@@ -1,0 +1,13 @@
+# HTML must always be revalidated, otherwise a redeploy can sit behind a stale copy
+/
+  Cache-Control: public, max-age=0, must-revalidate
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+# the service worker itself must never be cached, or new versions never ship
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/manifest.json
+  Content-Type: application/manifest+json
+  Cache-Control: public, max-age=0, must-revalidate
