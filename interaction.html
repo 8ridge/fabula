@@ -101,26 +101,28 @@
 
           <article class="message message-narrator" data-message-id="scene-intro">
             <div class="message-head"><span class="message-avatar avatar-narrator">✦</span><span><strong>Рассказчик</strong><small>Подтвержденный исход · сцена 02</small></span></div>
-            <p>Пепел идет с востока, хотя ветра там нет. За спиной старика осыпается каменная арка, и на миг в проломе видно темное пламя Цитадели. Он ждет, не отводя взгляда от клинка в твоей руке.</p>
-            <div class="message-foot"><span>Руины Эхокарты</span><button type="button" data-message-action="copy" aria-label="Скопировать сообщение">⧉</button><button type="button" data-message-action="retry" aria-label="Запросить другую формулировку">↻</button></div>
+            <div class="message-copy"><p>Пепел идет с востока, хотя ветра там нет. За спиной старика осыпается каменная арка, и на миг в проломе видно темное пламя Цитадели. Он ждет, не отводя взгляда от клинка в твоей руке.</p></div>
+            <div class="message-foot"><span>Руины Эхокарты</span><span class="message-actions"><button class="message-action-button" type="button" data-message-action="copy" aria-label="Скопировать сообщение">⧉<small>Копировать</small></button><button class="message-action-button" type="button" data-message-action="rephrase" aria-label="Переформулировать сообщение">≋<small>Переформулировать</small></button><button class="message-action-button" type="button" data-message-action="regenerate" aria-label="Перегенерировать сообщение">↻<small>Перегенерировать</small></button></span></div>
           </article>
 
           <article class="message message-character" data-message-id="keeper-question">
             <div class="message-head"><span class="message-avatar avatar-character"><img src="assets/avatar.jpg" alt=""></span><span><strong>Старик-хранитель</strong><small>Персонаж · отношение: насторожен</small></span></div>
-            <p>"Ты снова смотришь на клинок, будто надеешься, что он назовет тебя по имени. Не назовет. Но я могу показать дорогу, если ты скажешь, зачем идешь к Цитадели."</p>
+            <div class="message-copy"><p>"Ты снова смотришь на клинок, будто надеешься, что он назовет тебя по имени. Не назовет. Но я могу показать дорогу, если ты скажешь, зачем идешь к Цитадели."</p></div>
             <div class="character-mood"><span class="mood-dot"></span> Он ждет честного ответа</div>
+            <div class="message-foot"><span>Реплика персонажа</span><span class="message-actions"><button class="message-action-button" type="button" data-message-action="copy" aria-label="Скопировать сообщение">⧉<small>Копировать</small></button><button class="message-action-button" type="button" data-message-action="rephrase" aria-label="Переформулировать реплику">≋<small>Переформулировать</small></button><button class="message-action-button" type="button" data-message-action="regenerate" aria-label="Перегенерировать реплику">↻<small>Перегенерировать</small></button></span></div>
           </article>
 
           <article class="message message-player" data-message-id="player-reply">
             <div class="message-head"><span class="message-avatar avatar-player">Б</span><span><strong>Ты</strong><small>Речь · только что</small></span></div>
-            <p>Я поднимаю клинок так, чтобы старик увидел три звезды, и спрашиваю, кто оставил его среди руин.</p>
-            <div class="message-foot"><span>Ход записан в журнал</span><button type="button" data-message-action="edit" aria-label="Изменить действие">✎</button></div>
+            <div class="message-copy"><p>Я поднимаю клинок так, чтобы старик увидел три звезды, и спрашиваю, кто оставил его среди руин.</p></div>
+            <div class="message-foot"><span>Ход записан в журнал</span><span class="message-actions"><button class="message-action-button" type="button" data-message-action="edit" aria-label="Изменить действие">✎<small>Изменить</small></button></span></div>
           </article>
 
           <article class="message message-narrator message-pending" data-message-id="pending-turn">
             <div class="message-head"><span class="message-avatar avatar-narrator">✦</span><span><strong>Рассказчик</strong><small>Готовит последствие</small></span></div>
-            <p>Старик медленно протягивает руку к рукояти, но не касается ее. В его лице впервые появляется не страх, а узнавание.</p>
+            <div class="message-copy"><p>Старик медленно протягивает руку к рукояти, но не касается ее. В его лице впервые появляется не страх, а узнавание.</p></div>
             <div class="message-media-hint"><span>◌</span><span>Кадр сцены может быть предложен после подтверждения события</span></div>
+            <div class="message-foot"><span>Последствие еще не подтверждено</span><span class="message-actions"><button class="message-action-button" type="button" data-message-action="rephrase" aria-label="Переформулировать ответ">≋<small>Переформулировать</small></button><button class="message-action-button" type="button" data-message-action="regenerate" aria-label="Перегенерировать ответ">↻<small>Перегенерировать</small></button></span></div>
           </article>
         </div>
 
@@ -139,6 +141,7 @@
                 <button class="composer-tool" type="button" data-tool="inventory" aria-label="Добавить предмет из инвентаря">☙</button>
                 <button class="composer-tool" type="button" data-tool="journal" aria-label="Добавить запись из журнала">✒</button>
                 <button class="composer-tool" type="button" data-tool="check" aria-label="Открыть проверку навыка">⚄</button>
+                <button class="composer-tool composer-tool-rewrite" type="button" data-rewrite-composer aria-label="Переформулировать текст в поле" title="Переформулировать текст в поле">✧</button>
                 <span class="composer-divider"></span>
                 <button class="composer-tool" type="button" data-compose="Я осматриваю ближайшие следы и ищу безопасный путь." aria-label="Подставить пример исследования">⌁</button>
               </div>
@@ -186,6 +189,12 @@
         </section>
         <div class="detail-foot"><span class="secure-dot"></span><span>Состояние принадлежит сессии</span></div>
       </aside>
+    </div>
+    <div class="selection-toolbar" id="selectionToolbar" role="toolbar" aria-label="Действия с выделенным текстом" hidden>
+      <span class="selection-toolbar-text" id="selectionToolbarText">Выделено</span>
+      <button type="button" data-selection-action="rephrase" aria-label="Переформулировать выделенный текст"><span>≋</span><small>Переформулировать</small></button>
+      <button type="button" data-selection-action="regenerate" aria-label="Перегенерировать выделенный текст"><span>↻</span><small>Перегенерировать</small></button>
+      <button type="button" data-selection-action="copy" aria-label="Скопировать выделенный текст"><span>⧉</span><small>Копировать</small></button>
     </div>
   </div>
 
