@@ -20,7 +20,7 @@
 
 ```bash
 # 1. база
-docker compose up -d db
+docker compose -f docker-compose.dev.yml up -d db
 
 # 2. окружение
 python -m venv .venv
