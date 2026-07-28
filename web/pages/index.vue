@@ -820,9 +820,9 @@ if('serviceWorker' in navigator){
   function fail(t){ msg.classList.remove('ok'); msg.textContent=t; }
   function ok(t){ msg.classList.add('ok'); msg.textContent=t; }
 
-  // адрес бэкенда: локально — dev-сервер на :8000; в проде — тот же origin через /api
+  // адрес бэкенда: локально — dev-сервер на :8000; в проде — облачный бэкенд на Saturn
   const AUTH_API = (location.hostname==='localhost' || location.hostname==='127.0.0.1')
-    ? 'http://127.0.0.1:8000' : '/api';
+    ? 'http://127.0.0.1:8000' : 'https://dungeon20-p5svbq.saturn.ac';
 
   function saveSession(data){
     try{
