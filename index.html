@@ -1406,32 +1406,62 @@ if('serviceWorker' in navigator){
 
   const emailOk = v => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v);
   function fail(t){ msg.classList.remove('ok'); msg.textContent=t; }
-  function enter(name){
-    // мокап: помечаем «вход» локально и уводим в приложение
-    try{ localStorage.setItem('fabula-user', JSON.stringify({name:name||'Странник', at:'demo'})); }catch(_){}
-    msg.classList.add('ok'); msg.textContent='Готово, входим…';
-    setTimeout(()=>location.href='app.html', 650);
+  function ok(t){ msg.classList.add('ok'); msg.textContent=t; }
+
+  // адрес бэкенда: локально — dev-сервер на :8000; в проде — тот же origin через /api
+  const AUTH_API = (location.hostname==='localhost' || location.hostname==='127.0.0.1')
+    ? 'http://127.0.0.1:8000' : '/api';
+
+  function saveSession(data){
+    try{
+      localStorage.setItem('fabula-token', data.access_token);
+      localStorage.setItem('fabula-user', JSON.stringify(data.user));
+    }catch(_){}
+  }
+  function go(){ setTimeout(()=>location.href='app.html', 650); }
+
+  async function apiPost(path, body){
+    const r = await fetch(AUTH_API+path, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+    });
+    let data=null; try{ data=await r.json(); }catch(_){}
+    return {r, data};
   }
 
-  form.addEventListener('submit', e=>{
+  let busy=false;
+  form.addEventListener('submit', async e=>{
     e.preventDefault();
+    if(busy) return;
     const reg=box.classList.contains('mode-reg');
     const email=$('afEmail').value.trim(), pass=$('afPass').value;
     if(!emailOk(email)) return fail('Проверь почту — что-то не так.');
     if(pass.length<6) return fail('Пароль от 6 символов.');
+    let name=email.split('@')[0];
     if(reg){
-      const name=$('afName').value.trim();
+      name=$('afName').value.trim();
       if(!name) return fail('Как тебя звать?');
       if(pass!==$('afPass2').value) return fail('Пароли не совпадают.');
-      return enter(name);
     }
-    enter(email.split('@')[0]);
+    busy=true; submit.disabled=true;
+    const label=submit.textContent; submit.textContent='Секунду…';
+    try{
+      const {r, data} = await apiPost(reg ? '/auth/register' : '/auth/login',
+        reg ? {name, email, password:pass} : {email, password:pass});
+      if(r.ok){ saveSession(data); ok('Готово, входим…'); return go(); }
+      if(r.status===409)      fail('Эта почта уже зарегистрирована — попробуй войти.');
+      else if(r.status===401) fail('Неверная почта или пароль.');
+      else if(r.status===422) fail('Проверь поля — что-то заполнено не так.');
+      else fail((data && data.detail) ? (''+data.detail) : 'Что-то пошло не так, попробуй ещё раз.');
+    }catch(err){
+      fail('Сервер недоступен. Запущен ли бэкенд?');
+    }finally{
+      busy=false; submit.disabled=false; submit.textContent=label;
+    }
   });
 
-  // соцвход — мокап (без реального OAuth, пока нет бэкенда)
+  // соцвход — пока не подключён (Telegram/Google появятся на бэкенде)
   document.querySelectorAll('[data-soc]').forEach(b=>b.addEventListener('click',()=>{
-    msg.classList.add('ok'); msg.textContent='Подключим '+ (b.dataset.soc==='google'?'Google':'Telegram') +' на бэкенде — пока входим как гость…';
-    enter('Гость');
+    fail('Вход через '+(b.dataset.soc==='google'?'Google':'Telegram')+' скоро — подключаем на бэкенде.');
   }));
 })();
 </script>
