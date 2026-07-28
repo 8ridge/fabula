@@ -24,6 +24,7 @@
 
   let storyId = new URLSearchParams(location.search).get('story') || 'fant';
   let mode = 'action';
+  let fontScale = 'large';
   let sessionVersion = 2;
   let toastTimer = null;
   let selectionState = null;
@@ -375,6 +376,19 @@
     try { localStorage.setItem('fabula-interaction-mode', mode); } catch (_) {}
   }
 
+  function setFontScale(nextScale, notify) {
+    const allowed = ['normal', 'large', 'xlarge'];
+    fontScale = allowed.includes(nextScale) ? nextScale : 'large';
+    app.dataset.fontSize = fontScale;
+    document.querySelectorAll('[data-font-size-option]').forEach((button) => {
+      const active = button.dataset.fontSizeOption === fontScale;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+    try { localStorage.setItem('fabula-font-scale', fontScale); } catch (_) {}
+    if (notify) showToast(fontScale === 'normal' ? 'Обычный размер текста' : fontScale === 'xlarge' ? 'Очень крупный размер текста' : 'Крупный размер текста');
+  }
+
   function resizeInput() {
     input.style.height = 'auto';
     input.style.height = Math.min(input.scrollHeight, 150) + 'px';
@@ -479,7 +493,8 @@
   }
 
   function renderSettings() {
-    return '<div class="settings-group"><label>Тон сцены</label><div class="settings-segment"><button type="button" class="is-active">Мрачный</button><button type="button">Героический</button><button type="button">Ироничный</button></div></div><div class="settings-group"><label>Темп</label><div class="settings-segment"><button type="button" class="is-active">Спокойно</button><button type="button">Быстро</button></div></div><label class="settings-check"><input type="checkbox" checked> Показывать подсказки действий</label><div class="modal-actions"><button class="modal-button primary" type="button" data-close-modal>Сохранить для сессии</button></div>';
+    const fontOptions = [['normal', 'Обычный'], ['large', 'Крупный'], ['xlarge', 'Очень крупный']].map(([value, label]) => '<button type="button" data-font-size-option="' + value + '" class="' + (fontScale === value ? 'is-active' : '') + '" aria-pressed="' + (fontScale === value) + '">' + label + '</button>').join('');
+    return '<div class="settings-group"><label>Размер текста</label><div class="settings-segment settings-font-segment">' + fontOptions + '</div><small class="settings-help">Масштаб сохраняется для этой страницы и не меняет канон.</small></div><div class="settings-group"><label>Тон сцены</label><div class="settings-segment"><button type="button" class="is-active">Мрачный</button><button type="button">Героический</button><button type="button">Ироничный</button></div></div><div class="settings-group"><label>Темп</label><div class="settings-segment"><button type="button" class="is-active">Спокойно</button><button type="button">Быстро</button></div></div><label class="settings-check"><input type="checkbox" checked> Показывать подсказки действий</label><div class="modal-actions"><button class="modal-button primary" type="button" data-close-modal>Сохранить для сессии</button></div>';
   }
 
   function openTool(tool) {
@@ -580,6 +595,11 @@
     if (inventoryLook) {
       const item = inventory.find((entry) => entry.id === inventoryLook.dataset.inventoryLook);
       if (item) showToast(item.inspect);
+      return;
+    }
+    const fontSizeButton = event.target.closest('[data-font-size-option]');
+    if (fontSizeButton) {
+      setFontScale(fontSizeButton.dataset.fontSizeOption, true);
       return;
     }
     const composeButton = event.target.closest('[data-compose]');
@@ -706,10 +726,14 @@
   const savedMode = (() => {
     try { return localStorage.getItem('fabula-interaction-mode'); } catch (_) { return null; }
   })();
+  const savedFontScale = (() => {
+    try { return localStorage.getItem('fabula-font-scale'); } catch (_) { return null; }
+  })();
   setMode(['action', 'speech', 'exploration'].includes(savedMode) ? savedMode : 'action');
+  setFontScale(['normal', 'large', 'xlarge'].includes(savedFontScale) ? savedFontScale : 'large', false);
   resizeInput();
   applyStory(storyId);
-  window.__fabulaInteraction = { config, getStory: () => storyId, getMode: () => mode, openTool, buildTurnRequest: config.makeTurnRequest };
+  window.__fabulaInteraction = { config, getStory: () => storyId, getMode: () => mode, getFontScale: () => fontScale, openTool, buildTurnRequest: config.makeTurnRequest };
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();

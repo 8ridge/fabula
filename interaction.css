@@ -42,6 +42,7 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 a { color: inherit; }
 
 .interaction-app {
+  --font-scale: 1.1;
   height: 100dvh;
   min-height: 560px;
   display: flex;
@@ -50,6 +51,9 @@ a { color: inherit; }
     radial-gradient(70% 90% at 66% 0%, rgba(86, 57, 22, .18), transparent 58%),
     linear-gradient(135deg, #0c0c10, #09090c 64%, #11100d);
 }
+.interaction-app[data-font-size="normal"] { --font-scale: 1; }
+.interaction-app[data-font-size="large"] { --font-scale: 1.1; }
+.interaction-app[data-font-size="xlarge"] { --font-scale: 1.22; }
 
 .topbar {
   height: 72px;
@@ -412,6 +416,7 @@ a { color: inherit; }
 .meter i { width: 82%; height: 100%; display: block; background: linear-gradient(90deg, #bb453a, #e08053); }
 .settings-group { margin-bottom: 17px; }
 .settings-group > label { display: block; margin-bottom: 7px; color: var(--faint); font-family: var(--mono); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+.settings-help { display: block; margin-top: 7px; color: var(--faint); font-family: var(--mono); font-size: 8px; line-height: 1.4; }
 .settings-segment { display: flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
 .settings-segment button { flex: 1; padding: 10px 5px; border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--muted); font-family: var(--mono); font-size: 9px; cursor: pointer; }
 .settings-segment button:last-child { border-right: 0; }
@@ -500,6 +505,31 @@ a { color: inherit; }
   .sheet-portrait { width: 86px; height: 111px; }
   .sheet-copy h3 { font-size: 22px; }
 }
+
+/* Readability scale: the primary dialogue keeps its compact shell, while prose and
+   supporting labels grow together so the setting remains useful at every viewport. */
+.interaction-app .thread-copy strong { font-size: calc(15px * var(--font-scale)); }
+.interaction-app .thread-copy small, .interaction-app .thread-meta small { font-size: calc(8px * var(--font-scale)); }
+.interaction-app .group-label, .interaction-app .search-threads span:nth-child(2) { font-size: calc(9px * var(--font-scale)); }
+.interaction-app .message p { font-size: calc(18px * var(--font-scale)); }
+.interaction-app .message-head strong { font-size: calc(16px * var(--font-scale)); }
+.interaction-app .message-head small, .interaction-app .message-foot, .interaction-app .character-mood, .interaction-app .message-media-hint { font-size: calc(8px * var(--font-scale)); }
+.interaction-app .message-action-button small { font-size: calc(7px * var(--font-scale)); }
+.interaction-app .message-variant blockquote { font-size: calc(14px * var(--font-scale)); }
+.interaction-app .message-variant > p { font-size: calc(16px * var(--font-scale)); }
+.interaction-app .composer-hint, .interaction-app .context-link { font-size: calc(9px * var(--font-scale)); }
+.interaction-app .auto-toggle, .interaction-app .composer-footer { font-size: calc(8px * var(--font-scale)); }
+.interaction-app .mode-button { font-size: calc(9px * var(--font-scale)); }
+.interaction-app .composer textarea { font-size: calc(18px * var(--font-scale)); }
+.interaction-app .scene-context strong, .interaction-app .presence-relation b, .interaction-app .state-row strong, .interaction-app .runtime-stage strong { font-size: calc(14px * var(--font-scale)); }
+.interaction-app .scene-context small, .interaction-app .presence-top small, .interaction-app .presence-relation small, .interaction-app .state-row small, .interaction-app .runtime-stage small, .interaction-app .detail-foot { font-size: calc(8px * var(--font-scale)); }
+.interaction-app .modal-note { font-size: calc(16px * var(--font-scale)); }
+.interaction-app .modal-card p, .interaction-app .inventory-description { font-size: calc(15px * var(--font-scale)); }
+.interaction-app .modal-button, .interaction-app .settings-segment button { font-size: calc(9px * var(--font-scale)); }
+.interaction-app .prompt-row strong, .interaction-app .inventory-item strong, .interaction-app .journal-item strong { font-size: calc(16px * var(--font-scale)); }
+.interaction-app .prompt-row small, .interaction-app .inventory-item small, .interaction-app .journal-item small, .interaction-app .inventory-card-copy small { font-size: calc(8px * var(--font-scale)); }
+.interaction-app .inventory-card-copy strong { font-size: calc(14px * var(--font-scale)); }
+.interaction-app .inventory-canon-note, .interaction-app .inventory-detail-stats small, .interaction-app .inventory-empty small, .interaction-app .settings-help { font-size: calc(7px * var(--font-scale)); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }

@@ -7,7 +7,7 @@
    forever, no matter how many times the site was redeployed). Everything else
    (fonts, art) is cache-first because those filenames are stable and heavy.
 */
-const VERSION = 'fabula-v8';
+const VERSION = 'fabula-v9';
 const CACHE = VERSION;
 
 const SHELL = [
