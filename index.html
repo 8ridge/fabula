@@ -573,6 +573,55 @@
     .steps,.feats,.tiers{grid-template-columns:1fr}
     .nav-links a:not(.btn){display:none}
   }
+
+  /* ===== АВТОРИЗАЦИЯ (модалка) ===== */
+  .auth-open{cursor:pointer}
+  .auth-scrim{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:20px;
+    background:#06060899;backdrop-filter:blur(6px);opacity:0;pointer-events:none;transition:opacity .3s ease}
+  .auth-scrim.on{opacity:1;pointer-events:auto}
+  .auth{width:min(420px,100%);background:var(--surface);border:1px solid var(--line);border-radius:18px;
+    padding:32px 30px 30px;position:relative;transform:translateY(14px) scale(.98);transition:transform .32s cubic-bezier(.22,.61,.36,1);
+    box-shadow:0 40px 100px -30px #000}
+  .auth-scrim.on .auth{transform:none}
+  .auth-x{position:absolute;top:16px;right:16px;width:32px;height:32px;border-radius:9px;border:1px solid var(--line-soft);
+    background:none;color:var(--ink-dim);cursor:pointer;font-size:16px;transition:.2s}
+  .auth-x:hover{color:var(--ink);border-color:var(--line)}
+  .auth-brand{font-family:var(--display);font-size:20px;letter-spacing:.24em;color:var(--ink);text-align:center;margin-bottom:4px}
+  .auth-sub{text-align:center;font-family:'Forum',serif;font-size:12px;color:var(--ink-mute);margin-bottom:22px}
+  /* переключатель Вход/Регистрация */
+  .auth-tabs{display:flex;gap:4px;padding:4px;border:1px solid var(--line-soft);border-radius:100px;margin-bottom:20px}
+  .auth-tabs button{flex:1;font-family:'Forum',serif;font-size:12px;letter-spacing:.08em;text-transform:uppercase;
+    padding:10px;border:0;border-radius:100px;background:none;color:var(--ink-mute);cursor:pointer;transition:.25s}
+  .auth-tabs button.on{background:var(--ink);color:#0a0a0c}
+  /* поля */
+  .auth-field{margin-bottom:12px}
+  .auth-field label{display:block;font-family:'Forum',serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ink-mute);margin-bottom:6px}
+  .auth-field input{width:100%;padding:13px 15px;border-radius:11px;border:1px solid var(--line);background:#ffffff06;
+    color:var(--ink);font-family:'Cormorant Garamond',serif;font-size:16px;transition:.2s}
+  .auth-field input:focus{outline:none;border-color:var(--ink-dim);background:#ffffff0a}
+  .auth-field.err input{border-color:#c76b57}
+  .auth-msg{min-height:16px;font-family:'Forum',serif;font-size:12px;color:#c76b57;margin:2px 0 8px}
+  .auth-msg.ok{color:#9bbf3a}
+  .auth-submit{width:100%;margin-top:4px}
+  .auth-reg{display:none}
+  .auth.mode-reg .auth-reg{display:block}
+  .auth.mode-reg .auth-login-only{display:none}
+  /* соцвход */
+  .auth-or{display:flex;align-items:center;gap:12px;margin:18px 0;font-family:'Forum',serif;font-size:11px;
+    letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute)}
+  .auth-or::before,.auth-or::after{content:"";flex:1;height:1px;background:var(--line-soft)}
+  .auth-soc{display:flex;flex-direction:column;gap:9px}
+  .auth-soc button{display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;border-radius:11px;
+    border:1px solid var(--line);background:#ffffff08;color:var(--ink);cursor:pointer;
+    font-family:'Forum',serif;font-size:13px;letter-spacing:.03em;transition:.2s}
+  .auth-soc button:hover{background:#ffffff12;border-color:var(--line)}
+  .auth-soc .ic{width:18px;height:18px;flex:none}
+  .auth-skip{display:block;text-align:center;margin-top:18px;font-family:'Forum',serif;font-size:12px;
+    color:var(--ink-mute);text-decoration:none}
+  .auth-skip:hover{color:var(--ink-dim)}
+  @media(max-width:1000px){.nav-links a.auth-open{display:inline}}
+
 </style></head>
 <body>
 <div class="progress" id="prog"></div>
@@ -585,6 +634,7 @@
       <a href="#packs">Миры</a>
       <a href="#feats">Возможности</a>
       <a href="#price">Тарифы</a>
+      <a href="#" class="auth-open" data-auth="login">Войти</a>
       <a href="app.html" class="btn btn-solid">Начать</a>
     </nav>
   </div>
@@ -1281,4 +1331,109 @@ if('serviceWorker' in navigator){
 }
 </script>
 <!-- визуальный редактор: подключается только по ?edit, на боевом сайте не грузится -->
-<script>if(/[?&]edit\b/.test(location.search)){var e=document.createElement('script');e.src='edit.js?'+Date.now();document.body.appendChild(e);}</script></body></html>
+<script>if(/[?&]edit\b/.test(location.search)){var e=document.createElement('script');e.src='edit.js?'+Date.now();document.body.appendChild(e);}</script><!-- ===== модалка входа/регистрации ===== -->
+<div class="auth-scrim" id="authScrim" aria-hidden="true">
+  <div class="auth" id="authBox" role="dialog" aria-modal="true" aria-label="Вход">
+    <button class="auth-x" id="authClose" aria-label="Закрыть">✕</button>
+    <div class="auth-brand">ФАБУЛА</div>
+    <div class="auth-sub" id="authSub">С возвращением, странник</div>
+    <div class="auth-tabs">
+      <button data-tab="login" class="on">Вход</button>
+      <button data-tab="reg">Регистрация</button>
+    </div>
+    <form id="authForm" novalidate>
+      <div class="auth-field auth-reg">
+        <label>Как тебя звать</label>
+        <input type="text" id="afName" autocomplete="nickname" placeholder="Имя героя">
+      </div>
+      <div class="auth-field">
+        <label>Почта</label>
+        <input type="email" id="afEmail" autocomplete="email" placeholder="you@example.com">
+      </div>
+      <div class="auth-field">
+        <label>Пароль</label>
+        <input type="password" id="afPass" autocomplete="current-password" placeholder="••••••••">
+      </div>
+      <div class="auth-field auth-reg">
+        <label>Повтори пароль</label>
+        <input type="password" id="afPass2" autocomplete="new-password" placeholder="••••••••">
+      </div>
+      <div class="auth-msg" id="authMsg"></div>
+      <button type="submit" class="btn btn-solid auth-submit" id="authSubmit">Войти</button>
+    </form>
+    <div class="auth-or">или</div>
+    <div class="auth-soc">
+      <button data-soc="google"><svg class="ic" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.4 29.3 35 24 35c-6.1 0-11-4.9-11-11s4.9-11 11-11c2.8 0 5.4 1.1 7.3 2.8l5.7-5.7C33.6 6.1 29 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20c11 0 19.7-8 19.7-20 0-1.2-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c2.8 0 5.4 1.1 7.3 2.8l5.7-5.7C33.6 6.1 29 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 34.9 26.7 36 24 36c-5.3 0-9.7-2.6-11.3-6.9l-6.5 5C9.6 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4.1 5.6l6.2 5.2C41.9 35.5 44 30.2 44 24c0-1.2-.1-2.3-.4-3.5z"/></svg>Продолжить с Google</button>
+      <button data-soc="tg"><svg class="ic" viewBox="0 0 24 24" fill="#2AABEE"><path d="M21.9 4.3l-3.3 15.6c-.25 1.1-.9 1.37-1.83.85l-5.05-3.72-2.44 2.35c-.27.27-.5.5-1 .5l.36-5.13L18 6.36c.4-.36-.09-.56-.62-.2L6.98 13.02l-4.7-1.47c-1.02-.32-1.04-1.02.22-1.5l18.36-7.08c.85-.31 1.6.2 1.32 1.33z"/></svg>Продолжить с Telegram</button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+/* ===== авторизация (front-end мокап; реальный бэкенд подключим позже) ===== */
+(() => {
+  const scrim=document.getElementById('authScrim'), box=document.getElementById('authBox'),
+        form=document.getElementById('authForm'), msg=document.getElementById('authMsg'),
+        sub=document.getElementById('authSub'), submit=document.getElementById('authSubmit');
+  if(!scrim) return;
+  const $=id=>document.getElementById(id);
+
+  function open(mode){
+    setMode(mode||'login');
+    scrim.classList.add('on'); scrim.setAttribute('aria-hidden','false');
+    document.body.style.overflow='hidden';
+    setTimeout(()=>$('afEmail').focus(),120);
+  }
+  function close(){
+    scrim.classList.remove('on'); scrim.setAttribute('aria-hidden','true');
+    document.body.style.overflow=''; msg.textContent='';
+  }
+  function setMode(mode){
+    box.classList.toggle('mode-reg', mode==='reg');
+    document.querySelectorAll('.auth-tabs button').forEach(b=>b.classList.toggle('on', b.dataset.tab===mode));
+    sub.textContent = mode==='reg' ? 'Создай героя и сохраняй прогресс' : 'С возвращением, странник';
+    submit.textContent = mode==='reg' ? 'Создать аккаунт' : 'Войти';
+    msg.textContent='';
+  }
+
+  // открытие по «Войти»
+  document.querySelectorAll('[data-auth]').forEach(a=>a.addEventListener('click',e=>{ e.preventDefault(); open(a.dataset.auth); }));
+  $('authClose').addEventListener('click', close);
+  scrim.addEventListener('click', e=>{ if(e.target===scrim) close(); });
+  addEventListener('keydown', e=>{ if(e.key==='Escape' && scrim.classList.contains('on')) close(); });
+  document.querySelectorAll('.auth-tabs button').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.tab)));
+
+  const emailOk = v => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v);
+  function fail(t){ msg.classList.remove('ok'); msg.textContent=t; }
+  function enter(name){
+    // мокап: помечаем «вход» локально и уводим в приложение
+    try{ localStorage.setItem('fabula-user', JSON.stringify({name:name||'Странник', at:'demo'})); }catch(_){}
+    msg.classList.add('ok'); msg.textContent='Готово, входим…';
+    setTimeout(()=>location.href='app.html', 650);
+  }
+
+  form.addEventListener('submit', e=>{
+    e.preventDefault();
+    const reg=box.classList.contains('mode-reg');
+    const email=$('afEmail').value.trim(), pass=$('afPass').value;
+    if(!emailOk(email)) return fail('Проверь почту — что-то не так.');
+    if(pass.length<6) return fail('Пароль от 6 символов.');
+    if(reg){
+      const name=$('afName').value.trim();
+      if(!name) return fail('Как тебя звать?');
+      if(pass!==$('afPass2').value) return fail('Пароли не совпадают.');
+      return enter(name);
+    }
+    enter(email.split('@')[0]);
+  });
+
+  // соцвход — мокап (без реального OAuth, пока нет бэкенда)
+  document.querySelectorAll('[data-soc]').forEach(b=>b.addEventListener('click',()=>{
+    msg.classList.add('ok'); msg.textContent='Подключим '+ (b.dataset.soc==='google'?'Google':'Telegram') +' на бэкенде — пока входим как гость…';
+    enter('Гость');
+  }));
+})();
+</script>
+
+</body></html>

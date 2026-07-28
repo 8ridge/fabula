@@ -550,6 +550,80 @@
       color:var(--shell-ink);font-family:'Forum',serif;font-size:12px;letter-spacing:.1em;text-transform:uppercase}
   }
 
+
+  /* ===== СОЗДАНИЕ ГЕРОЯ ===== */
+  .creator{position:absolute;inset:0;z-index:80;display:none;flex-direction:column;
+    background:linear-gradient(180deg,#111013,#0b0a0d);overflow-y:auto;scrollbar-width:none}
+  .creator::-webkit-scrollbar{display:none}
+  .creator.on{display:flex;animation:scrin .3s ease both}
+  .cr-bar{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:12px;
+    padding:calc(env(safe-area-inset-top,0px) + 16px) 20px 12px;
+    background:linear-gradient(#0b0a0dee,#0b0a0d00);backdrop-filter:blur(4px)}
+  .cr-back{width:36px;height:36px;border-radius:11px;border:1px solid var(--shell-line);background:#ffffff08;
+    color:var(--shell-dim);cursor:pointer;display:grid;place-items:center;font-size:15px}
+  .cr-back:hover{color:var(--shell-ink)}
+  .cr-kick{font-family:'Forum',serif;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--acc)}
+  .cr-kick b{color:var(--shell-dim);font-weight:400;display:block;font-size:9px;letter-spacing:.14em}
+  .cr-body{flex:1;padding:8px 20px 30px;max-width:960px;width:100%;margin:0 auto}
+  .cr-h{font-family:var(--display);font-size:clamp(26px,4vw,34px);color:var(--shell-ink);
+    text-align:center;margin:4px 0 4px}
+  .cr-sub{text-align:center;font-family:'Forum',serif;font-size:12px;color:var(--shell-mute);margin-bottom:22px}
+  .cr-grid{display:grid;gap:18px}
+  @media(min-width:760px){.cr-grid{grid-template-columns:300px 1fr}}
+  /* портрет */
+  .cr-portrait{aspect-ratio:3/4;border-radius:16px;overflow:hidden;position:relative;
+    border:1px solid var(--shell-line);background:#0c0c10}
+  .cr-portrait img{width:100%;height:100%;object-fit:cover}
+  .cr-portrait.empty{display:grid;place-items:center;color:var(--shell-mute);font-family:'Forum',serif;font-size:12px}
+  .cr-pbtns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+  .cr-pbtns button{padding:11px;border-radius:11px;border:1px solid var(--shell-line);background:#ffffff08;
+    color:var(--shell-dim);cursor:pointer;font-family:'Forum',serif;font-size:12px;transition:.2s}
+  .cr-pbtns button:hover{color:var(--shell-ink);border-color:var(--acc)}
+  /* поля */
+  .cr-field{margin-bottom:14px}
+  .cr-field label{display:block;font-family:'Forum',serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--shell-mute);margin-bottom:6px}
+  .cr-field input,.cr-field textarea{width:100%;padding:13px 15px;border-radius:11px;border:1px solid var(--shell-line);
+    background:#ffffff06;color:var(--shell-ink);font-family:'Cormorant Garamond',serif;font-size:16px;resize:none}
+  .cr-field input:focus,.cr-field textarea:focus{outline:none;border-color:var(--acc)}
+  .cr-field textarea{min-height:84px;line-height:1.45}
+  /* генерация по промту */
+  .cr-gen{display:flex;gap:8px;margin-top:8px}
+  .cr-gen button{flex:none;padding:0 18px;border-radius:11px;border:1px solid var(--acc);cursor:pointer;
+    background:color-mix(in srgb,var(--acc) 16%,transparent);color:var(--shell-ink);
+    font-family:'Forum',serif;font-size:12px;letter-spacing:.06em;white-space:nowrap;transition:.2s}
+  .cr-gen button:hover{background:color-mix(in srgb,var(--acc) 26%,transparent)}
+  .cr-gen button.busy{opacity:.6;pointer-events:none}
+  /* характеристики */
+  .cr-stats-h{display:flex;align-items:center;justify-content:space-between;margin:18px 0 10px}
+  .cr-stats-h b{font-family:var(--display);font-size:16px;color:var(--shell-ink)}
+  .cr-reroll{font-family:'Forum',serif;font-size:11px;letter-spacing:.06em;color:var(--acc);cursor:pointer;
+    border:1px solid var(--shell-line);border-radius:100px;padding:7px 14px;background:none;transition:.2s}
+  .cr-reroll:hover{border-color:var(--acc)}
+  .cr-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+  .cr-stat{text-align:center;padding:13px 4px;border-radius:12px;border:1px solid var(--shell-line);background:#ffffff05}
+  .cr-stat .k{font-family:'Forum',serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--acc)}
+  .cr-stat .v{font-family:var(--display);font-size:24px;color:var(--shell-ink);line-height:1.1;margin:2px 0;
+    transition:transform .3s}
+  .cr-stat .m{font-family:'Forum',serif;font-size:11px;color:var(--shell-dim)}
+  .cr-stat.bump .v{transform:scale(1.25)}
+  /* роли и тематическое поле зависят от мира */
+  .cr-roles{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  .cr-role{font-family:'Forum',serif;font-size:13px;padding:9px 15px;border-radius:100px;cursor:pointer;
+    border:1px solid var(--shell-line);background:#ffffff06;color:var(--shell-dim);transition:.2s}
+  .cr-role:hover{color:var(--shell-ink)}
+  .cr-role.on{color:#12100a;border-color:transparent;background:var(--acc)}
+  .cr-sel{width:100%;padding:12px 14px;border-radius:11px;border:1px solid var(--shell-line);
+    background:#ffffff06;color:var(--shell-ink);font-family:'Cormorant Garamond',serif;font-size:16px}
+  .cr-sel:focus{outline:none;border-color:var(--acc)}
+  /* низ */
+  .cr-go{width:100%;margin-top:24px;padding:17px;border-radius:14px;border:none;cursor:pointer;
+    font-family:'Forum',serif;font-size:14px;letter-spacing:.14em;text-transform:uppercase;color:#08080a;
+    background:linear-gradient(180deg,#ffffff,#f0f0f4 55%,#dcdce4);
+    box-shadow:0 1px 0 rgba(255,255,255,.95) inset,0 8px 22px -10px rgba(0,0,0,.6)}
+  .cr-go:active{transform:scale(.99)}
+  .cr-note{text-align:center;font-family:'Forum',serif;font-size:11px;color:var(--shell-mute);margin-top:10px}
+
   /* ===== reader chat feed (vertical canvas) ===== */
   .chat{position:relative;z-index:10;flex:1;overflow-y:auto;scrollbar-width:none;padding:14px 18px 12px;display:flex;flex-direction:column;gap:14px}
   .chat::-webkit-scrollbar{display:none}
@@ -792,6 +866,51 @@
         </aside>
       </div>
 
+      <!-- ===== СОЗДАНИЕ ГЕРОЯ ===== -->
+      <div class="creator" id="creator">
+        <div class="cr-bar">
+          <button class="cr-back" id="crBack" aria-label="Назад">‹</button>
+          <div class="cr-kick"><b>Создание героя</b><span id="crWorld">Пепельные земли</span></div>
+        </div>
+        <div class="cr-body">
+          <div class="cr-h">Кто ты в этом мире?</div>
+          <div class="cr-sub">Опиши героя одной фразой — остальное подберёт ИИ. Или заполни сам.</div>
+          <div class="cr-grid">
+            <div>
+              <div class="cr-portrait" id="crPortrait"><img src="assets/avatar.jpg" alt=""></div>
+              <div class="cr-pbtns">
+                <button data-p="gen">✦ Сгенерировать</button>
+                <button data-p="upload">↥ Загрузить</button>
+              </div>
+            </div>
+            <div>
+              <div class="cr-field">
+                <label id="crRoleLabel">Класс</label>
+                <div class="cr-roles" id="crRoles"></div>
+              </div>
+              <div class="cr-field">
+                <label>Опиши своего героя</label>
+                <textarea id="crPrompt"></textarea>
+                <div class="cr-gen"><button id="crGen">✦ Сгенерировать героя</button></div>
+              </div>
+              <div class="cr-field cr-grid" style="grid-template-columns:1fr 1fr;gap:12px">
+                <div><label>Имя</label><input type="text" id="crName" placeholder="Безымянный"></div>
+                <div><label id="crFieldLabel">Раса</label>
+                  <select class="cr-sel" id="crField"></select></div>
+              </div>
+              <div class="cr-field">
+                <label>Кратко о герое</label>
+                <textarea id="crBio" placeholder="Пара строк о характере и прошлом"></textarea>
+              </div>
+              <div class="cr-stats-h"><b>Характеристики</b><button class="cr-reroll" id="crReroll">⟳ Перебросить</button></div>
+              <div class="cr-stats" id="crStats"></div>
+              <button class="cr-go" id="crGo">Начать приключение</button>
+              <div class="cr-note">Героя можно будет докрутить в любой момент</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ===== DRAWER (side menu) ===== -->
       <div class="scrim" id="dScrim" style="z-index:94"></div>
       <aside class="drawer" id="drawer">
@@ -929,7 +1048,12 @@ document.querySelectorAll('#screen .chip').forEach(c=>c.addEventListener('click'
 const stories={
   fant:{title:'Пепельные земли', cover:'assets/cover_fantasy.jpg', tag:'Тёмное фэнтези', tagClass:'g-fant',
     synopsis:'Мир истлел до пепла. Ты очнулся среди руин без имени — и Тёмная Цитадель на горизонте зовёт тебя к себе.',
-    chapters:8, difficulty:'Тяжёлая', tone:'Мрачный', time:'~15 мин', role:'Скиталец', tags:['выживание','моральный выбор','лор'], rating:'4.8', pages:[
+    chapters:8, difficulty:'Тяжёлая', tone:'Мрачный', time:'~15 мин', role:'Скиталец', tags:['выживание','моральный выбор','лор'], rating:'4.8',
+    creation:{ headline:'Кто очнулся среди пепла?', sub:'Опиши героя одной фразой — остальное подберёт ИИ.',
+      hint:'Напр.: седой наёмник без имени, с холодным клинком и тёплым сердцем',
+      roleLabel:'Класс', roles:['Воин','Маг','Плут','Странник'],
+      fieldLabel:'Раса', fieldOpts:['Человек','Полукровка','Житель пепла','Неизвестно'] },
+    pages:[
     {h:'Королевство Пепельных земель', drop:'Д', text:'ревние хроники лгали — мир не погиб в одночасье. Он умирал медленно, век за веком, пока от цветущих долин Эхокарта не остался лишь серый пепел, что стелется по ветру, будто снег. Ты очнулся среди холодных руин, не помня ни своего имени, ни того, как здесь оказался. В памяти — лишь одно: далёкие шпили Тёмной Цитадели, что зовут тебя к себе.'},
     {kf:'assets/keyframe_01.jpg', cat:'action', log:'Подобран Клинок Тихого Пепла — три звезды над разбитой короной.', text:'Ты с трудом поднимаешься на ноги. Ветер несёт пепел, забиваясь в горло. Среди обломков рука натыкается на сталь — тёплый клинок, будто им только что рубили. Кто-то вложил его тебе в ладонь, пока ты спал. На лезвии выгравирован герб, которого ты не узнаёшь: три звезды над разбитой короной.'},
     {kf:'assets/keyframe_02.jpg', cat:'char', log:'Старик-хранитель — ждал того, кто поднимет меч.', text:'«Значит, ты всё-таки проснулся», — раздаётся хриплый голос за спиной. Старик в лохмотьях, лицо изрезано шрамами. Он смотрит не на тебя — только на клинок в твоей руке. «Двадцать лет я ждал того, кто поднимет этот меч. Всё надеялся, что это будет кто-то… посильнее».'},
@@ -961,21 +1085,36 @@ const stories={
   }},
   scifi:{title:'Станция «Кассандра»', cover:'assets/cover_scifi.jpg', tag:'Хард sci-fi', tagClass:'g-scifi',
     synopsis:'Ты проснулся на 214 лет позже срока. Экипаж исчез, реактор умирает, а ИИ уверяет, что ты — не тот, за кого себя выдаёшь.',
-    chapters:9, difficulty:'Обычная', tone:'Напряжённый', time:'~15 мин', role:'«Капитан»', tags:['мистерия','выживание','ИИ'], rating:'4.6', pages:[
+    chapters:9, difficulty:'Обычная', tone:'Напряжённый', time:'~15 мин', role:'«Капитан»', tags:['мистерия','выживание','ИИ'], rating:'4.6',
+    creation:{ headline:'Кого разбудила «Кассандра»?', sub:'Опиши, кем ты был до криосна.',
+      hint:'Напр.: пилот-контрабандист с чужим именем и имплантом в голове',
+      roleLabel:'Профессия', roles:['Капитан','Инженер','Пилот','ИИ-оператор'],
+      fieldLabel:'Фракция', fieldOpts:['Флот','Корпорация','Вольные','Без фракции'] },
+    pages:[
     {h:'Станция «Кассандра»', drop:'С', text:'истема разбудила тебя на 214 лет позже срока. Экипаж исчез, реактор гудит на 4%, а бортовой ИИ утверждает, что ты — не тот, за кого себя выдаёшь.'},
     {text:'До ближайшего сигнала — восемь часов кислорода. В отсеке мигает красный. Голос ИИ спокоен: «Рада, что вы наконец проснулись, капитан. Или мне называть вас иначе?»'},
     {choices:['Потребовать доступ к бортовому журналу.','Молча идти к реактору.','Спросить ИИ, что случилось с экипажем.']}
   ]},
   hist:{title:'Восстание Спартака', cover:'assets/cover_history.jpg', tag:'Античность', tagClass:'g-hist',
     synopsis:'Песок арены хранит вчерашнюю кровь. Ты — раб-гладиатор школы Батиата, и сегодня в казарме шепчутся о побеге.',
-    chapters:7, difficulty:'Тяжёлая', tone:'Драматичный', time:'~15 мин', role:'Гладиатор', tags:['история','восстание','свобода'], rating:'4.7', pages:[
+    chapters:7, difficulty:'Тяжёлая', tone:'Драматичный', time:'~15 мин', role:'Гладиатор', tags:['история','восстание','свобода'], rating:'4.7',
+    creation:{ headline:'Кто выйдет на песок арены?', sub:'Опиши, кем ты был до рабства.',
+      hint:'Напр.: фракийский пастух, проданный в гладиаторы за долги',
+      roleLabel:'Роль', roles:['Гладиатор','Раб','Дезертир','Наёмник'],
+      fieldLabel:'Происхождение', fieldOpts:['Фракиец','Галл','Римлянин','Чужеземец'] },
+    pages:[
     {h:'Восстание Спартака', drop:'П', text:'есок арены ещё хранит вчерашнюю кровь. Ты — раб-гладиатор школы Батиата, и сегодня в казарме шепчутся о побеге.'},
     {text:'Один неверный взгляд стражи — и всё кончено. Спартак смотрит на тебя через решётку: «Ну что, брат? Жить рабом или умереть свободным?»'},
     {choices:['Присоединиться к заговору.','Выждать и оценить силы.','Выдать заговор ради свободы.']}
   ]},
   post:{title:'После тишины', cover:'assets/cover_postapoc.jpg', tag:'Пост-апок', tagClass:'g-post',
     synopsis:'Город зарос за двадцать лет. Где-то впереди — первый человеческий звук за долгие дни. Спасение или ловушка?',
-    chapters:6, difficulty:'Обычная', tone:'Тревожный', time:'~15 мин', role:'Выживший', tags:['зомби','выживание','атмосфера'], rating:'4.5', pages:[
+    chapters:6, difficulty:'Обычная', tone:'Тревожный', time:'~15 мин', role:'Выживший', tags:['зомби','выживание','атмосфера'], rating:'4.5',
+    creation:{ headline:'Кто выжил в мёртвом городе?', sub:'Опиши, кем ты был до тишины.',
+      hint:'Напр.: бывший врач, потерявший семью, но не руки',
+      roleLabel:'Навык', roles:['Выживший','Мародёр','Врач','Следопыт'],
+      fieldLabel:'Убежище', fieldOpts:['Метро','Больница','Крыши','Одиночка'] },
+    pages:[
     {h:'После тишины', drop:'Г', text:'ород зарос за двадцать лет. Ты идёшь по бывшему проспекту, где сквозь асфальт пробились деревья, а витрины ослепли от пыли.'},
     {text:'Где-то впереди — звук. Первый человеческий звук за много дней. Он может значить спасение. Или ловушку.'},
     {choices:['Пойти на звук.','Обойти стороной, держась в тени.','Затаиться и ждать темноты.']}
@@ -1051,6 +1190,91 @@ function advance(){
   else if(nx.check){ renderContinue(); }
   else { renderContinue(); }
 }
+/* ===== СОЗДАНИЕ ГЕРОЯ ===== */
+const PACK_ACC={fant:'#d9a94a', scifi:'#54e6d0', hist:'#c9a865', post:'#9bbf3a'};
+let crKey='fant', crStats=[];
+function rollStat(){ // 3d6-подобно, мод из значения
+  const v=8+Math.floor(Math.random()*11); // 8..18
+  return {v, m:Math.floor((v-10)/2)};
+}
+function crRenderStats(bump){
+  const el=document.getElementById('crStats'); if(!el) return;
+  el.innerHTML=ABIL.map((a,i)=>{
+    const st=crStats[i];
+    return '<div class="cr-stat'+(bump?' bump':'')+'"><div class="k">'+a.k.toUpperCase()+'</div>'+
+      '<div class="v">'+st.v+'</div><div class="m">'+fmtMod(st.m)+'</div></div>';
+  }).join('');
+  if(bump) setTimeout(()=>el.querySelectorAll('.cr-stat').forEach(x=>x.classList.remove('bump')),320);
+}
+function crReroll(){ crStats=ABIL.map(()=>rollStat()); crRenderStats(true); sfxClick(); }
+let crRole=null;
+function openCreator(key){
+  crKey=key;
+  const cr=document.getElementById('creator'), c=stories[key].creation||{};
+  cr.style.setProperty('--acc', PACK_ACC[key]||'#d9a94a');
+  document.getElementById('crWorld').textContent=stories[key].title;
+  // заголовок и подсказка из мира
+  cr.querySelector('.cr-h').textContent=c.headline||'Кто ты в этом мире?';
+  cr.querySelector('.cr-sub').textContent=c.sub||'Опиши героя одной фразой — остальное подберёт ИИ.';
+  document.getElementById('crPrompt').placeholder=c.hint||'Опиши своего героя';
+  // роли-чипы
+  document.getElementById('crRoleLabel').textContent=c.roleLabel||'Класс';
+  const roles=document.getElementById('crRoles'); crRole=null;
+  roles.innerHTML=(c.roles||[]).map((r,i)=>'<button class="cr-role'+(i===0?' on':'')+'" data-r="'+r+'">'+r+'</button>').join('');
+  crRole=(c.roles||[])[0]||null;
+  roles.querySelectorAll('.cr-role').forEach(b=>b.addEventListener('click',()=>{
+    roles.querySelectorAll('.cr-role').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+    crRole=b.dataset.r; sfxClick();
+  }));
+  // тематическое поле
+  document.getElementById('crFieldLabel').textContent=c.fieldLabel||'Происхождение';
+  document.getElementById('crField').innerHTML=(c.fieldOpts||['—']).map(o=>'<option>'+o+'</option>').join('');
+  document.getElementById('crName').value='';
+  document.getElementById('crBio').value='';
+  document.getElementById('crPrompt').value='';
+  crReroll();
+  cr.classList.add('on'); document.getElementById('nav').style.display='none'; sfxNav();
+}
+function closeCreator(){ document.getElementById('creator').classList.remove('on'); document.getElementById('nav').style.display=''; }
+/* мокап генерации: заполняем поля по промту (реальную модель подключим на бэкенде) */
+const GEN_NAMES=['Кель','Ворон','Сайла','Древ','Мирра','Аскет','Тень','Ольвен'];
+function crGenerate(){
+  const btn=document.getElementById('crGen'); btn.classList.add('busy'); btn.textContent='✦ Генерирую…'; sfxClick();
+  setTimeout(()=>{
+    const prompt=document.getElementById('crPrompt').value.trim();
+    document.getElementById('crName').value=GEN_NAMES[Math.floor(Math.random()*GEN_NAMES.length)];
+    const roleTxt = crRole ? crRole.toLowerCase()+', ' : '';
+    document.getElementById('crBio').value = prompt
+      ? prompt.charAt(0).toUpperCase()+prompt.slice(1)+'. '+(crRole?crRole+' по призванию.':'')
+      : 'По роду — '+roleTxt+'но прошлое скрыто в тумане. Каждый выбор пишет, кем он станет.';
+    crReroll();
+    // «портрет обновился»
+    const pt=document.getElementById('crPortrait'); pt.style.opacity=.3;
+    setTimeout(()=>{ pt.style.transition='opacity .5s'; pt.style.opacity=1; },350);
+    btn.classList.remove('busy'); btn.textContent='✦ Сгенерировать заново';
+  }, 900);
+}
+(function(){
+  const cr=document.getElementById('creator'); if(!cr) return;
+  document.getElementById('crBack').addEventListener('click',()=>{ closeCreator(); sfxClick(); });
+  document.getElementById('crReroll').addEventListener('click', crReroll);
+  document.getElementById('crGen').addEventListener('click', crGenerate);
+  cr.querySelectorAll('.cr-pbtns button').forEach(b=>b.addEventListener('click',()=>{
+    if(b.dataset.p==='gen') crGenerate(); else toast('Загрузка портрета — на бэкенде');
+    sfxClick();
+  }));
+  document.getElementById('crGo').addEventListener('click',()=>{
+    const name=document.getElementById('crName').value.trim()||'Безымянный';
+    CHAR.name=name;
+    CHAR.role=crRole;
+    // переносим характеристики создания в лист персонажа
+    ABIL.forEach((a,i)=>{ a.mod=crStats[i].m; });
+    closeCreator();
+    setTimeout(()=>openReader(crKey), 240);
+    sfxClick();
+  });
+})();
+
 function openReader(key){
   curStory=key; feedIndex=0; queue=stories[key].pages.slice(); titleEl.textContent=stories[key].title;
   document.getElementById('drawerTitle').textContent=stories[key].title;
@@ -1112,7 +1336,7 @@ function scenarioHTML(k){ const s=stories[k];
     <button class="rbtn solid sc-start" data-start="${k}">Начать историю ⚔</button>`;
 }
 function openScenario(k){ openSheet(scenarioHTML(k)); sfxClick();
-  const b=sheetBody.querySelector('.sc-start'); if(b) b.addEventListener('click',()=>{ closeSheet(); setTimeout(()=>openReader(b.dataset.start),240); });
+  const b=sheetBody.querySelector('.sc-start'); if(b) b.addEventListener('click',()=>{ closeSheet(); setTimeout(()=>openCreator(b.dataset.start),240); });
 }
 
 /* --- tools as sheets --- */
