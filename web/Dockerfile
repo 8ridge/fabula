@@ -2,7 +2,9 @@
 # Гарантированно включает public/ (видео, картинки, шрифты) в .output/public.
 FROM node:20-slim AS build
 WORKDIR /app
-# Копируем весь исходник ДО npm install: postinstall (nuxt prepare) требует nuxt.config и исходники.
+# npm 10.8.2 из node:20 падает 'edgesOut' на платформенных optional-деп (oxc-parser).
+# Обновляем npm до версии без этого бага.
+RUN npm install -g npm@11
 COPY . .
 RUN npm install
 RUN npm run build
