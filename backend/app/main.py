@@ -29,6 +29,12 @@ app.add_middleware(
 app.include_router(auth.router)
 
 
+@app.get("/", tags=["health"])
+async def root():
+    # корневой роут, чтобы health-check хостинга на "/" получал 200, а не 404
+    return {"service": "fabula-auth", "status": "ok"}
+
+
 @app.get("/health", tags=["health"])
 async def health():
     return {"status": "ok"}
