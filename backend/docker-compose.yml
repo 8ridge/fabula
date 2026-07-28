@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: fabula-db
+    environment:
+      POSTGRES_USER: fabula
+      POSTGRES_PASSWORD: fabula
+      POSTGRES_DB: fabula
+    ports:
+      - "5432:5432"
+    volumes:
+      - fabula_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fabula"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  fabula_pgdata:
