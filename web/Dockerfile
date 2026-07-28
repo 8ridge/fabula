@@ -2,9 +2,9 @@
 # Гарантированно включает public/ (видео, картинки, шрифты) в .output/public.
 FROM node:20-slim AS build
 WORKDIR /app
-COPY package.json ./
-RUN npm install
+# Копируем весь исходник ДО npm install: postinstall (nuxt prepare) требует nuxt.config и исходники.
 COPY . .
+RUN npm install
 RUN npm run build
 
 FROM node:20-slim
