@@ -7,7 +7,9 @@ services:
       POSTGRES_PASSWORD: fabula
       POSTGRES_DB: fabula
     ports:
-      - "5432:5432"
+      # Хост-порт можно переопределить через POSTGRES_PORT в .env
+      # (напр. 55432, если на 5432 уже висит локальный Postgres).
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - fabula_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -15,6 +17,20 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  api:
+    build: .
+    container_name: fabula-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # внутри compose-сети база доступна как host "db":5432
+      DATABASE_URL: postgresql+asyncpg://fabula:fabula@db:5432/fabula
+      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-9f3a1c7b2e5d8046}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://localhost:8090,http://127.0.0.1:8090}
+    ports:
+      - "${API_PORT:-8000}:8000"
 
 volumes:
   fabula_pgdata:
