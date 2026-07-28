@@ -1112,7 +1112,7 @@ function scenarioHTML(k){ const s=stories[k];
     <button class="rbtn solid sc-start" data-start="${k}">Начать историю ⚔</button>`;
 }
 function openScenario(k){ openSheet(scenarioHTML(k)); sfxClick();
-  const b=sheetBody.querySelector('.sc-start'); if(b) b.addEventListener('click',()=>{ closeSheet(); setTimeout(()=>openReader(b.dataset.start),240); });
+  const b=sheetBody.querySelector('.sc-start'); if(b) b.addEventListener('click',()=>{ closeSheet(); setTimeout(()=>{ location.href='interaction.html?story='+encodeURIComponent(b.dataset.start); },240); });
 }
 
 /* --- tools as sheets --- */

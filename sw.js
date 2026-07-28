@@ -7,13 +7,17 @@
    forever, no matter how many times the site was redeployed). Everything else
    (fonts, art) is cache-first because those filenames are stable and heavy.
 */
-const VERSION = 'fabula-v3';
+const VERSION = 'fabula-v5';
 const CACHE = VERSION;
 
 const SHELL = [
   './',
   'index.html',
   'app.html',
+  'interaction.html',
+  'interaction.css',
+  'interaction.js',
+  'interaction-config.js',
   'manifest.json',
   'assets/fonts/fonts.css',
   'assets/hero_landing.jpg',
