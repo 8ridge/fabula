@@ -5,6 +5,26 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   modules: ['@vite-pwa/nuxt', 'motion-v/nuxt', '@vueuse/nuxt'],
   css: ['~/assets/css/main.css'],
+  runtimeConfig: {
+    openrouterApiKey: '',
+    openrouterBaseUrl: 'https://openrouter.ai/api/v1',
+    openrouterSiteUrl: '',
+    openrouterAppName: 'Fabula',
+    fabulaAiEnabled: false,
+    fabulaAiAllowUnauthenticated: false,
+    fabulaAiNemotronEnabled: false,
+    fabulaAiAionEnabled: false,
+    fabulaAiMediaEnabled: false,
+    fabulaAiPremiumMediaEnabled: false,
+    fabulaAiRequestsPerMinute: 8,
+  },
+  nitro: {
+    serverAssets: [{
+      baseName: 'fabula-prompts',
+      dir: new URL('../deliverables/PWA_AI_PRESENTATION_KIT/prompts', import.meta.url).pathname,
+      pattern: '*.md',
+    }],
+  },
   vite: {
     plugins: [tailwindcss()],
   },

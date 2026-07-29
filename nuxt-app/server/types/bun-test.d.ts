@@ -1,0 +1,11 @@
+declare module 'bun:test' {
+  export const describe: (name: string, callback: () => void) => void
+  export const test: (name: string, callback: () => void | Promise<void>) => void
+  export const expect: (actual: unknown) => any
+}
+
+declare const Bun: {
+  file(path: string | URL): {
+    text(): Promise<string>
+  }
+}

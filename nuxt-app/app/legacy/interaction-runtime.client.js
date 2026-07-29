@@ -45,7 +45,11 @@ export function mountInteractionRuntime(root) {
   let storyId = new URLSearchParams(location.search).get('story') || 'fant';
   let mode = 'action';
   let fontScale = 'large';
-  let sessionVersion = 2;
+  const previewSessions = new Map();
+  let sessionState = loadSessionState(storyId);
+  let sessionId = sessionState.sessionId;
+  let sessionVersion = sessionState.version;
+  let turnPending = false;
   let toastTimer = null;
   let selectionState = null;
   const inventoryState = { query: '', filter: 'all', selectedId: 'ash-blade' };
@@ -147,6 +151,42 @@ export function mountInteractionRuntime(root) {
     toastEl.classList.add('is-visible');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => toastEl.classList.remove('is-visible'), 2200);
+  }
+
+  function loadSessionState(targetStoryId) {
+    const existing = previewSessions.get(targetStoryId);
+    if (existing) return existing;
+    const created = {
+      storyId: targetStoryId,
+      sessionId: 'session:' + (globalThis.crypto?.randomUUID?.() || ('local-' + Date.now())),
+      version: 0
+    };
+    previewSessions.set(targetStoryId, created);
+    return created;
+  }
+
+  function persistSessionState() {
+    sessionState.sessionId = sessionId;
+    sessionState.version = sessionVersion;
+    previewSessions.set(sessionState.storyId, sessionState);
+  }
+
+  function switchSessionForStory(targetStoryId) {
+    sessionState = loadSessionState(targetStoryId);
+    sessionId = sessionState.sessionId;
+    sessionVersion = sessionState.version;
+  }
+
+  function resetPreviewSession(targetStoryId) {
+    const reset = {
+      storyId: targetStoryId,
+      sessionId: 'session:' + (globalThis.crypto?.randomUUID?.() || ('local-' + Date.now())),
+      version: 0
+    };
+    previewSessions.set(targetStoryId, reset);
+    sessionState = reset;
+    sessionId = reset.sessionId;
+    sessionVersion = 0;
   }
 
   function messageText(article) {
@@ -396,7 +436,9 @@ export function mountInteractionRuntime(root) {
   }
 
   function applyStory(nextId) {
+    const previousStoryId = storyId;
     storyId = config.storyPacks[nextId] ? nextId : 'fant';
+    if (storyId !== previousStoryId) switchSessionForStory(storyId);
     const story = currentStory();
     const theme = config.themes[story.themeId] || config.themes.fantasy;
     app.dataset.story = storyId;
@@ -480,37 +522,112 @@ export function mountInteractionRuntime(root) {
     count.textContent = input.value.length + ' / 1200';
   }
 
-  function appendDemoTurn(text) {
-    const user = { type: 'player', name: 'Ты', meta: mode === 'speech' ? 'Речь · только что' : mode === 'exploration' ? 'Исследование · только что' : 'Действие · только что', text, foot: 'Локальный demo fixture' };
+  async function appendServerTurn(text) {
+    const user = { type: 'player', name: 'Ты', meta: mode === 'speech' ? 'Речь · только что' : mode === 'exploration' ? 'Исследование · только что' : 'Действие · только что', text, foot: 'Отправлено серверному движку' };
     chatScroll.insertAdjacentHTML('beforeend', messageMarkup(user));
-    const pending = { type: 'narrator', name: 'Рассказчик', meta: 'Демо-ответ · adapter не подключен', text: mode === 'speech' ? 'Старик не отвечает сразу. Его взгляд скользит от твоего лица к клинку, а затем возвращается обратно - теперь уже без прежнего недоверия.' : mode === 'exploration' ? 'Ты замечаешь две вещи: свежую пыль на внутренней стороне арки и следы сапог, ведущие не к Цитадели, а обратно к руинам.' : 'Действие принято как намерение. Серверный движок проверит доступность, риск и последствия перед изменением канона.', foot: 'Ничего не записано в канон до server commit', pending: true };
     const pendingNode = document.createElement('div');
-    pendingNode.className = 'demo-pending';
-    pendingNode.innerHTML = '<div class="message pending-placeholder"><span class="loading-dots">● ● ●</span><span>Собираю demo-ответ для проверки интерфейса</span></div>';
+    pendingNode.className = 'server-pending';
+    pendingNode.innerHTML = '<div class="message pending-placeholder"><span class="loading-dots">● ● ●</span><span>Проверяю контекст и собираю ход через OpenRouter</span></div>';
     chatScroll.appendChild(pendingNode);
     chatScroll.scrollTop = chatScroll.scrollHeight;
-    const request = config.makeTurnRequest({ text, mode, storyId, sessionVersion });
-    window.__fabulaLastTurnRequest = request;
-    sessionVersion += 1;
-    setTimeout(() => {
+    const requestStoryId = storyId;
+    const request = config.makeTurnRequest({ text, mode, storyId: requestStoryId, sessionId, sessionVersion });
+    async function fetchTurn() {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 100000);
+      try {
+        return await fetch('/api/ai/turn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(request),
+          cache: 'no-store',
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+    try {
+      let response;
+      try {
+        response = await fetchTurn();
+      } catch (firstError) {
+        if (firstError?.name !== 'AbortError' && !(firstError instanceof TypeError)) throw firstError;
+        response = await fetchTurn();
+      }
+      let payload = await response.json().catch(() => null);
+      if (response.status === 409 && payload?.code === 'SESSION_VERSION_CONFLICT') {
+        resetPreviewSession(requestStoryId);
+        request.session_id = sessionId;
+        request.expected_session_version = 0;
+        response = await fetchTurn();
+        payload = await response.json().catch(() => null);
+      }
+      if (!response.ok || !payload || payload.schema_version !== 'turn-response@1.0') {
+        const error = new Error(payload?.message || 'Сервер не вернул безопасный ход');
+        error.code = payload?.code || 'INVALID_SERVER_RESPONSE';
+        throw error;
+      }
+      if (!payload.turn || typeof payload.turn.narrative_text !== 'string') {
+        const error = new Error('Ответ не прошел клиентскую проверку');
+        error.code = 'INVALID_TURN_RESPONSE';
+        throw error;
+      }
+      if (storyId !== requestStoryId) throw new Error('История была переключена во время хода');
+      sessionVersion = payload.session_version;
+      persistSessionState();
+      const turn = payload.turn;
+      const pending = {
+        type: 'narrator',
+        name: 'Рассказчик',
+        meta: (payload.fallback_used ? 'Резервная модель' : 'Авторитетный preview-ход') + ' · ' + turn.resolution.outcome,
+        text: turn.narrative_text || turn.resolution.summary,
+        foot: 'Preview-сессия v' + sessionVersion + ' · память процесса, без production-канона',
+        pending: false
+      };
       pendingNode.outerHTML = messageMarkup(pending);
       chatScroll.scrollTop = chatScroll.scrollHeight;
+      showToast(payload.fallback_used ? 'Ход получен через резервную модель' : 'Ход подтвержден preview-сервером');
+    } catch (error) {
+      const aborted = error && error.name === 'AbortError';
+      const message = aborted ? 'Сервер не успел завершить ход после безопасного повтора.' : (error?.message || 'Не удалось получить ход.');
+      const code = aborted ? 'CLIENT_TIMEOUT' : (error?.code || 'NETWORK_ERROR');
+      pendingNode.outerHTML = messageMarkup({
+        type: 'narrator',
+        name: 'Системный контур',
+        meta: 'Ход не применен',
+        text: message,
+        foot: 'Код: ' + code + ' · текст возвращен в поле',
+        pending: true
+      });
+      if (!input.value.trim()) {
+        input.value = text;
+        resizeInput();
+      }
+      input.focus();
+      showToast('Ход не применен');
+    } finally {
+      turnPending = false;
       document.querySelector('.turn-badge').innerHTML = '<i></i> Твой ход';
-      showToast('Demo-ответ добавлен локально');
-    }, 720);
+    }
   }
 
   function submitTurn() {
+    if (turnPending) {
+      showToast('Предыдущий ход еще выполняется');
+      return;
+    }
     const text = input.value.trim();
     if (!text) {
       input.focus();
       showToast('Сначала опиши свое намерение');
       return;
     }
-    appendDemoTurn(text);
+    turnPending = true;
     input.value = '';
     resizeInput();
     document.querySelector('.turn-badge').innerHTML = '<i></i> Ход собирается';
+    void appendServerTurn(text);
   }
 
   function closeModal() {
@@ -529,7 +646,27 @@ export function mountInteractionRuntime(root) {
       const statusClass = prompt.route === 'primary' ? 'primary' : prompt.route.indexOf('async') === 0 || prompt.route === 'premium' ? 'async' : prompt.route === 'advisory' ? 'advisory' : '';
       return '<div class="prompt-row"><span class="prompt-number">' + prompt.number + '</span><span><strong>' + escapeHTML(prompt.title) + '</strong><small>' + escapeHTML(model.label) + ' · ' + escapeHTML(prompt.contract) + '</small></span><span class="prompt-status ' + statusClass + '">' + escapeHTML(prompt.route) + '</span></div>';
     }).join('');
-    return '<div class="model-summary"><span>⌘</span><span><strong>OpenRouter transport подготовлен</strong><small>browserCalls: false · server-owned budget and secrets</small></span></div><p class="modal-note">Все модели остаются серверными seams: только авторитетный ход меняет состояние, advisory-модели предлагают, media работает асинхронно.</p><div class="model-catalog-grid">' + modelCards + '</div><div class="prompt-list-heading">12 prompt-модулей</div><div class="prompt-list">' + rows + '</div><div class="modal-actions"><a class="modal-button primary" href="https://openrouter.ai" target="_blank" rel="noopener">Открыть OpenRouter</a></div>';
+    return '<div class="model-summary" id="aiCatalogState" role="status"><span>⌘</span><span><strong>Проверяю серверный контур</strong><small>Ключи остаются в Nitro runtimeConfig</small></span></div><p class="modal-note">Модели вызываются только через server API. Авторитетный preview-ход проходит строгий контракт; advisory и media включаются отдельными серверными флагами.</p><div class="model-catalog-grid">' + modelCards + '</div><div class="prompt-list-heading">12 prompt-модулей</div><div class="prompt-list">' + rows + '</div><div class="modal-actions"><a class="modal-button primary" href="https://openrouter.ai" target="_blank" rel="noopener">Открыть OpenRouter</a></div>';
+  }
+
+  async function refreshAiCatalogStatus() {
+    const status = modalBody.querySelector('#aiCatalogState');
+    if (!status) return;
+    try {
+      const response = await fetch('/api/ai/catalog', { cache: 'no-store' });
+      const catalog = await response.json();
+      const enabledModules = Array.isArray(catalog.modules) ? catalog.modules.filter((module) => module.enabled).length : 0;
+      const title = catalog.enabled && catalog.configured && catalog.public_access
+        ? 'OpenRouter готов к preview-вызовам'
+        : catalog.enabled && catalog.configured
+          ? 'OpenRouter настроен, но публичный preview закрыт'
+          : catalog.configured
+            ? 'OpenRouter настроен, но выключен'
+            : 'OpenRouter ожидает серверный ключ';
+      status.innerHTML = '<span>⌘</span><span><strong>' + escapeHTML(title) + '</strong><small>' + enabledModules + ' модулей включено · ключ не передается в браузер</small></span>';
+    } catch (_) {
+      status.innerHTML = '<span>⌘</span><span><strong>Статус сервера недоступен</strong><small>Модельный каталог не загрузился</small></span>';
+    }
   }
 
   function filteredInventory() {
@@ -606,6 +743,7 @@ export function mountInteractionRuntime(root) {
     modalTitle.textContent = view[1];
     modalBody.innerHTML = view[2]();
     if (!modal.open) modal.showModal();
+    if (tool === 'models') void refreshAiCatalogStatus();
   }
 
   function compose(text) {
@@ -655,6 +793,10 @@ export function mountInteractionRuntime(root) {
     }
     const storyButton = event.target.closest('.thread-item[data-story], [data-story-select]');
     if (storyButton) {
+      if (turnPending) {
+        showToast('Дождись завершения текущего хода');
+        return;
+      }
       applyStory(storyButton.dataset.story || storyButton.dataset.storySelect);
       closeDrawers();
       showToast('Открыта история: ' + currentStory().title);
