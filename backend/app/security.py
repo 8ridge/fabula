@@ -21,20 +21,21 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-def create_access_token(user_id: int) -> str:
+def create_access_token(user_id: int, token_version: int) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": str(user_id),
+        "ver": token_version,
         "iat": now,
         "exp": now + timedelta(minutes=settings.access_token_ttl_min),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_alg)
 
 
-def decode_access_token(token: str) -> int | None:
-    """Возвращает user_id из валидного токена или None."""
+def decode_access_token(token: str) -> dict | None:
+    """Возвращает {'user_id': int, 'ver': int} из валидного токена или None."""
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_alg])
-        return int(payload["sub"])
+        return {"user_id": int(payload["sub"]), "ver": int(payload["ver"])}
     except (jwt.PyJWTError, KeyError, ValueError):
         return None

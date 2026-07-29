@@ -14,10 +14,10 @@ async def get_current_user(
     creds: HTTPAuthorizationCredentials = Depends(bearer),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    user_id = decode_access_token(creds.credentials)
-    if user_id is None:
+    payload = decode_access_token(creds.credentials)
+    if payload is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Недействительный токен")
-    user = await db.get(User, user_id)
-    if user is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Пользователь не найден")
+    user = await db.get(User, payload["user_id"])
+    if user is None or user.token_version != payload["ver"]:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Сессия недействительна")
     return user
