@@ -83,8 +83,9 @@
           <div class="appbar" style="position:sticky"><div class="ttl">Профиль</div><div class="iconbtn">⚙</div></div>
           <div class="p-top">
             <div class="avatar"><img src="/assets/avatar.jpg" onerror="this.style.display='none'"><span class="fb">♞</span><span class="ring"></span></div>
-            <div class="p-name">Безымянный</div>
-            <div class="p-tier">⚜ Подписка · Бард</div>
+            <div class="p-name" data-p="username">@…</div>
+            <div class="p-tier"><span data-p="email">…</span> <span data-p="verified" style="color:#7cc47f">✓ подтверждена</span></div>
+            <div class="p-joined" data-p="joined" style="font-size:12px;color:var(--ink-mute)"></div>
             <div style="width:100%"><div class="xp"><span>Уровень 7</span><span>1 840 / 2 800 XP</span></div><div class="xpbar"><i></i></div></div>
           </div>
           <div class="stats"><div class="stat"><b>12</b><span>историй</span></div><div class="stat"><b>34</b><span>часа</span></div><div class="stat"><b>8</b><span>достижений</span></div></div>
@@ -93,12 +94,20 @@
             <div style="flex:1"><div class="st">Королевство Пепельных земель</div><div class="sp"><i style="width:62%"></i></div><div class="pct">Глава 5 · 62%</div></div></div>
           <div class="story-row" data-open="scifi"><div class="th pv-scifi"><img src="/assets/cover_scifi.png" onerror="this.style.display='none'"></div>
             <div style="flex:1"><div class="st">Станция «Кассандра»</div><div class="sp"><i style="width:28%"></i></div><div class="pct">Глава 2 · 28%</div></div></div>
+          <div class="list-h" style="margin-top:16px">Аккаунт</div>
+          <div class="setrow" data-act="username"><span class="l"><span class="g">◈</span>Никнейм</span><span class="chev" data-p="username-mini"></span></div>
+          <div class="setrow" data-act="password"><span class="l"><span class="g">⚿</span>Пароль</span><span class="chev">Изменить ›</span></div>
+          <div class="setrow"><span class="l"><span class="g">✉</span>Почта</span><span class="chev" style="color:#7cc47f">подключена</span></div>
+          <div class="setrow"><span class="l"><span class="g">G</span>Google</span><span class="chev" data-p="google">скоро</span></div>
+          <div class="setrow" data-act="logout"><span class="l"><span class="g">⎋</span>Выйти</span><span class="chev">›</span></div>
+          <div class="setrow" data-act="logout-all"><span class="l"><span class="g">⎇</span>Выйти со всех устройств</span><span class="chev">›</span></div>
           <div class="list-h" style="margin-top:16px">Настройки</div>
           <div class="setrow"><span class="l"><span class="g">☙</span>Подписка и грейды</span><span class="chev">›</span></div>
           <div class="setrow"><span class="l"><span class="g">♪</span>Звук и музыка</span><span class="chev">›</span></div>
           <div class="setrow"><span class="l"><span class="g">✦</span>Оформление</span><span class="chev">›</span></div>
           <div class="setrow" id="installRow"><span class="l"><span class="g">⤓</span>Установить приложение</span><span class="chev">›</span></div>
           <a class="setrow" href="/" style="border:none;text-decoration:none"><span class="l"><span class="g">⌂</span>Вернуться на сайт</span><span class="chev">›</span></a>
+          <div class="setrow" data-act="delete" style="margin-top:10px"><span class="l" style="color:#d9655f"><span class="g">🗑</span>Удалить аккаунт</span></div>
         </div>
       </section>
 
@@ -217,6 +226,39 @@ onMounted(() => {
   try { const t = localStorage.getItem('fabula-token'), u = localStorage.getItem('fabula-user'); if (t && u) session = { token: t, user: JSON.parse(u) }; } catch(e) {}
   window.__fabulaSession = session;                 // доступно всему приложению
   if (session && session.user) window.__fabulaUserName = session.user.name;
+
+  const AUTH_API = (location.hostname==='localhost' || location.hostname==='127.0.0.1')
+    ? 'http://127.0.0.1:8000' : 'https://dungeon20-p5svbq.saturn.ac';
+
+  async function apiAuth(path, method='GET', body=null){
+    const token = localStorage.getItem('fabula-token') || '';
+    const opt = { method, headers: { 'Authorization': 'Bearer ' + token } };
+    if (body){ opt.headers['Content-Type']='application/json'; opt.body = JSON.stringify(body); }
+    const res = await fetch(AUTH_API + path, opt);
+    let data = null; try { data = await res.json(); } catch(_){}
+    return { res, data };
+  }
+
+  function fmtJoined(iso){
+    try { return new Date(iso).toLocaleDateString('ru-RU', {day:'numeric', month:'long', year:'numeric'}); }
+    catch(_){ return ''; }
+  }
+
+  async function loadProfile(){
+    const { res, data } = await apiAuth('/auth/me');
+    if (res.status === 401){ location.href = '/'; return; }  // нет сессии → на сайт
+    if (!res.ok || !data) return;
+    window.__fabulaUser = data;
+    const set = (sel, val) => { const el = document.querySelector(sel); if (el) el.textContent = val; };
+    set('[data-p="username"]', '@' + data.username);
+    set('[data-p="email"]', data.email);
+    set('[data-p="joined"]', 'на ФАБУЛЕ с ' + fmtJoined(data.created_at));
+    const badge = document.querySelector('[data-p="verified"]');
+    if (badge) badge.style.display = data.email_verified ? '' : 'none';
+    const gp = document.querySelector('[data-p="google"]');
+    if (gp) gp.textContent = data.providers.includes('google') ? 'подключён' : 'скоро';
+  }
+  loadProfile();
 
 /* ================= SOUND (Web Audio) ================= */
 let AC=null, master=null, ambGain=null, ambOsc=[], unlocked=false, muted=false;
