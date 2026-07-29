@@ -4,10 +4,17 @@
   --color-fabula-950: #0a0a0c;
   --color-fabula-900: #101014;
   --color-fabula-800: #1a1a1e;
+  --color-fabula-surface: #141416;
+  --color-fabula-surface-raised: #1a1a1e;
   --color-fabula-100: #eaeaee;
   --color-fabula-300: #a2a2ab;
+  --color-fabula-500: #6d6d78;
   --color-fabula-gold: #d9a94a;
   --color-fabula-gold-light: #f2cd7c;
+  --color-fabula-scifi: #54e6d0;
+  --color-fabula-history: #c9a865;
+  --color-fabula-post: #9bbf3a;
+  --color-fabula-epic: #9a6fd0;
   --font-display: "Forum", Georgia, serif;
   --font-story: "Cormorant Garamond", Georgia, serif;
   --font-interface: "Tektur", ui-monospace, monospace;

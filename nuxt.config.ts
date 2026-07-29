@@ -3,7 +3,7 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
-  modules: ['@vite-pwa/nuxt', 'motion-v/nuxt', '@vueuse/nuxt'],
+  modules: ['@vite-pwa/nuxt', '@vueuse/nuxt'],
   css: ['~/assets/css/main.css'],
   runtimeConfig: {
     openrouterApiKey: '',
