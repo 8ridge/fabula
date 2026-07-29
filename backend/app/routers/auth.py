@@ -1,5 +1,5 @@
 """Роуты аутентификации и профиля."""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +8,7 @@ from ..database import get_db
 from ..deps import get_current_user
 from ..google_auth import GoogleVerifier, get_google_verifier
 from ..models import OAuthAccount, User
+from ..ratelimit import limiter
 from ..schemas import (
     ChangePasswordIn,
     GoogleAuthOut,
@@ -77,7 +78,8 @@ def _session_out(user: User) -> dict:
 
 
 @router.post("/register", response_model=TokenOut, status_code=status.HTTP_201_CREATED)
-async def register(data: RegisterIn, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def register(request: Request, data: RegisterIn, db: AsyncSession = Depends(get_db)):
     if await _get_by_email(db, data.email):
         raise HTTPException(status.HTTP_409_CONFLICT, "Почта уже зарегистрирована")
     if await _username_taken(db, data.username):
@@ -95,7 +97,8 @@ async def register(data: RegisterIn, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenOut)
-async def login(data: LoginIn, db: AsyncSession = Depends(get_db)):
+@limiter.limit("20/minute")
+async def login(request: Request, data: LoginIn, db: AsyncSession = Depends(get_db)):
     user = await _get_by_email(db, data.email)
     if user is None or user.password_hash is None or not verify_password(data.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверная почта или пароль")
@@ -141,7 +144,9 @@ async def delete_account(user: User = Depends(get_current_user), db: AsyncSessio
 
 
 @router.post("/google", response_model=GoogleAuthOut)
+@limiter.limit("20/minute")
 async def google_auth(
+    request: Request,
     data: GoogleIn,
     verifier: GoogleVerifier = Depends(get_google_verifier),
     db: AsyncSession = Depends(get_db),
@@ -197,7 +202,8 @@ async def google_auth(
 
 
 @router.post("/google/complete", response_model=TokenOut)
-async def google_complete(data: GoogleCompleteIn, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def google_complete(request: Request, data: GoogleCompleteIn, db: AsyncSession = Depends(get_db)):
     payload = decode_registration_token(data.registration_token)
     if payload is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Ссылка регистрации недействительна")
@@ -223,7 +229,9 @@ async def google_complete(data: GoogleCompleteIn, db: AsyncSession = Depends(get
 
 
 @router.post("/link/google", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/minute")
 async def link_google(
+    request: Request,
     data: GoogleIn,
     user: User = Depends(get_current_user),
     verifier: GoogleVerifier = Depends(get_google_verifier),
