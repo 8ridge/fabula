@@ -4,6 +4,7 @@ import uuid
 
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test.db"
 os.environ["JWT_SECRET"] = "test-secret"
+os.environ["RATE_LIMIT_ENABLED"] = "false"
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,6 +15,22 @@ def client():
     if os.path.exists("test.db"):
         os.remove("test.db")
     from app.main import app  # импорт после подмены env
+
+    from app.google_auth import get_google_verifier
+
+    class _FakeGoogleVerifier:
+        def verify(self, token: str) -> dict:
+            if token == "BAD":
+                raise ValueError("bad token")
+            import json
+            d = json.loads(token)
+            return {
+                "sub": d["sub"],
+                "email": d["email"],
+                "email_verified": bool(d.get("email_verified", True)),
+            }
+
+    app.dependency_overrides[get_google_verifier] = lambda: _FakeGoogleVerifier()
 
     with TestClient(app) as c:  # lifespan создаёт таблицы (init_db)
         yield c
@@ -35,3 +52,8 @@ def register(client, creds):
 
 def auth_headers(token):
     return {"Authorization": f"Bearer {token}"}
+
+
+def google_token(sub: str, email: str, email_verified: bool = True) -> str:
+    import json
+    return json.dumps({"sub": sub, "email": email, "email_verified": email_verified})

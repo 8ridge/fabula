@@ -42,3 +42,20 @@ class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserOut
+
+
+class GoogleIn(BaseModel):
+    id_token: str
+
+
+class GoogleCompleteIn(BaseModel):
+    registration_token: str
+    username: str = Field(pattern=USERNAME_PATTERN)
+
+
+class GoogleAuthOut(BaseModel):
+    access_token: str | None = None
+    token_type: str | None = None
+    user: UserOut | None = None
+    needs_username: bool = False
+    registration_token: str | None = None
