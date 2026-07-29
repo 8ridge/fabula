@@ -13,14 +13,14 @@ from fastapi import (
     status,
 )
 from PIL import Image
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
 from ..deps import get_current_user
 from ..google_auth import GoogleVerifier, get_google_verifier
-from ..models import OAuthAccount, User
+from ..models import OAuthAccount, User, UserSession
 from ..ratelimit import limiter
 from ..schemas import (
     ChangePasswordIn,
@@ -85,11 +85,53 @@ async def _user_out(db: AsyncSession, user: User) -> UserOut:
     )
 
 
-def _session_out(user: User) -> dict:
-    return {
-        "access_token": create_access_token(user.id, user.token_version),
-        "token_type": "bearer",
-    }
+_UA_BROWSERS = [("YaBrowser", "Yandex"), ("Edg", "Edge"), ("OPR", "Opera"),
+                ("Chrome", "Chrome"), ("Firefox", "Firefox"), ("Safari", "Safari")]
+_COUNTRY_NAMES = {
+    "RU": "Россия", "UA": "Украина", "BY": "Беларусь", "KZ": "Казахстан", "DE": "Германия",
+    "US": "США", "GB": "Великобритания", "PL": "Польша", "FR": "Франция", "NL": "Нидерланды",
+    "TR": "Турция", "IT": "Италия", "ES": "Испания", "CA": "Канада", "GE": "Грузия",
+    "AM": "Армения", "AZ": "Азербайджан", "UZ": "Узбекистан", "CN": "Китай", "IN": "Индия",
+    "JP": "Япония", "AE": "ОАЭ", "CY": "Кипр", "CZ": "Чехия", "FI": "Финляндия",
+    "SE": "Швеция", "RS": "Сербия", "LT": "Литва", "LV": "Латвия", "EE": "Эстония",
+}
+
+
+def _device_label(ua: str) -> str:
+    ua = ua or ""
+    browser = next((name for tok, name in _UA_BROWSERS if tok in ua), None)
+    if "Windows" in ua:
+        os_ = "Windows"
+    elif "Android" in ua:
+        os_ = "Android"
+    elif "iPhone" in ua or "iPad" in ua:
+        os_ = "iOS"
+    elif "Mac OS" in ua or "Macintosh" in ua:
+        os_ = "macOS"
+    elif "Linux" in ua:
+        os_ = "Linux"
+    else:
+        os_ = None
+    if browser and os_:
+        return f"{browser} · {os_}"
+    return browser or os_ or "Неизвестное устройство"
+
+
+def _country_name(code: str | None) -> str:
+    if not code:
+        return "—"
+    return _COUNTRY_NAMES.get(code.upper(), code.upper())
+
+
+async def _issue_session(db: AsyncSession, user: User, request: Request) -> str:
+    ua = request.headers.get("user-agent", "")
+    country = request.headers.get("cf-ipcountry")
+    if country in (None, "", "XX", "T1"):
+        country = None
+    s = UserSession(user_id=user.id, device=_device_label(ua), country=country)
+    db.add(s)
+    await db.flush()
+    return create_access_token(user.id, user.token_version, sid=s.id)
 
 
 @router.post("/register", response_model=TokenOut, status_code=status.HTTP_201_CREATED)
@@ -107,7 +149,8 @@ async def register(request: Request, data: RegisterIn, db: AsyncSession = Depend
     db.add(user)
     await db.commit()
     await db.refresh(user)
-    token = create_access_token(user.id, user.token_version)
+    token = await _issue_session(db, user, request)
+    await db.commit()
     return TokenOut(access_token=token, user=await _user_out(db, user))
 
 
@@ -117,7 +160,8 @@ async def login(request: Request, data: LoginIn, db: AsyncSession = Depends(get_
     user = await _get_by_email(db, data.email)
     if user is None or user.password_hash is None or not verify_password(data.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверная почта или пароль")
-    token = create_access_token(user.id, user.token_version)
+    token = await _issue_session(db, user, request)
+    await db.commit()
     return TokenOut(access_token=token, user=await _user_out(db, user))
 
 
@@ -149,6 +193,7 @@ async def change_password(data: ChangePasswordIn, user: User = Depends(get_curre
 @router.post("/logout-all", status_code=status.HTTP_204_NO_CONTENT)
 async def logout_all(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     user.token_version += 1
+    await db.execute(update(UserSession).where(UserSession.user_id == user.id).values(revoked=True))
     await db.commit()
 
 
@@ -183,7 +228,9 @@ async def google_auth(
     ).scalar_one_or_none()
     if acc:
         user = await db.get(User, acc.user_id)
-        return GoogleAuthOut(**_session_out(user), user=await _user_out(db, user))
+        token = await _issue_session(db, user, request)
+        await db.commit()
+        return GoogleAuthOut(access_token=token, token_type="bearer", user=await _user_out(db, user))
 
     user = await _get_by_email(db, email)
     if user is not None:
@@ -207,7 +254,9 @@ async def google_auth(
             ).scalar_one_or_none()
             if acc is not None:
                 user = await db.get(User, acc.user_id)
-        return GoogleAuthOut(**_session_out(user), user=await _user_out(db, user))
+        token = await _issue_session(db, user, request)
+        await db.commit()
+        return GoogleAuthOut(access_token=token, token_type="bearer", user=await _user_out(db, user))
 
     if not ev:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Google не подтвердил почту")
@@ -237,10 +286,9 @@ async def google_complete(request: Request, data: GoogleCompleteIn, db: AsyncSes
         await db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "Ник или аккаунт уже заняты")
     await db.refresh(user)
-    return TokenOut(
-        access_token=create_access_token(user.id, user.token_version),
-        user=await _user_out(db, user),
-    )
+    token = await _issue_session(db, user, request)
+    await db.commit()
+    return TokenOut(access_token=token, user=await _user_out(db, user))
 
 
 @router.post("/link/google", status_code=status.HTTP_204_NO_CONTENT)
@@ -343,3 +391,38 @@ async def get_avatar(user_id: int, db: AsyncSession = Depends(get_db)):
         media_type="image/webp",
         headers={"Cache-Control": "public, max-age=300"},
     )
+
+
+@router.get("/sessions")
+async def list_sessions(
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    res = await db.execute(
+        select(UserSession)
+        .where(UserSession.user_id == user.id, UserSession.revoked == False)  # noqa: E712
+        .order_by(UserSession.last_seen_at.desc())
+    )
+    cur = getattr(user, "current_sid", None)
+    return [
+        {
+            "id": s.id,
+            "device": s.device,
+            "country": s.country,
+            "country_name": _country_name(s.country),
+            "created_at": s.created_at,
+            "last_seen_at": s.last_seen_at,
+            "current": s.id == cur,
+        }
+        for s in res.scalars()
+    ]
+
+
+@router.delete("/sessions/{sid}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_session(
+    sid: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    s = await db.get(UserSession, sid)
+    if s is None or s.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Сессия не найдена")
+    s.revoked = True
+    await db.commit()
