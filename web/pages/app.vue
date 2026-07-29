@@ -225,7 +225,7 @@ onMounted(() => {
   let session = null;
   try { const t = localStorage.getItem('fabula-token'), u = localStorage.getItem('fabula-user'); if (t && u) session = { token: t, user: JSON.parse(u) }; } catch(e) {}
   window.__fabulaSession = session;                 // доступно всему приложению
-  if (session && session.user) window.__fabulaUserName = session.user.name;
+  if (session && session.user) window.__fabulaUserName = session.user.username;
 
   const AUTH_API = (location.hostname==='localhost' || location.hostname==='127.0.0.1')
     ? 'http://127.0.0.1:8000' : 'https://dungeon20-p5svbq.saturn.ac';
@@ -286,7 +286,8 @@ onMounted(() => {
         const cur = prompt('Текущий пароль:'); if (cur === null) return;
         const nw = prompt('Новый пароль (от 6 символов):'); if (!nw) return;
         const { res } = await apiAuth('/auth/change-password', 'POST', { current_password: cur, new_password: nw });
-        toast(res.ok ? 'Пароль изменён' : 'Неверный текущий пароль');
+        if (res.ok) { toast('Пароль изменён, войдите заново'); clearSession(); }
+        else toast('Неверный текущий пароль');
         return;
       }
       if (act === 'delete') {

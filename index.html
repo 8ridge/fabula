@@ -1344,7 +1344,7 @@ if('serviceWorker' in navigator){
     <form id="authForm" novalidate>
       <div class="auth-field auth-reg">
         <label>Как тебя звать</label>
-        <input type="text" id="afName" autocomplete="nickname" placeholder="Имя героя">
+        <input type="text" id="afName" autocomplete="nickname" placeholder="Ник: латиница, цифры, _">
       </div>
       <div class="auth-field">
         <label>Почта</label>
@@ -1440,6 +1440,7 @@ if('serviceWorker' in navigator){
     if(reg){
       name=$('afName').value.trim();
       if(!name) return fail('Как тебя звать?');
+      if(!/^[A-Za-z0-9_]{3,20}$/.test(name)) return fail('Ник: 3–20 символов, латиница, цифры, _');
       if(pass!==$('afPass2').value) return fail('Пароли не совпадают.');
     }
     busy=true; submit.disabled=true;

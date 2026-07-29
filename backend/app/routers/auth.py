@@ -103,6 +103,7 @@ async def change_password(data: ChangePasswordIn, user: User = Depends(get_curre
         if not data.current_password or not verify_password(data.current_password, user.password_hash):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Неверный текущий пароль")
     user.password_hash = hash_password(data.new_password)
+    user.token_version += 1
     await db.commit()
 
 
