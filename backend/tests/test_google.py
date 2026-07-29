@@ -74,3 +74,35 @@ def test_registration_token_not_usable_as_access(client):
     tok = google_token("g_new5", "gnew5@t.io")
     rt = client.post("/auth/google", json={"id_token": tok}).json()["registration_token"]
     assert client.get("/auth/me", headers=auth_headers(rt)).status_code == 401
+
+
+def test_link_and_unlink_google(client, creds):
+    data = register(client, creds)  # есть пароль
+    h = auth_headers(data["access_token"])
+    tok = google_token("g_link_me", "somethingelse@t.io")
+    assert client.post("/auth/link/google", json={"id_token": tok}, headers=h).status_code == 204
+    me = client.get("/auth/me", headers=h).json()
+    assert set(me["providers"]) == {"email", "google"}
+    # отвязка (пароль есть) -> 204
+    assert client.delete("/auth/link/google", headers=h).status_code == 204
+    assert client.get("/auth/me", headers=h).json()["providers"] == ["email"]
+
+
+def test_link_google_already_on_other_account(client, creds):
+    a = register(client, creds)
+    # b — отдельный аккаунт с привязанным google sub
+    tok = google_token("g_shared", "gshared@t.io")
+    rt = client.post("/auth/google", json={"id_token": tok}).json()["registration_token"]
+    client.post("/auth/google/complete", json={"registration_token": rt, "username": "gsharednick"})
+    # a пытается привязать тот же sub -> 409
+    r = client.post("/auth/link/google", json={"id_token": tok}, headers=auth_headers(a["access_token"]))
+    assert r.status_code == 409
+
+
+def test_unlink_google_only_login_blocked(client):
+    # google-only аккаунт (пароля нет) -> отвязка запрещена
+    tok = google_token("g_only", "gonly@t.io")
+    rt = client.post("/auth/google", json={"id_token": tok}).json()["registration_token"]
+    data = client.post("/auth/google/complete", json={"registration_token": rt, "username": "gonlynick"}).json()
+    r = client.delete("/auth/link/google", headers=auth_headers(data["access_token"]))
+    assert r.status_code == 400

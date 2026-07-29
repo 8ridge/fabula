@@ -1,6 +1,6 @@
 """Роуты аутентификации и профиля."""
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -220,3 +220,44 @@ async def google_complete(data: GoogleCompleteIn, db: AsyncSession = Depends(get
         access_token=create_access_token(user.id, user.token_version),
         user=await _user_out(db, user),
     )
+
+
+@router.post("/link/google", status_code=status.HTTP_204_NO_CONTENT)
+async def link_google(
+    data: GoogleIn,
+    user: User = Depends(get_current_user),
+    verifier: GoogleVerifier = Depends(get_google_verifier),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        claims = verifier.verify(data.id_token)
+    except Exception:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Недействительный токен Google")
+    sub = claims["sub"]
+    existing = (
+        await db.execute(
+            select(OAuthAccount).where(
+                OAuthAccount.provider == "google", OAuthAccount.provider_user_id == sub
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        if existing.user_id != user.id:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Этот Google уже привязан к другому аккаунту")
+        return  # идемпотентно
+    db.add(OAuthAccount(user_id=user.id, provider="google", provider_user_id=sub))
+    await db.commit()
+
+
+@router.delete("/link/google", status_code=status.HTTP_204_NO_CONTENT)
+async def unlink_google(
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    if user.password_hash is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Сначала добавь пароль")
+    await db.execute(
+        delete(OAuthAccount).where(
+            OAuthAccount.user_id == user.id, OAuthAccount.provider == "google"
+        )
+    )
+    await db.commit()
