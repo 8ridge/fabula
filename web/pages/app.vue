@@ -260,6 +260,44 @@ onMounted(() => {
   }
   loadProfile();
 
+  function toast(msg){ const t=document.getElementById('toast'); if(!t) return; t.textContent=msg; t.classList.add('on'); setTimeout(()=>t.classList.remove('on'),2200); }
+
+  function clearSession(){ try{ localStorage.removeItem('fabula-token'); localStorage.removeItem('fabula-user'); }catch(_){}; location.href='/'; }
+
+  document.querySelectorAll('[data-scr="profile"] [data-act]').forEach(row => {
+    row.addEventListener('click', async () => {
+      const act = row.dataset.act;
+      if (act === 'logout') { clearSession(); return; }
+      if (act === 'logout-all') {
+        const { res } = await apiAuth('/auth/logout-all', 'POST');
+        if (res.ok) { toast('Вышли со всех устройств'); clearSession(); }
+        return;
+      }
+      if (act === 'username') {
+        const cur = (window.__fabulaUser && window.__fabulaUser.username) || '';
+        const val = prompt('Новый ник (3–20, латиница/цифры/_):', cur);
+        if (!val || val === cur) return;
+        const { res, data } = await apiAuth('/auth/username', 'PATCH', { username: val });
+        if (res.ok) { toast('Ник обновлён'); loadProfile(); }
+        else toast(res.status === 409 ? 'Ник занят' : 'Проверь формат ника');
+        return;
+      }
+      if (act === 'password') {
+        const cur = prompt('Текущий пароль:'); if (cur === null) return;
+        const nw = prompt('Новый пароль (от 6 символов):'); if (!nw) return;
+        const { res } = await apiAuth('/auth/change-password', 'POST', { current_password: cur, new_password: nw });
+        toast(res.ok ? 'Пароль изменён' : 'Неверный текущий пароль');
+        return;
+      }
+      if (act === 'delete') {
+        if (!confirm('Удалить аккаунт навсегда? Это необратимо.')) return;
+        const { res } = await apiAuth('/auth/account', 'DELETE');
+        if (res.ok) { toast('Аккаунт удалён'); clearSession(); }
+        return;
+      }
+    });
+  });
+
 /* ================= SOUND (Web Audio) ================= */
 let AC=null, master=null, ambGain=null, ambOsc=[], unlocked=false, muted=false;
 function initAudio(){
