@@ -665,7 +665,8 @@ target_metadata = Base.metadata
 
 
 def do_run_migrations(connection):
-    context.configure(connection=connection, target_metadata=target_metadata)
+    # render_as_batch=True — совместимость с SQLite (batch/recreate), на Postgres авто-native.
+    context.configure(connection=connection, target_metadata=target_metadata, render_as_batch=True)
     with context.begin_transaction():
         context.run_migrations()
 
@@ -682,7 +683,7 @@ async def run_async_migrations():
 
 
 if context.is_offline_mode():
-    context.configure(url=settings.database_url, target_metadata=target_metadata, literal_binds=True)
+    context.configure(url=settings.database_url, target_metadata=target_metadata, literal_binds=True, render_as_batch=True)
     with context.begin_transaction():
         context.run_migrations()
 else:
@@ -770,22 +771,23 @@ def upgrade() -> None:
         used.add(name.lower())
         bind.execute(sa.text("UPDATE users SET username = :u WHERE id = :i"), {"u": name, "i": uid})
 
-    op.alter_column("users", "username", nullable=False)
-    op.create_unique_constraint("uq_users_username", "users", ["username"])
-    op.create_index("ix_users_username", "users", ["username"])
-
-    # name больше не нужен (ник = отображаемое имя).
-    op.drop_column("users", "name")
+    # batch_alter_table — портируемо: на SQLite делает recreate, на Postgres native ALTER.
+    with op.batch_alter_table("users") as batch:
+        batch.alter_column("username", existing_type=sa.String(20), nullable=False)
+        batch.create_unique_constraint("uq_users_username", ["username"])
+        batch.create_index("ix_users_username", ["username"])
+        batch.drop_column("name")  # ник = отображаемое имя
 
 
 def downgrade() -> None:
-    op.add_column("users", sa.Column("name", sa.String(80), nullable=False, server_default=""))
-    op.drop_index("ix_users_username", "users")
-    op.drop_constraint("uq_users_username", "users", type_="unique")
+    with op.batch_alter_table("users") as batch:
+        batch.add_column(sa.Column("name", sa.String(80), nullable=False, server_default=""))
+        batch.drop_index("ix_users_username")
+        batch.drop_constraint("uq_users_username", type_="unique")
+        batch.drop_column("username")
     op.drop_column("users", "token_version")
     op.drop_column("users", "avatar_url")
     op.drop_column("users", "email_verified")
-    op.drop_column("users", "username")
 ```
 
 - [ ] **Step 6: Проверить миграции на чистой SQLite**
