@@ -48,6 +48,7 @@ describe('OpenRouter transport', () => {
     expect(body.model).toBe('deepseek/deepseek-v4-flash')
     expect(body.provider).toMatchObject({
       require_parameters: true,
+      sort: 'throughput',
       data_collection: 'deny',
       zdr: true,
       max_price: { prompt: 0.15, completion: 0.3 },

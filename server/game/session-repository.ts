@@ -15,7 +15,7 @@ import type {
 import { STORY_PACKS } from '../../shared/storypacks'
 import type { StoryPackId } from '../../shared/storypacks'
 import type { SafeModelRun } from '../ai/http'
-import { FabulaApiError } from '../ai/http'
+import { AiExecutionError, FabulaApiError } from '../ai/http'
 import type { ExpectedInventoryState, TurnOperation, TurnOutput } from '../ai/contracts'
 import { ALLOWED_TURN_OPERATION_TYPES, getStoryPackContext } from './storypack-context'
 
@@ -26,6 +26,8 @@ export interface SessionTurnResult {
   advisoryUsed: boolean
   modelRuns?: SafeModelRun[]
 }
+
+export type TurnOutputValidator = (output: TurnOutput) => void
 
 export interface EngineSessionSnapshot {
   sessionId: string
@@ -760,7 +762,7 @@ export class GameSessionRepository {
   async executeTurn(
     ownerId: string,
     command: GameTurnCommand,
-    worker: (snapshot: EngineSessionSnapshot) => Promise<SessionTurnResult>,
+    worker: (snapshot: EngineSessionSnapshot, validateOutput: TurnOutputValidator) => Promise<SessionTurnResult>,
     requestId: string,
   ): Promise<GameTurnResponse> {
     const inFlightKey = `${ownerId}:${command.session_id}:${command.idempotency_key}`
@@ -788,7 +790,10 @@ export class GameSessionRepository {
   private async executeTurnLocked(
     ownerId: string,
     command: GameTurnCommand,
-    worker: (snapshot: EngineSessionSnapshot) => Promise<SessionTurnResult>,
+    worker: (
+      snapshot: EngineSessionSnapshot,
+      validateOutput: TurnOutputValidator,
+    ) => Promise<SessionTurnResult>,
     requestId: string,
     commandFingerprint: string,
   ): Promise<GameTurnResponse> {
@@ -825,12 +830,30 @@ export class GameSessionRepository {
       reservedIds,
       allowedOperationTypes: ALLOWED_TURN_OPERATION_TYPES,
     }
-    const result = await worker(engineSnapshot)
+    const validateOutput: TurnOutputValidator = (output) => {
+      const preview = clone(session)
+      applyOperations(preview, command, output, reservedIds)
+    }
+    const result = await worker(engineSnapshot, validateOutput)
     if (session.snapshot.version !== command.expected_session_version)
       throw new FabulaApiError('SESSION_VERSION_CONFLICT', 'История изменилась во время хода.', 409)
 
     const nextSession = clone(session)
-    const sourceEventIds = applyOperations(nextSession, command, result.output, reservedIds)
+    let sourceEventIds: string[]
+    try {
+      sourceEventIds = applyOperations(nextSession, command, result.output, reservedIds)
+    }
+    catch (error) {
+      if (error instanceof FabulaApiError && result.modelRuns?.length) {
+        throw new AiExecutionError(
+          error.code,
+          error.message,
+          result.modelRuns,
+          error.retryable,
+        )
+      }
+      throw error
+    }
     const createdAt = nowIso()
     nextSession.snapshot.messages.push(
       makeMessage({

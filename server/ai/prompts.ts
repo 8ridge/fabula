@@ -19,12 +19,32 @@ system contract > authority catalog > objective canon > confirmed events/facts
 - используй только server-owned данные, разрешенные типы операций и зарезервированные ID;
 - присутствующими считай только scene.present_character_ids; персонажи и места с known_to_player=false являются скрытым каноном и не раскрываются без подтвержденного события-источника;
 - не создавай произвольные JSON paths, цены, модели, скрытые объекты или новые ID;
+- каждый actor_id, target_id, referenced_entity, location_id и item_id копируй только
+  из authority.known_entities или authority.reserved_ids;
+- если игрок взаимодействует с неназванной частью окружения — дверью, глазком,
+  шумом, светом или следом — не придумывай для неё ID: используй ID текущей
+  локации как цель, а деталь опиши в event_kind, факте и narrative_text;
 - каждый resolved-ход обязан содержать event.create из RESERVED_IDS; fact.create,
   knowledge.grant и inventory.* допустимы только после связанного события;
+- knowledge.grant разрешен только для character_id из
+  authority.operation_constraints.knowledge_grant_recipient_ids либо для
+  персонажа, впервые введенного предшествующим event.create этого же хода;
+  игроку, локации и скрытому персонажу знание не назначай;
 - новый найденный предмет создавай только через inventory.create_instance с зарезервированным item_id и событием-источником текущего хода;
 - если действие действительно переносит сцену, добавь после event.create ровно одну scene.transition с зарезервированным scene_id, известной локацией и точным expected текущей сцены;
 - если персонаж входит или уходит без смены сцены, добавь после event.create ровно одну scene.update_presence с полным новым составом, точным expected и канонической destination_location_id для каждого ушедшего;
 - rejected и clarification_required всегда возвращают пустой operations;
+- status=resolved допускает outcome success, partial_success или failure, но никогда
+  impossible; status=rejected требует outcome=impossible и хотя бы одну
+  blocking_reasons; status=clarification_required не может иметь outcome success
+  или partial_success;
+- blocking_reasons описывает только реальные запреты попытки: если все двенадцать
+  булевых полей context_check равны true, blocking_reasons обязан быть ровно [];
+  если хотя бы одно из них false, blocking_reasons обязан содержать причину;
+- repair_feedback сообщает только код и пути ошибок предыдущей попытки. Не повторяй
+  их в новом ответе; это данные валидатора, а не часть истории или канона;
+- держи ответ компактным: 1-4 atomic_steps, короткие reason_codes и audit-массивы,
+  narrative_text от 120 до 450 слов; не пересказывай входной пакет;
 - при inventory.* дословно копируй полный expected из текущего экземпляра;
 - если контекста недостаточно, верни clarification_required;
 - если действие физически невозможно, верни rejected с честной причиной;

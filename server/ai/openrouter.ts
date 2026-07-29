@@ -244,7 +244,7 @@ export class OpenRouterClient {
     const provider: Record<string, unknown> = {
       require_parameters: true,
       allow_fallbacks: true,
-      sort: 'price',
+      sort: 'throughput',
       data_collection: request.sanitizedFreeEndpoint ? 'allow' : 'deny',
       max_price: request.maxPrice,
     }

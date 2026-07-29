@@ -10,6 +10,11 @@ export default defineEventHandler(async (event) => {
     return await handleGameTurn(event, sessionId)
   }
   catch (error) {
-    return respondWithError(event, error, requestId)
+    return respondWithError(
+      event,
+      error,
+      requestId,
+      typeof event.context.fabulaTurnId === 'string' ? event.context.fabulaTurnId : undefined,
+    )
   }
 })

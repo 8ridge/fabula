@@ -455,7 +455,8 @@ describe('game session repository', () => {
 
     await expect(repository.executeTurn(ownerId, command, async (snapshot) => {
       const eventId = snapshot.reservedIds.events[0]!
-      return workerResult(snapshot, command, [
+      return {
+        ...workerResult(snapshot, command, [
         {
           type: 'event.create',
           operation_index: 0,
@@ -475,8 +476,24 @@ describe('game session repository', () => {
           truth_status: 'observed',
           source_event_ids: [eventId],
         },
-      ])
-    }, 'request:atomicity')).rejects.toMatchObject({ code: 'MODEL_AUTHORITY_ERROR' })
+        ]),
+        modelRuns: [{
+          role: 'primary',
+          model: 'deepseek/deepseek-v4-flash',
+          request_id: 'request:model-authority',
+          usage: { total_tokens: 10 },
+          status: 'accepted',
+          error_code: null,
+          validation_errors: [],
+        }],
+      }
+    }, 'request:atomicity')).rejects.toMatchObject({
+      code: 'MODEL_AUTHORITY_ERROR',
+      modelRuns: [{
+        request_id: 'request:model-authority',
+        status: 'accepted',
+      }],
+    })
 
     const current = await repository.get(ownerId, session.id)
     expect(current.version).toBe(0)

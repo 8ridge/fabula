@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { FabulaAiConfig } from './config'
-import type { TurnCommand } from './contracts'
-import { AiExecutionError } from './http'
+import type { TurnCommand, TurnOutput } from './contracts'
+import { AiExecutionError, FabulaApiError } from './http'
 import { OpenRouterError } from './openrouter'
 import type { ChatJsonRequest, OpenRouterClient } from './openrouter'
 import type { EngineSessionSnapshot } from '../game/session-repository'
@@ -69,7 +69,7 @@ const snapshot: EngineSessionSnapshot = {
   allowedOperationTypes: ['event.create', 'fact.create'],
 }
 
-function successfulTurnOutput() {
+function successfulTurnOutput(): TurnOutput {
   return {
     schema_version: 'turn-output@0.2',
     turn_id: command.idempotency_key,
@@ -211,6 +211,162 @@ describe('turn engine model telemetry', () => {
         timeoutMs: TURN_MODEL_TIMEOUTS.fallbackMs,
       },
     ])
+  })
+
+  test('rejects invented entity ids before persistence and lets the registered fallback repair the turn', async () => {
+    const calls: string[] = []
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        calls.push(request.model)
+        const output = successfulTurnOutput()
+        if (calls.length === 1)
+          output.intent.targets = ['door:invented-by-model']
+        return {
+          requestId: `request:${calls.length}`,
+          model: request.model,
+          output,
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+    const engine = new TurnEngine(config, client, async () => 'system prompt')
+
+    const result = await engine.execute(command, snapshot)
+
+    expect(calls).toEqual([
+      'deepseek/deepseek-v4-flash',
+      'mistralai/mistral-small-2603',
+    ])
+    expect(result.fallbackUsed).toBe(true)
+    expect(result.modelRuns).toMatchObject([
+      {
+        role: 'primary',
+        status: 'discarded',
+        error_code: 'MODEL_AUTHORITY_ERROR',
+        validation_errors: ['$.intent.targets:door:invented-by-model'],
+      },
+      {
+        role: 'fallback',
+        status: 'accepted',
+        error_code: null,
+      },
+    ])
+  })
+
+  test('passes exact repository rejection paths to the fallback without accepting the invalid turn', async () => {
+    const requests: ChatJsonRequest[] = []
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        requests.push(request)
+        return {
+          requestId: `request:${requests.length}`,
+          model: request.model,
+          output: successfulTurnOutput(),
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+    const engine = new TurnEngine(config, client, async () => 'system prompt')
+    let validations = 0
+
+    const result = await engine.execute(command, snapshot, undefined, () => {
+      validations += 1
+      if (validations === 1) {
+        throw new FabulaApiError(
+          'MODEL_AUTHORITY_ERROR',
+          'Знание назначено неизвестному персонажу.',
+          502,
+          false,
+          ['$.operations[2].character_id'],
+        )
+      }
+    })
+
+    expect(result.fallbackUsed).toBe(true)
+    expect(validations).toBe(2)
+    expect(requests[1]?.payload.repair_feedback).toEqual({
+      previous_role: 'primary',
+      error_code: 'MODEL_AUTHORITY_ERROR',
+      validation_errors: ['$.operations[2].character_id'],
+    })
+  })
+
+  test('uses the server-owned turn envelope while preserving strict validation of model content', async () => {
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        const output = successfulTurnOutput()
+        output.turn_id = 'turn:model-invented'
+        output.expected_session_version = 999
+        output.operations = [{
+          type: 'event.create',
+          operation_index: 0,
+          event_id: snapshot.reservedIds.events[0]!,
+          event_kind: 'door_inspected',
+          actor_ids: ['player'],
+          target_ids: [],
+          item_ids: [],
+          location_id: 'location:summoning-hal',
+          source_turn_id: 'turn:model-invented',
+        }]
+        return {
+          requestId: 'request:wrong-envelope',
+          model: request.model,
+          output,
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+    const engine = new TurnEngine(config, client, async () => 'system prompt')
+
+    const result = await engine.execute(command, snapshot)
+
+    expect(result.output.turn_id).toBe(command.idempotency_key)
+    expect(result.output.expected_session_version).toBe(command.expected_session_version)
+    expect(result.output.operations[0]).toMatchObject({
+      type: 'event.create',
+      source_turn_id: command.idempotency_key,
+      location_id: snapshot.scene.location_id,
+    })
+  })
+
+  test('gives Mistral one bounded semantic repair after repository authority rejection', async () => {
+    const requests: ChatJsonRequest[] = []
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        requests.push(request)
+        if (requests.length === 1)
+          throw new OpenRouterError('UPSTREAM_TIMEOUT', 'OpenRouter не ответил вовремя.', 504, true)
+        return {
+          requestId: `request:${requests.length}`,
+          model: request.model,
+          output: successfulTurnOutput(),
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+    const engine = new TurnEngine(config, client, async () => 'system prompt')
+    let validations = 0
+
+    const result = await engine.execute(command, snapshot, undefined, () => {
+      validations += 1
+      if (validations === 1) {
+        throw new FabulaApiError(
+          'MODEL_AUTHORITY_ERROR',
+          'Знание назначено неизвестному персонажу.',
+          502,
+        )
+      }
+    })
+
+    expect(result.fallbackUsed).toBe(true)
+    expect(requests).toHaveLength(3)
+    expect(requests[2]?.payload.repair_feedback).toEqual({
+      previous_role: 'fallback',
+      error_code: 'MODEL_AUTHORITY_ERROR',
+      validation_errors: [
+        'repository:MODEL_AUTHORITY_ERROR:Знание назначено неизвестному персонажу.',
+      ],
+    })
   })
 
   test('does not start fallback after the caller cancels the turn', async () => {

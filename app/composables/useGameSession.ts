@@ -22,7 +22,7 @@ interface SubmitTurnInput {
 }
 
 const SESSION_ID = /^session:[0-9a-f-]{36}$/i
-const TURN_CLIENT_TIMEOUT_MS = 75_000
+const TURN_CLIENT_TIMEOUT_MS = 110_000
 
 type TurnAbortReason = 'user' | 'deadline' | 'unmount' | null
 
@@ -205,7 +205,7 @@ export function useGameSession(sessionId: Ref<string | null>) {
         if (turnAbortReason === 'user')
           errorMessage.value = 'Ход остановлен. Текст сохранен — повторная отправка продолжит тот же запрос без дубликата.'
         else if (turnAbortReason === 'deadline')
-          errorMessage.value = 'Ход не завершился за 75 секунд и был остановлен. Текст сохранен для повтора.'
+          errorMessage.value = 'Ход не завершился за 110 секунд и был остановлен. Текст сохранен для повтора.'
         return false
       }
       const message = apiMessage(error)
