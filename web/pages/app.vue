@@ -220,6 +220,26 @@
           <div class="pmodal-btns"><button class="pmodal-cancel" id="pmCancel">Отмена</button><button class="pmodal-ok" id="pmOk">Сохранить</button></div>
         </div>
       </div>
+      <div class="sheet2" id="settingsSheet">
+        <div class="sheet2-card">
+          <div class="sheet2-h">Настройки <button class="sheet2-x" id="setClose">✕</button></div>
+          <div class="set-grp"><div class="set-lh">Звук и музыка</div>
+            <label class="set-tog"><span>Общий звук</span><input type="checkbox" id="sndMaster"></label>
+            <label class="set-tog"><span>Музыка / эмбиент</span><input type="checkbox" id="sndMusic"></label>
+            <label class="set-tog"><span>Эффекты (клики)</span><input type="checkbox" id="sndSfx"></label>
+          </div>
+          <div class="set-grp"><div class="set-lh">Оформление</div>
+            <div class="set-seg" id="fontSeg"><button data-fs="s">S</button><button data-fs="m">M</button><button data-fs="l">L</button></div>
+            <div class="set-hint">Размер шрифта в чтении</div>
+          </div>
+          <div class="set-grp"><div class="set-lh">Приложение</div>
+            <div class="set-row-soon" id="installRow" style="cursor:pointer"><span>Установить приложение</span><span class="soon">›</span></div>
+          </div>
+          <div class="set-grp"><div class="set-lh">Подписка</div>
+            <div class="set-row-soon"><span>Подписка и грейды</span><span class="soon">Скоро</span></div>
+          </div>
+        </div>
+      </div>
       <div class="grain"><svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"><filter id="ng"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2"/></filter><rect width="100%" height="100%" filter="url(#ng)"/></svg></div>
       <div class="homebar"></div>
     </div>
@@ -318,6 +338,23 @@ onMounted(() => {
     const first = document.querySelector('#pmBody input'); if(first) first.focus();
   }
 
+  const setSheet=document.getElementById('settingsSheet');
+  document.querySelectorAll('[data-act="open-settings"]').forEach(b=>b.addEventListener('click',()=>setSheet.classList.add('on')));
+  const setClose=document.getElementById('setClose'); if(setClose) setClose.addEventListener('click',()=>setSheet.classList.remove('on'));
+  const sndEls={ master:document.getElementById('sndMaster'), music:document.getElementById('sndMusic'), sfx:document.getElementById('sndSfx') };
+  const sndGet=(k)=>localStorage.getItem('fabula-snd-'+k)!=='off';
+  function applySound(){
+    try{ if(typeof master!=='undefined' && master) master.gain.value = sndGet('master') ? 0.9 : 0; }catch(e){}
+    try{ if(typeof ambGain!=='undefined' && ambGain) ambGain.gain.value = (sndGet('master')&&sndGet('music')) ? 0.2 : 0; }catch(e){}
+    window.__fabulaSfxOff = !(sndGet('master')&&sndGet('sfx'));
+  }
+  Object.entries(sndEls).forEach(([k,el])=>{ if(!el) return; el.checked=sndGet(k); el.addEventListener('change',()=>{ localStorage.setItem('fabula-snd-'+k, el.checked?'on':'off'); applySound(); }); });
+  applySound();
+  const fsSeg=document.getElementById('fontSeg');
+  function applyFont(){ const fs=localStorage.getItem('fabula-fontsize')||'m'; document.documentElement.style.setProperty('--read-fs', fs==='s'?'16px':fs==='l'?'21px':'18px'); if(fsSeg) fsSeg.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.fs===fs)); }
+  if(fsSeg) fsSeg.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{ localStorage.setItem('fabula-fontsize', b.dataset.fs); applyFont(); }));
+  applyFont();
+
   function clearSession(){ try{ localStorage.removeItem('fabula-token'); localStorage.removeItem('fabula-user'); }catch(_){}; location.href='/'; }
 
   document.querySelectorAll('[data-scr="profile"] [data-act]').forEach(row => {
@@ -392,6 +429,7 @@ function initAudio(){
   if(AC) return;
   AC=new (window.AudioContext||window.webkitAudioContext)();
   master=AC.createGain(); master.gain.value=0.9; master.connect(AC.destination);
+  applySound();
 }
 function canPlay(){ return AC && unlocked && !muted; }
 function blip(freq,dur,type,vol){
@@ -403,10 +441,11 @@ function blip(freq,dur,type,vol){
   g.gain.exponentialRampToValueAtTime(0.0001,AC.currentTime+dur);
   o.connect(g); g.connect(master); o.start(); o.stop(AC.currentTime+dur+0.02);
 }
-function sfxClick(){ blip(1300,0.05,'triangle',0.22); blip(2600,0.03,'sine',0.09); }
-function sfxRoll(){ for(let i=0;i<6;i++) setTimeout(()=>blip(300+Math.random()*500,0.03,'square',0.06),i*70); }
-function sfxNav(){ blip(560,0.09,'sine',0.24); setTimeout(()=>blip(840,0.10,'sine',0.17),55); }
+function sfxClick(){ if(window.__fabulaSfxOff) return; blip(1300,0.05,'triangle',0.22); blip(2600,0.03,'sine',0.09); }
+function sfxRoll(){ if(window.__fabulaSfxOff) return; for(let i=0;i<6;i++) setTimeout(()=>blip(300+Math.random()*500,0.03,'square',0.06),i*70); }
+function sfxNav(){ if(window.__fabulaSfxOff) return; blip(560,0.09,'sine',0.24); setTimeout(()=>blip(840,0.10,'sine',0.17),55); }
 function sfxPage(){
+  if(window.__fabulaSfxOff) return;
   if(!canPlay()) return;
   const now=AC.currentTime, dur=0.34;
   /* soft muffled paper turn — lowpass so no harsh highs */
