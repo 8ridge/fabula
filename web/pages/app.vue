@@ -79,34 +79,39 @@
       <!-- ===== PROFILE ===== -->
       <section class="scr" data-scr="profile">
         <div class="scroll">
-          <div class="appbar" style="position:sticky"><div class="ttl">Профиль</div><div class="iconbtn">⚙</div></div>
+          <div class="appbar" style="position:sticky"><div class="ttl">Профиль</div>
+            <div class="p-actions"><button class="p-act" data-act="logout" title="Выйти"><span class="g">🚪</span>Выйти</button><button class="p-act p-gear" data-act="open-settings" title="Настройки">⚙</button></div>
+          </div>
           <div class="p-top">
             <div class="avatar"><img src="/assets/avatar.jpg" onerror="this.style.display='none'"><span class="fb">♞</span><span class="ring"></span></div>
             <div class="p-name" data-p="username">@…</div>
             <div class="p-tier"><span data-p="email">…</span> <span data-p="verified" style="color:#7cc47f">✓ подтверждена</span></div>
             <div class="p-joined" data-p="joined" style="font-size:12px;color:var(--ink-mute)"></div>
           </div>
+          <div class="list-h" style="margin-top:14px">Уровень и достижения</div>
+          <div class="p-card p-lvl">
+            <div class="lvl-top"><span>Уровень <b>7</b> · Хроникёр</span><span><b>1 840</b> / 2 800 XP</span></div>
+            <div class="lvl-bar"><i style="width:64%"></i></div>
+            <div class="ach">
+              <div class="badge"><span class="ic">🗝</span><span class="bl">Первый выбор</span></div>
+              <div class="badge"><span class="ic">⚔</span><span class="bl">10 битв</span></div>
+              <div class="badge"><span class="ic">📖</span><span class="bl">5 глав</span></div>
+              <div class="badge lock"><span class="ic">👑</span><span class="bl">Финал</span></div>
+              <div class="badge lock"><span class="ic">✦</span><span class="bl">Секрет</span></div>
+            </div>
+          </div>
           <div class="list-h">Активные истории</div>
           <div class="story-row" data-open="fant"><div class="th pv-fant"><img src="/assets/cover_fantasy.jpg" onerror="this.style.display='none'"></div>
-            <div style="flex:1"><div class="st">Королевство Пепельных земель</div><div class="sp"><i style="width:62%"></i></div><div class="pct">Глава 5 · 62%</div></div></div>
+            <div style="flex:1"><div class="st">Королевство Пепельных земель</div><div class="s-meta"><span>Глава 5 · 62%</span><span>Роль: Странник</span><span>2 дня назад</span></div><div class="sp"><i style="width:62%"></i></div></div></div>
           <div class="story-row" data-open="scifi"><div class="th pv-scifi"><img src="/assets/cover_scifi.png" onerror="this.style.display='none'"></div>
-            <div style="flex:1"><div class="st">Станция «Кассандра»</div><div class="sp"><i style="width:28%"></i></div><div class="pct">Глава 2 · 28%</div></div></div>
+            <div style="flex:1"><div class="st">Станция «Кассандра»</div><div class="s-meta"><span>Глава 2 · 28%</span><span>Роль: Капитан</span><span>неделю назад</span></div><div class="sp"><i style="width:28%"></i></div></div></div>
           <div class="list-h" style="margin-top:18px">Аккаунт</div>
           <div class="p-card">
             <div class="setrow" data-act="username"><span class="l"><span class="g">◈</span>Никнейм</span><span class="chev" data-p="username-mini"></span></div>
             <div class="setrow" data-act="password"><span class="l"><span class="g">⚿</span>Пароль</span><span class="chev">Изменить ›</span></div>
             <div class="setrow"><span class="l"><span class="g">✉</span>Почта</span><span class="chev" style="color:#7cc47f">подключена</span></div>
             <div class="setrow" data-act="google"><span class="l"><span class="g">G</span>Google</span><span class="chev" data-p="google">скоро</span></div>
-            <div class="setrow" data-act="logout"><span class="l"><span class="g">⎋</span>Выйти</span><span class="chev">›</span></div>
             <div class="setrow" data-act="logout-all"><span class="l"><span class="g">⎇</span>Выйти со всех устройств</span><span class="chev">›</span></div>
-          </div>
-          <div class="list-h" style="margin-top:18px">Настройки</div>
-          <div class="p-card">
-            <div class="setrow"><span class="l"><span class="g">☙</span>Подписка и грейды</span><span class="chev">›</span></div>
-            <div class="setrow"><span class="l"><span class="g">♪</span>Звук и музыка</span><span class="chev">›</span></div>
-            <div class="setrow"><span class="l"><span class="g">✦</span>Оформление</span><span class="chev">›</span></div>
-            <div class="setrow" id="installRow"><span class="l"><span class="g">⤓</span>Установить приложение</span><span class="chev">›</span></div>
-            <a class="setrow" href="/" style="border:none;text-decoration:none"><span class="l"><span class="g">⌂</span>Вернуться на сайт</span><span class="chev">›</span></a>
           </div>
           <div class="p-card" style="margin-top:12px">
             <div class="setrow" data-act="delete"><span class="l" style="color:#d9655f"><span class="g">🗑</span>Удалить аккаунт</span><span class="chev">›</span></div>
