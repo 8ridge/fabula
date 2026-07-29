@@ -1,31 +1,8 @@
-import type { interactionConfig } from '~/data/interaction'
+import type { GameMessage, InteractionToolName as SharedInteractionToolName } from '#shared/game'
+import type { StoryMode } from '#shared/storypacks'
 
-export type InteractionStoryId = keyof typeof interactionConfig.storyPacks
-export type InteractionStory = (typeof interactionConfig.storyPacks)[InteractionStoryId]
-export type InteractionTheme = (typeof interactionConfig.themes)[keyof typeof interactionConfig.themes]
-export type InteractionMode = 'action' | 'speech' | 'exploration'
+export type InteractionMode = StoryMode
 export type InteractionFontScale = 'normal' | 'large' | 'xlarge'
-export type InteractionToolName = 'models' | 'inventory' | 'journal' | 'character' | 'check' | 'settings'
-export type InteractionDrawer = 'threads' | 'details' | null
-
-export type InteractionMessageData = {
-  id?: string
-  type: 'narrator' | 'character' | 'player'
-  name: string
-  meta: string
-  text: string
-  foot: string
-  pending?: boolean
-}
-
-export type AiCatalog = {
-  available?: boolean
-  modules?: Array<{
-    id: string
-    model_id?: string
-    enabled?: boolean
-    route_available?: boolean
-    blocked_reason?: string | null
-    internal_only?: boolean
-  }>
-}
+export type InteractionToolName = SharedInteractionToolName
+export type InteractionDrawer = 'threads' | null
+export type InteractionMessageData = GameMessage

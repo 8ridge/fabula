@@ -1,14 +1,11 @@
 <script setup lang="ts">
 import { gsap } from 'gsap'
-import { interactionConfig } from '~/data/interaction'
-import { interactionTools } from '~/data/interaction-tools'
+import type { SuggestedAction } from '#shared/game'
+import { normalizeStoryPackId, STORY_PACKS } from '#shared/storypacks'
+import type { StoryMode } from '#shared/storypacks'
 import type {
-  AiCatalog,
   InteractionDrawer,
   InteractionFontScale,
-  InteractionMessageData,
-  InteractionMode,
-  InteractionStoryId,
   InteractionToolName,
 } from '~/types/interaction-ui'
 
@@ -23,64 +20,44 @@ const router = useRouter()
 const pageRoot = ref<HTMLElement | null>(null)
 const chatScroll = ref<HTMLElement | null>(null)
 const composer = ref<ComposerHandle | null>(null)
-const storyIds = Object.keys(interactionConfig.storyPacks) as InteractionStoryId[]
-const requestedStory = String(route.query.story || 'fant') as InteractionStoryId
-const storyId = ref<InteractionStoryId>(storyIds.includes(requestedStory) ? requestedStory : 'fant')
-const mode = ref<InteractionMode>('action')
-const fontScale = ref<InteractionFontScale>('large')
-const messages = ref<InteractionMessageData[]>([...interactionConfig.storyPacks[storyId.value].messages] as InteractionMessageData[])
+const sessionId = computed(() => typeof route.query.session === 'string' ? route.query.session : null)
+const game = useGameSession(sessionId)
+
 const input = ref('')
-const turnPending = ref(false)
+const mode = ref<StoryMode>('action')
+const fontScale = ref<InteractionFontScale>('large')
+const selectedSuggestionId = ref<string | null>(null)
+const selectedItemIds = ref<string[]>([])
 const activeTool = ref<InteractionToolName | null>(null)
 const openDrawer = ref<InteractionDrawer>(null)
 const toast = ref('')
-const aiCatalog = ref<AiCatalog | null>(null)
-const catalogPending = ref(false)
-const sessionStates = new Map<InteractionStoryId, { sessionId: string, version: number }>()
 let toastTimer: ReturnType<typeof setTimeout> | null = null
-let requestController: AbortController | null = null
 let motionContext: gsap.Context | null = null
 
-const story = computed(() => interactionConfig.storyPacks[storyId.value])
-type ThemeId = keyof typeof interactionConfig.themes
-const themeForStory = (id: InteractionStoryId) => interactionConfig.themes[interactionConfig.storyPacks[id].themeId as ThemeId]
-const theme = computed(() => themeForStory(storyId.value))
-const tools = computed(() => interactionTools[storyId.value])
+const story = computed(() => game.session.value
+  ? STORY_PACKS[game.session.value.story_pack_id]
+  : STORY_PACKS['eighth-seal'])
 const themeStyle = computed(() => ({
-  '--accent': theme.value.accent,
-  '--accent-light': theme.value.accentLight,
-  '--accent-deep': theme.value.accentDeep,
-  '--accent-soft': theme.value.accentSoft,
-  '--theme-glow': theme.value.glow,
-  '--player-surface': theme.value.playerSurface,
+  '--accent': story.value.theme.accent,
+  '--accent-light': story.value.theme.accentLight,
+  '--accent-deep': story.value.theme.accentDeep,
+  '--accent-rgb': story.value.theme.accentRgb,
+  '--surface-tint': story.value.theme.surfaceTint,
+  '--story-font': fontScale.value === 'normal' ? '17px' : fontScale.value === 'xlarge' ? '21px' : '19px',
 }))
-const modeCopy = computed(() => ({
-  action: ['Опиши действие, речь или исследование', 'Что ты делаешь?'],
-  speech: ['Говори от лица своего персонажа', 'Что ты говоришь?'],
-  exploration: ['Опиши, что именно ты проверяешь вокруг', 'Что ты исследуешь?'],
-})[mode.value])
-const messageScaleClass = computed(() => ({
-  normal: 'text-[.9rem]',
-  large: 'text-base',
-  xlarge: 'text-lg',
-})[fontScale.value])
+const selectedItems = computed(() => {
+  if (!game.session.value)
+    return []
+  return game.session.value.inventory.filter(item => selectedItemIds.value.includes(item.id))
+})
+const playerInventoryCount = computed(() =>
+  game.session.value?.inventory.filter(item => item.owner_id === 'player' || item.holder_id === 'player').length || 0)
 
 useHead({
-  title: computed(() => `ФАБУЛА · ${story.value.title}`),
+  title: computed(() => game.session.value
+    ? `ФАБУЛА · ${game.session.value.persona.name} · ${story.value.title}`
+    : 'ФАБУЛА · История'),
 })
-
-function newSession(storyKey: InteractionStoryId) {
-  const state = {
-    sessionId: `session:${globalThis.crypto?.randomUUID?.() || `local-${Date.now()}`}`,
-    version: 0,
-  }
-  sessionStates.set(storyKey, state)
-  return state
-}
-
-function currentSession() {
-  return sessionStates.get(storyId.value) || newSession(storyId.value)
-}
 
 function showToast(message: string) {
   toast.value = message
@@ -89,248 +66,186 @@ function showToast(message: string) {
   toastTimer = setTimeout(() => toast.value = '', 2200)
 }
 
-function resizeInput() {
-  composer.value?.resize()
-}
-
-function switchStory(nextStoryId: InteractionStoryId) {
-  if (turnPending.value) {
-    showToast('Дождись завершения текущего хода')
-    return
-  }
-  storyId.value = nextStoryId
-  messages.value = [...interactionConfig.storyPacks[nextStoryId].messages] as InteractionMessageData[]
-  openDrawer.value = null
-  void router.replace({ query: { ...route.query, story: nextStoryId } })
-  showToast(`Открыта история: ${interactionConfig.storyPacks[nextStoryId].title}`)
-}
-
-function setMode(nextMode: InteractionMode) {
+function setMode(nextMode: StoryMode) {
   mode.value = nextMode
+  selectedSuggestionId.value = null
   if (import.meta.client)
-    localStorage.setItem('fabula-interaction-mode', nextMode)
-  resizeInput()
+    localStorage.setItem('fabula:interaction-mode', nextMode)
+  composer.value?.resize()
 }
 
 function setFontScale(nextScale: InteractionFontScale) {
   fontScale.value = nextScale
   if (import.meta.client)
-    localStorage.setItem('fabula-font-scale', nextScale)
-  showToast(nextScale === 'normal' ? 'Обычный размер текста' : nextScale === 'xlarge' ? 'Очень крупный размер текста' : 'Крупный размер текста')
+    localStorage.setItem('fabula:font-scale', nextScale)
+  showToast(nextScale === 'normal' ? 'Размер текста: 17 px' : nextScale === 'xlarge' ? 'Размер текста: 21 px' : 'Размер текста: 19 px')
 }
 
-function openTool(tool: InteractionToolName) {
-  openDrawer.value = null
-  activeTool.value = tool
-  if (tool === 'models')
-    void loadCatalog()
+function chooseSuggestion(suggestion: SuggestedAction) {
+  input.value = suggestion.label
+  setMode(suggestion.mode)
+  selectedSuggestionId.value = suggestion.id
+  nextTick(() => composer.value?.selectEnd())
 }
 
-function closeTool() {
+function composeFromTool(payload: { text: string, itemId?: string }) {
+  input.value = payload.text
+  selectedSuggestionId.value = null
+  selectedItemIds.value = payload.itemId ? [payload.itemId] : []
   activeTool.value = null
+  nextTick(() => composer.value?.selectEnd())
 }
 
-function compose(text: string) {
-  input.value = text
-  closeTool()
-  resizeInput()
-  composer.value?.focus()
-  showToast('Добавлено в поле хода')
+function removeItem(itemId: string) {
+  selectedItemIds.value = selectedItemIds.value.filter(id => id !== itemId)
 }
 
 function editMessage(text: string) {
   input.value = text
-  resizeInput()
-  composer.value?.selectEnd()
-  showToast('Ход загружен в поле ввода')
+  selectedSuggestionId.value = null
+  selectedItemIds.value = []
+  nextTick(() => composer.value?.selectEnd())
 }
 
 async function copyMessage(text: string) {
   try {
     await navigator.clipboard.writeText(text)
-    showToast('Текст сообщения скопирован')
+    showToast('Текст скопирован')
   }
   catch {
     showToast('Браузер не разрешил копирование')
   }
 }
 
-async function loadCatalog() {
-  if (catalogPending.value)
-    return
-  catalogPending.value = true
-  try {
-    aiCatalog.value = await $fetch<AiCatalog>('/api/ai/catalog')
-  }
-  catch {
-    aiCatalog.value = null
-  }
-  finally {
-    catalogPending.value = false
-  }
-}
-
-async function fetchTurn(request: ReturnType<typeof interactionConfig.makeTurnRequest>) {
-  requestController?.abort()
-  requestController = new AbortController()
-  const timeout = setTimeout(() => requestController?.abort(), 390_000)
-  try {
-    return await fetch('/api/ai/turn', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
-      cache: 'no-store',
-      signal: requestController.signal,
-    })
-  }
-  finally {
-    clearTimeout(timeout)
-  }
+function openTool(tool: InteractionToolName) {
+  openDrawer.value = null
+  activeTool.value = tool
 }
 
 async function submitTurn() {
-  if (turnPending.value) {
-    showToast('Предыдущий ход еще выполняется')
+  if (!game.session.value || game.sending.value)
     return
-  }
   const text = input.value.trim()
   if (!text) {
     composer.value?.focus()
-    showToast('Сначала опиши свое намерение')
     return
   }
-
-  const requestStoryId = storyId.value
-  const session = currentSession()
-  const request = interactionConfig.makeTurnRequest({
+  const succeeded = await game.submit({
     text,
     mode: mode.value,
-    storyId: requestStoryId,
-    sessionId: session.sessionId,
-    sessionVersion: session.version,
+    selectedSuggestionId: selectedSuggestionId.value,
+    selectedItemIds: selectedItemIds.value,
   })
-  messages.value.push({
-    type: 'player',
-    name: 'Ты',
-    meta: mode.value === 'speech' ? 'Речь · только что' : mode.value === 'exploration' ? 'Исследование · только что' : 'Действие · только что',
-    text,
-    foot: 'Отправлено серверному движку',
-  })
-  input.value = ''
-  turnPending.value = true
-  resizeInput()
-
-  try {
-    let response = await fetchTurn(request)
-    let payload = await response.json().catch(() => null)
-    if (response.status === 409 && payload?.code === 'SESSION_VERSION_CONFLICT') {
-      const reset = newSession(requestStoryId)
-      request.session_id = reset.sessionId
-      request.expected_session_version = 0
-      response = await fetchTurn(request)
-      payload = await response.json().catch(() => null)
-    }
-    if (!response.ok || payload?.schema_version !== 'turn-response@1.0' || typeof payload?.turn?.narrative_text !== 'string')
-      throw Object.assign(new Error(payload?.message || 'Сервер не вернул безопасный ход'), { code: payload?.code || 'INVALID_SERVER_RESPONSE' })
-    if (storyId.value !== requestStoryId)
-      throw Object.assign(new Error('История была переключена во время хода'), { code: 'STORY_CHANGED' })
-
-    sessionStates.set(requestStoryId, { sessionId: request.session_id, version: payload.session_version })
-    messages.value.push({
-      type: 'narrator',
-      name: 'Рассказчик',
-      meta: `${payload.fallback_used ? 'Резервная модель' : 'Авторитетный preview-ход'} · ${payload.turn.resolution.outcome}`,
-      text: payload.turn.narrative_text || payload.turn.resolution.summary,
-      foot: `Preview-сессия v${payload.session_version} · память процесса, без production-канона`,
-    })
-    showToast(payload.fallback_used ? 'Ход получен через резервную модель' : 'Ход подтвержден preview-сервером')
+  if (succeeded) {
+    input.value = ''
+    selectedSuggestionId.value = null
+    selectedItemIds.value = []
+    showToast('Ход подтвержден')
   }
-  catch (error) {
-    const typedError = error as Error & { code?: string }
-    const aborted = typedError.name === 'AbortError'
-    const message = aborted ? 'Сервер не успел завершить ход.' : typedError.message || 'Не удалось получить ход.'
-    messages.value.push({
-      type: 'narrator',
-      name: 'Системный контур',
-      meta: 'Ход не применен',
-      text: message,
-      foot: `Код: ${aborted ? 'CLIENT_TIMEOUT' : typedError.code || 'NETWORK_ERROR'} · текст возвращен в поле`,
-      pending: true,
-    })
-    input.value = text
-    resizeInput()
+  else {
     composer.value?.focus()
-    showToast('Ход не применен')
-  }
-  finally {
-    turnPending.value = false
-    requestController = null
   }
 }
 
-function rewriteComposer() {
-  const text = input.value.trim()
-  if (!text) {
-    showToast('Сначала напиши текст для локального варианта')
+function openSession(nextSessionId: string) {
+  if (nextSessionId === sessionId.value) {
+    openDrawer.value = null
     return
   }
-  input.value = text.replace(/Я /, 'Я внимательно ').replace(/спрашиваю/g, 'пытаюсь выяснить')
-  if (input.value === text)
-    input.value = `Иначе это звучит так: ${text.charAt(0).toLowerCase()}${text.slice(1)}`
-  resizeInput()
-  showToast('Локальный пример: модель не вызывалась')
+  openDrawer.value = null
+  return router.push({ path: '/interaction', query: { session: nextSessionId } })
 }
 
-function newScene() {
-  input.value = ''
-  composer.value?.focus()
-  showToast('Preview: создание новой сцены пока не подключено')
+function startNewStory() {
+  return router.push('/app')
 }
 
-function searchScenes() {
-  composer.value?.focus()
-  showToast('Поиск сцен подключится к истории сессий')
+async function resolveInitialRoute() {
+  await game.load()
+  if (game.session.value || game.errorMessage.value)
+    return
+
+  const legacyStory = normalizeStoryPackId(route.query.story)
+  if (legacyStory) {
+    await router.replace(`/story/${legacyStory}`)
+    return
+  }
+  const lastSession = game.startedSessions.value[0]
+  if (lastSession) {
+    await router.replace({ path: '/interaction', query: { session: lastSession.id } })
+    return
+  }
+  await router.replace('/app')
+}
+
+function scrollToLatest(animate = false) {
+  nextTick(() => {
+    const container = chatScroll.value
+    if (!container)
+      return
+    const elements = container.querySelectorAll<HTMLElement>('[data-interaction-message]')
+    const last = elements[elements.length - 1]
+    const reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (animate && last && motionContext && !reducedMotion) {
+      motionContext.add(() => {
+        gsap.fromTo(last, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.35, ease: 'power2.out' })
+      })
+    }
+    container.scrollTop = container.scrollHeight
+  })
 }
 
 function onKeydown(event: KeyboardEvent) {
-  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === 'k') {
     event.preventDefault()
     composer.value?.focus()
   }
   if (event.key === 'Escape') {
     openDrawer.value = null
-    closeTool()
+    activeTool.value = null
   }
 }
 
-watch(() => messages.value.length, async () => {
-  await nextTick()
-  const elements = chatScroll.value?.querySelectorAll<HTMLElement>('[data-interaction-message]')
-  const lastMessage = elements?.[elements.length - 1]
-  if (lastMessage && motionContext)
-    motionContext.add(() => gsap.fromTo(lastMessage, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.42, ease: 'power2.out' }))
-  chatScroll.value?.scrollTo({ top: chatScroll.value.scrollHeight, behavior: 'smooth' })
+watch(input, (value) => {
+  game.saveDraft(value)
+  const selected = game.session.value?.suggestions.find(item => item.id === selectedSuggestionId.value)
+  if (selected && value !== selected.label)
+    selectedSuggestionId.value = null
 })
 
-onMounted(() => {
-  const savedMode = localStorage.getItem('fabula-interaction-mode') as InteractionMode | null
-  const savedFontScale = localStorage.getItem('fabula-font-scale') as InteractionFontScale | null
+watch(() => game.session.value?.id, (nextId, previousId) => {
+  if (!nextId || nextId === previousId)
+    return
+  input.value = game.readDraft()
+  selectedSuggestionId.value = null
+  selectedItemIds.value = []
+  activeTool.value = null
+  scrollToLatest()
+})
+
+watch(() => game.session.value?.messages.length, (length, previousLength) => {
+  if (length && previousLength && length > previousLength)
+    scrollToLatest(true)
+})
+
+onMounted(async () => {
+  const savedMode = localStorage.getItem('fabula:interaction-mode') as StoryMode | null
   if (savedMode && ['action', 'speech', 'exploration'].includes(savedMode))
     mode.value = savedMode
+  const savedFontScale = localStorage.getItem('fabula:font-scale') as InteractionFontScale | null
   if (savedFontScale && ['normal', 'large', 'xlarge'].includes(savedFontScale))
     fontScale.value = savedFontScale
   if (pageRoot.value)
     motionContext = gsap.context(() => {}, pageRoot.value)
   window.addEventListener('keydown', onKeydown)
-  resizeInput()
-  nextTick(() => {
-    if (chatScroll.value)
-      chatScroll.value.scrollTop = chatScroll.value.scrollHeight
-  })
+  await resolveInitialRoute()
+  if (game.session.value) {
+    input.value = game.readDraft()
+    scrollToLatest()
+  }
 })
 
 onBeforeUnmount(() => {
-  requestController?.abort()
   motionContext?.revert()
   window.removeEventListener('keydown', onKeydown)
   if (toastTimer)
@@ -341,116 +256,171 @@ onBeforeUnmount(() => {
 <template>
   <main
     ref="pageRoot"
-    class="fixed inset-0 overflow-hidden bg-[#0a0a0d] text-fabula-100"
-    :data-story="storyId"
-    :data-theme="story.themeId"
-    :data-font-size="fontScale"
     :style="themeStyle"
+    class="fixed inset-0 overflow-hidden bg-[#090a0d] text-fabula-100 [background-image:radial-gradient(circle_at_65%_0%,rgb(var(--accent-rgb)/.06),transparent_34%)]"
   >
-    <header class="grid h-[70px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-white/10 bg-[#0d0d11] px-4 min-[600px]:gap-5 min-[600px]:px-[clamp(16px,2vw,26px)]">
-      <NuxtLink class="font-display text-[17px] tracking-[.12em] text-fabula-gold-light no-underline min-[600px]:text-[22px] min-[600px]:tracking-[.16em]" to="/app" aria-label="Вернуться в ФАБУЛУ">ФАБУЛА</NuxtLink>
-      <div class="flex min-w-0 items-center gap-3">
-        <span class="hidden font-interface text-[8px] uppercase tracking-[.1em] text-fabula-500 min-[900px]:inline">{{ story.eyebrow }}</span>
-        <strong class="truncate font-display text-[15px] font-normal min-[600px]:text-[18px]">{{ story.title }}</strong>
+    <header class="grid h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-white/8 bg-[#0b0c0f] px-3 sm:px-5">
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          class="grid size-10 place-items-center rounded-xl border border-white/10 text-[18px] text-fabula-300 min-[900px]:hidden"
+          aria-label="Открыть начатые истории"
+          @click="openDrawer = 'threads'"
+        >
+          ☰
+        </button>
+        <NuxtLink to="/app" class="hidden font-display text-[17px] tracking-[.14em] text-fabula-gold-light no-underline sm:block">ФАБУЛА</NuxtLink>
       </div>
-      <div class="flex items-center gap-1.5 min-[600px]:gap-2">
-        <span class="hidden items-center gap-2 font-interface text-[8px] text-fabula-300 min-[900px]:flex"><i class="size-1.5 rounded-full bg-[#8fcd78] shadow-[0_0_8px_#8fcd78]" />Сессия сохранена</span>
-        <button type="button" class="grid size-9 place-items-center rounded-xl border border-white/10 min-[600px]:size-10 min-[761px]:hidden" aria-label="Открыть чаты" @click="openDrawer = 'threads'">☰</button>
-        <button type="button" class="grid size-9 place-items-center rounded-xl border border-white/10 min-[600px]:size-10" aria-label="Открыть контур моделей" @click="openTool('models')">⌘</button>
-        <button type="button" class="grid size-9 place-items-center rounded-xl border border-white/10 min-[600px]:size-10 min-[1181px]:hidden" aria-label="Открыть состояние мира" @click="openDrawer = 'details'">◈</button>
+
+      <div class="min-w-0 text-center sm:text-left">
+        <strong class="block truncate font-display text-[17px] font-normal">{{ game.session.value ? story.title : 'Загружаем историю' }}</strong>
+        <span v-if="game.session.value" class="block truncate text-[11px] text-[#9b9ba6]">
+          {{ game.session.value.persona.name }} · {{ game.session.value.scene.title }}
+        </span>
+      </div>
+
+      <div class="flex items-center gap-1 min-[1180px]:hidden">
+        <button
+          v-for="tool in [
+            { id: 'inventory', icon: '◫', label: 'Инвентарь' },
+            { id: 'journal', icon: '✒', label: 'Журнал' },
+            { id: 'world', icon: '⌖', label: 'Мир' },
+          ]"
+          :key="tool.id"
+          type="button"
+          class="grid size-9 place-items-center rounded-xl text-[17px] text-[#9b9ba6] transition hover:bg-white/5 hover:text-fabula-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+          :aria-label="tool.label"
+          :title="tool.label"
+          @click="openTool(tool.id as InteractionToolName)"
+        >
+          {{ tool.icon }}
+        </button>
       </div>
     </header>
 
-    <div class="grid h-[calc(100dvh-70px)] min-h-0 grid-cols-1 min-[761px]:grid-cols-[296px_minmax(0,1fr)] min-[1181px]:grid-cols-[296px_minmax(520px,1fr)_350px]">
-      <InteractionThreadRail
-        :story-id="storyId"
-        :story-ids="storyIds"
-        :open="openDrawer === 'threads'"
-        @close="openDrawer = null"
-        @switch-story="switchStory"
-        @open-tool="openTool"
-        @new-scene="newScene"
-        @search="searchScenes"
-      />
-
-      <section class="flex min-h-0 min-w-0 flex-col bg-[radial-gradient(90%_45%_at_50%_0%,var(--theme-glow),transparent_70%),#101014]" aria-label="Диалог с персонажем">
-        <header class="flex shrink-0 items-center justify-between border-b border-white/10 bg-[#111116] px-[clamp(14px,3vw,28px)] py-3">
-          <div class="flex min-w-0 items-center gap-3">
-            <img class="size-10 shrink-0 rounded-xl border border-[var(--accent)] object-cover" src="/assets/avatar.jpg" alt="Портрет персонажа">
-            <span class="min-w-0"><strong class="block truncate font-display text-[18px] font-normal">{{ story.character }}</strong><small class="flex items-center gap-1.5 truncate font-interface text-[8px] text-fabula-500"><i class="size-1.5 rounded-full bg-[#8fcd78]" />В сцене · {{ story.location }}</small></span>
-          </div>
-          <div class="flex items-center gap-2"><span class="flex items-center gap-1.5 rounded-full border border-[#8fcd78]/30 bg-[#8fcd78]/[.06] px-2.5 py-1.5 font-interface text-[7px] text-[#8fcd78] sm:px-3 sm:text-[8px]"><i class="size-1.5 rounded-full bg-[#8fcd78]" />{{ turnPending ? 'Ход собирается' : 'Твой ход' }}</span><button type="button" class="hidden size-9 place-items-center rounded-xl border border-white/10 sm:grid" aria-label="Открыть настройки сцены" @click="openTool('settings')">⚙</button></div>
-        </header>
-
-        <div class="flex shrink-0 items-center gap-3 border-b border-white/10 bg-[var(--accent-soft)] px-[clamp(14px,3vw,28px)] py-2.5" role="status">
-          <span class="grid size-8 shrink-0 place-items-center rounded-lg border border-[var(--accent)]/50 text-[var(--accent-light)]">✦</span>
-          <span class="min-w-0 flex-1"><strong class="block font-display text-[15px] font-normal">Сцена 02 · preview</strong><small class="block truncate font-interface text-[7px] text-fabula-500">Ходы живут только в памяти процесса и не записываются в production-канон</small></span>
-          <button type="button" class="font-interface text-[8px] text-[var(--accent-light)]" @click="openTool('models')">Контур хода ›</button>
-        </div>
-
-        <section class="grid shrink-0 grid-cols-[auto_1fr] gap-3 border-b border-white/10 bg-[linear-gradient(90deg,var(--accent-soft),transparent)] px-[clamp(14px,3vw,28px)] py-3 min-[700px]:grid-cols-[auto_1fr_200px]" aria-live="polite" aria-label="Сюжетный контекст">
-          <span class="grid size-9 place-items-center rounded-xl border border-[var(--accent)]/50 bg-[var(--accent-soft)] text-[var(--accent-light)]">{{ theme.icon }}</span>
-          <div class="min-w-0"><span class="font-interface text-[7px] uppercase tracking-[.1em] text-[var(--accent)]">{{ theme.label }}</span><strong class="block truncate font-display text-[17px] font-normal">{{ story.title }}</strong><p class="truncate text-sm text-fabula-300">{{ story.premise }}</p></div>
-          <div class="hidden border-l border-white/10 pl-3 min-[700px]:block"><span class="font-interface text-[7px] text-fabula-500">СТАВКА</span><strong class="block font-display text-[14px] font-normal text-[var(--accent-light)]">{{ story.stake }}</strong></div>
-        </section>
-
-        <div ref="chatScroll" class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-[clamp(14px,5vw,58px)] py-5 [scrollbar-width:thin]" :class="messageScaleClass" aria-live="polite">
-          <div class="flex items-center gap-3 font-interface text-[7px] uppercase tracking-[.1em] text-fabula-500 before:h-px before:flex-1 before:bg-white/10 after:h-px after:flex-1 after:bg-white/10"><span>СЕГОДНЯ · 21:14</span></div>
-          <InteractionMessage
-            v-for="(message, index) in messages"
-            :key="message.id || `${storyId}-${index}-${message.meta}`"
-            :message="message"
-            @copy="copyMessage"
-            @edit="editMessage"
-            @variant="showToast('Локальный пример: модель не вызывалась')"
-          />
-          <div v-if="turnPending" class="self-start rounded-xl border border-dashed border-white/15 bg-[#131316] px-4 py-3 font-interface text-[8px] text-fabula-500">
-            <span class="mr-2 tracking-[.2em] text-[var(--accent)]">● ● ●</span>Проверяю контекст и собираю ход через OpenRouter
-          </div>
-        </div>
-
-        <InteractionComposer
-          ref="composer"
-          v-model="input"
-          :mode="mode"
-          :turn-pending="turnPending"
-          :mode-copy="modeCopy"
-          @set-mode="setMode"
-          @submit="submitTurn"
-          @open-tool="openTool"
-          @rewrite="rewriteComposer"
-          @compose="compose"
-        />
-      </section>
-
-      <InteractionDetailRail
-        :story="story"
-        :story-id="storyId"
-        :story-ids="storyIds"
-        :theme="theme"
-        :open="openDrawer === 'details'"
-        @close="openDrawer = null"
-        @switch-story="switchStory"
-        @open-tool="openTool"
-      />
+    <div v-if="game.loading.value" class="grid h-[calc(100dvh-64px)] place-items-center px-6 text-center">
+      <div>
+        <span class="text-[22px] text-[var(--accent)]" aria-hidden="true">✦</span>
+        <p class="mt-3 font-display text-[20px] text-fabula-100">Восстанавливаем ветку</p>
+        <p class="mt-1 text-[14px] text-[#9b9ba6]">Загружаем сцену, журнал и предметы.</p>
+      </div>
     </div>
 
-    <button v-if="openDrawer" type="button" class="fixed inset-0 z-50 bg-black/70 min-[1181px]:hidden" aria-label="Закрыть боковую панель" @click="openDrawer = null" />
-    <InteractionToolModal
-      :active-tool="activeTool"
-      :story="story"
-      :tools="tools"
-      :ai-catalog="aiCatalog"
-      :catalog-pending="catalogPending"
-      :font-scale="fontScale"
-      @close="closeTool"
-      @compose="compose"
-      @toast="showToast"
-      @open-tool="openTool"
-      @set-font-scale="setFontScale"
-    />
+    <div v-else-if="!game.session.value" class="grid h-[calc(100dvh-64px)] place-items-center px-6 text-center">
+      <div class="max-w-[520px]">
+        <h1 class="font-display text-[24px] text-fabula-100">История недоступна</h1>
+        <p class="mt-2 text-[15px] leading-relaxed text-fabula-300">{{ game.errorMessage.value || 'Выбери одну из сохраненных веток или начни новую.' }}</p>
+        <div class="mt-5 flex flex-wrap justify-center gap-2">
+          <button type="button" class="min-h-11 rounded-xl bg-[var(--accent)] px-4 font-display text-[14px] text-[#101114]" @click="game.load()">Повторить</button>
+          <NuxtLink to="/app" class="inline-flex min-h-11 items-center rounded-xl border border-white/10 px-4 font-display text-[14px] text-fabula-300 no-underline">К историям</NuxtLink>
+        </div>
+      </div>
+    </div>
 
-    <div class="pointer-events-none fixed bottom-5 left-1/2 z-[120] -translate-x-1/2 rounded-full border border-[var(--accent)]/45 bg-[#17171dee] px-4 py-2 font-interface text-[8px] text-[var(--accent-light)] shadow-xl transition" :class="toast ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'" role="status" aria-live="polite">
+    <template v-else>
+      <div class="grid h-[calc(100dvh-64px)] min-h-0 grid-cols-1 min-[900px]:grid-cols-[240px_minmax(0,1fr)] min-[1180px]:grid-cols-[240px_minmax(0,1fr)_64px]">
+        <InteractionThreadRail
+          :sessions="game.startedSessions.value"
+          :current-session-id="game.session.value.id"
+          :open="openDrawer === 'threads'"
+          @close="openDrawer = null"
+          @select-session="openSession"
+          @new-story="startNewStory"
+        />
+
+        <section class="flex min-h-0 min-w-0 flex-col bg-[#101115]" aria-label="Диалог истории">
+          <header class="flex shrink-0 items-center justify-between gap-4 border-b border-white/8 px-4 py-2.5 sm:px-6">
+            <div class="min-w-0">
+              <p class="truncate font-interface text-[10px] uppercase tracking-[.12em] text-[var(--accent-light)]">
+                {{ game.session.value.scene.location_name }} · {{ game.session.value.scene.story_time }}
+              </p>
+              <p class="mt-0.5 truncate text-[13px] text-[#9b9ba6]">{{ game.session.value.scene.objective }}</p>
+            </div>
+            <button
+              type="button"
+              class="grid size-9 shrink-0 place-items-center rounded-xl text-[17px] text-[#9b9ba6] transition hover:bg-white/5 hover:text-fabula-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+              aria-label="Настройки текста"
+              title="Настройки текста"
+              @click="openTool('settings')"
+            >
+              Aa
+            </button>
+          </header>
+
+          <div v-if="game.errorMessage.value" role="alert" class="flex shrink-0 items-start gap-2 border-b border-red-300/15 bg-red-300/[.045] px-4 py-2.5 text-[13px] leading-relaxed text-red-100 sm:px-6">
+            <span aria-hidden="true">!</span>
+            <span>{{ game.errorMessage.value }}</span>
+          </div>
+
+          <div
+            ref="chatScroll"
+            class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 py-3 [scrollbar-width:thin] sm:px-6"
+            aria-live="polite"
+          >
+            <div class="mx-auto w-full max-w-[860px] space-y-3">
+              <InteractionMessage
+                v-for="message in game.session.value.messages"
+                :key="message.id"
+                :message="message"
+                @copy="copyMessage"
+                @edit="editMessage"
+              />
+
+              <div v-if="game.sending.value" class="py-2 font-interface text-[11px] text-[#9b9ba6]" role="status">
+                <span class="mr-2 text-[var(--accent)]">● ● ●</span>Мир проверяет действие и его последствия
+              </div>
+            </div>
+          </div>
+
+          <InteractionComposer
+            ref="composer"
+            v-model="input"
+            :mode="mode"
+            :turn-pending="game.sending.value"
+            :suggestions="game.session.value.suggestions"
+            :selected-suggestion-id="selectedSuggestionId"
+            :selected-items="selectedItems"
+            @set-mode="setMode"
+            @choose-suggestion="chooseSuggestion"
+            @remove-item="removeItem"
+            @submit="submitTurn"
+            @open-tool="openTool"
+          />
+        </section>
+
+        <InteractionActionRail
+          :inventory-count="playerInventoryCount"
+          :journal-count="game.session.value.journal.length"
+          :active-tool="activeTool"
+          @open-tool="openTool"
+        />
+      </div>
+
+      <button
+        v-if="openDrawer"
+        type="button"
+        class="fixed inset-0 top-16 z-50 bg-black/70 min-[900px]:hidden"
+        aria-label="Закрыть список историй"
+        @click="openDrawer = null"
+      />
+
+      <InteractionToolModal
+        :active-tool="activeTool"
+        :session="game.session.value"
+        :font-scale="fontScale"
+        @close="activeTool = null"
+        @compose="composeFromTool"
+        @open-tool="openTool"
+        @set-font-scale="setFontScale"
+      />
+    </template>
+
+    <div
+      class="pointer-events-none fixed bottom-4 left-1/2 z-[120] -translate-x-1/2 rounded-full border border-[rgb(var(--accent-rgb)/.4)] bg-[#17191eef] px-4 py-2 font-interface text-[11px] text-[var(--accent-light)] shadow-xl transition"
+      :class="toast ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'"
+      role="status"
+      aria-live="polite"
+    >
       {{ toast }}
     </div>
   </main>

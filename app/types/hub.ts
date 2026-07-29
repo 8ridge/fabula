@@ -1,7 +1,4 @@
-import type { interactionConfig } from '~/data/interaction'
+import type { StoryPackId } from '#shared/storypacks'
 
-export type HubScreenName = 'home' | 'packs' | 'inventory' | 'profile'
-export type HubStoryId = keyof typeof interactionConfig.storyPacks
-export type HubStory = (typeof interactionConfig.storyPacks)[HubStoryId]
-export type HubToolName = 'inventory' | 'journal' | 'check' | 'character' | 'settings'
-export type HubSheetView = 'story' | HubToolName | null
+export type HubScreenName = 'home' | 'packs' | 'profile'
+export type HubStoryId = StoryPackId

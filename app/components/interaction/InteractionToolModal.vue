@@ -1,80 +1,100 @@
 <script setup lang="ts">
-import { interactionConfig } from '~/data/interaction'
-import type { InventoryItem, StoryToolset } from '~/data/interaction-tools'
-import type { AiCatalog, InteractionFontScale, InteractionStory, InteractionToolName } from '~/types/interaction-ui'
+import type { GameSessionSnapshot, InventoryItemProjection } from '#shared/game'
+import type { InteractionFontScale, InteractionToolName } from '~/types/interaction-ui'
 
 const props = defineProps<{
   activeTool: InteractionToolName | null
-  story: InteractionStory
-  tools: StoryToolset
-  aiCatalog: AiCatalog | null
-  catalogPending: boolean
+  session: GameSessionSnapshot
   fontScale: InteractionFontScale
 }>()
 
 const emit = defineEmits<{
   close: []
-  compose: [text: string]
-  toast: [message: string]
+  compose: [payload: { text: string, itemId?: string }]
   openTool: [tool: InteractionToolName]
   setFontScale: [scale: InteractionFontScale]
 }>()
 
 const dialog = ref<HTMLDialogElement | null>(null)
 const inventoryQuery = ref('')
-const inventoryFilter = ref<InventoryItem['category'] | 'all'>('all')
-const selectedInventoryId = ref('')
-const inventoryCategories: Array<[InventoryItem['category'] | 'all', string]> = [
-  ['all', 'Все'],
-  ['weapon', 'Оружие'],
-  ['armor', 'Броня'],
-  ['artifact', 'Артефакты'],
-  ['key', 'Ключи'],
-  ['consumable', 'Расходники'],
-]
+const selectedItemId = ref('')
 
-const modalCopy = computed(() => ({
-  models: ['КОНТУР OPENROUTER', 'Модели и промты'],
-  inventory: ['СОСТОЯНИЕ СЕССИИ', 'Рюкзак и предметы'],
-  journal: ['ДЕМО-ЖУРНАЛ', 'Локальные примеры'],
-  character: ['ЛИСТ ПЕРСОНАЖА', 'Безымянный'],
-  check: ['ПРОВЕРКА', 'Инструмент действия'],
-  settings: ['НАСТРОЙКИ СЦЕНЫ', 'Опыт взаимодействия'],
-})[props.activeTool || 'models'])
-const filteredInventory = computed(() => {
-  const query = inventoryQuery.value.trim().toLowerCase()
-  return props.tools.inventory.filter((item) => {
-    const matchesCategory = inventoryFilter.value === 'all' || item.category === inventoryFilter.value
-    const haystack = [item.name, item.categoryLabel, item.rarityLabel, item.description].join(' ').toLowerCase()
-    return matchesCategory && (!query || haystack.includes(query))
-  })
-})
-const selectedInventoryItem = computed(() => props.tools.inventory.find(item => item.id === selectedInventoryId.value) || filteredInventory.value[0] || null)
-const rarityClasses: Record<InventoryItem['rarity'], string> = {
-  legendary: 'border-[#e8b24a] text-[#e8b24a] bg-[#e8b24a]/10',
-  epic: 'border-fabula-epic text-fabula-epic bg-fabula-epic/10',
-  rare: 'border-[#5b8fd6] text-[#5b8fd6] bg-[#5b8fd6]/10',
-  common: 'border-white/15 text-fabula-300 bg-white/[.03]',
+const toolCopy: Record<InteractionToolName, { eyebrow: string, title: string }> = {
+  inventory: { eyebrow: 'Состояние сессии', title: 'Инвентарь' },
+  journal: { eyebrow: 'Подтвержденные события', title: 'Журнал' },
+  character: { eyebrow: 'Воплощение и связи', title: 'Персонажи' },
+  world: { eyebrow: 'Сцена и известные места', title: 'Мир' },
+  settings: { eyebrow: 'Чтение и ввод', title: 'Настройки' },
 }
 
-function moduleStatus(promptId: string) {
-  const module = props.aiCatalog?.modules?.find(entry => entry.id === promptId)
-  if (!module)
-    return props.aiCatalog ? 'недоступен' : 'статус не загружен'
-  if (module.id === 'authoritative-turn')
-    return props.aiCatalog?.available ? 'живой turn route' : 'нужен серверный ключ'
-  if (module.enabled)
-    return 'доступен'
-  if (module.blocked_reason)
-    return 'честно заблокирован'
-  return module.internal_only ? 'внутренний' : 'недоступен'
+const currentCopy = computed(() => props.activeTool ? toolCopy[props.activeTool] : toolCopy.inventory)
+const playerInventory = computed(() =>
+  props.session.inventory.filter(item => item.owner_id === 'player' || item.holder_id === 'player'))
+const filteredInventory = computed(() => {
+  const query = inventoryQuery.value.trim().toLocaleLowerCase('ru')
+  if (!query)
+    return playerInventory.value
+  return playerInventory.value.filter((item) => {
+    const haystack = [item.name, item.description, item.location_name, item.holder_name].join(' ').toLocaleLowerCase('ru')
+    return haystack.includes(query)
+  })
+})
+const selectedItem = computed(() =>
+  playerInventory.value.find(item => item.id === selectedItemId.value)
+  || filteredInventory.value[0]
+  || null)
+
+const categoryLabels: Record<InventoryItemProjection['category'], string> = {
+  tool: 'Инструмент',
+  document: 'Документ',
+  medicine: 'Медицина',
+  keepsake: 'Личная вещь',
+  resource: 'Ресурс',
+}
+const conditionLabels: Record<InventoryItemProjection['condition'], string> = {
+  pristine: 'Новое',
+  usable: 'Исправно',
+  worn: 'Изношено',
+  damaged: 'Повреждено',
+  spent: 'Использовано',
+}
+const slotLabels: Record<Exclude<InventoryItemProjection['slot'], null>, string> = {
+  hand: 'В руках',
+  body: 'На себе',
+  bag: 'В сумке',
+}
+const entryTypeLabels = {
+  event: 'Событие',
+  character: 'Персонаж',
+  location: 'Место',
+  item: 'Предмет',
+  clue: 'Улика',
+  promise: 'Обещание',
+  objective: 'Цель',
+}
+const uncertaintyLabels = {
+  confirmed: 'Подтверждено',
+  reported: 'Со слов',
+  suspected: 'Предположение',
+  contradicted: 'Противоречие',
+}
+
+function itemsInSlot(slot: Exclude<InventoryItemProjection['slot'], null>) {
+  return playerInventory.value.filter(item => item.slot === slot)
+}
+
+function addItemToTurn(item: InventoryItemProjection) {
+  emit('compose', {
+    text: `Я использую «${item.name}» для текущего действия.`,
+    itemId: item.id,
+  })
 }
 
 watch(() => props.activeTool, async (tool) => {
   await nextTick()
   if (tool) {
-    if (tool === 'inventory' && !selectedInventoryId.value)
-      selectedInventoryId.value = props.tools.inventory[0]?.id || ''
+    if (tool === 'inventory' && !selectedItemId.value)
+      selectedItemId.value = playerInventory.value[0]?.id || ''
     if (dialog.value && !dialog.value.open)
       dialog.value.showModal()
   }
@@ -83,94 +103,245 @@ watch(() => props.activeTool, async (tool) => {
   }
 })
 
-watch(() => props.tools, () => {
+watch(() => props.session.id, () => {
   inventoryQuery.value = ''
-  inventoryFilter.value = 'all'
-  selectedInventoryId.value = props.tools.inventory[0]?.id || ''
+  selectedItemId.value = playerInventory.value[0]?.id || ''
 })
 </script>
 
 <template>
   <dialog
     ref="dialog"
-    class="fixed inset-0 z-[100] m-auto hidden h-[min(836px,92dvh)] w-[min(790px,94vw)] flex-col overflow-hidden rounded-[20px] border border-[var(--accent)]/45 bg-[#121217] p-0 text-fabula-100 shadow-[0_40px_120px_-30px_#000] backdrop:bg-black/80 backdrop:backdrop-blur-sm open:flex"
-    aria-labelledby="toolModalTitle"
+    class="fixed inset-0 z-[100] m-auto hidden h-[min(820px,92dvh)] w-[min(980px,95vw)] flex-col overflow-hidden rounded-2xl border border-white/12 bg-[#0e1014] p-0 text-fabula-100 shadow-[0_36px_120px_-28px_#000] backdrop:bg-black/80 open:flex"
+    aria-labelledby="interactionToolTitle"
     @cancel.prevent="emit('close')"
-    @click.self="emit('close')"
     @close="emit('close')"
   >
-    <header class="flex shrink-0 items-center justify-between border-b border-white/10 bg-[linear-gradient(145deg,var(--accent-soft),#15151a_70%)] px-6 py-5">
-      <div><span class="font-interface text-[8px] uppercase tracking-[.12em] text-fabula-500">{{ modalCopy[0] }}</span><h2 id="toolModalTitle" class="mt-2 font-display text-[28px]">{{ modalCopy[1] }}</h2></div>
-      <button type="button" class="grid size-10 place-items-center rounded-xl border border-white/10 text-fabula-300" aria-label="Закрыть" @click="emit('close')">×</button>
+    <header class="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3.5 sm:px-6">
+      <div>
+        <p class="font-interface text-[10px] uppercase tracking-[.14em] text-[var(--accent-light)]">{{ currentCopy.eyebrow }}</p>
+        <h2 id="interactionToolTitle" class="mt-1 font-display text-[24px]">{{ currentCopy.title }}</h2>
+      </div>
+      <button
+        type="button"
+        class="grid size-10 place-items-center rounded-xl border border-white/10 text-[20px] text-fabula-300 transition hover:bg-white/5 hover:text-fabula-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+        aria-label="Закрыть"
+        @click="emit('close')"
+      >
+        ×
+      </button>
     </header>
 
-    <div class="flex-1 overflow-y-auto px-6 py-5 [scrollbar-width:thin]">
-      <template v-if="activeTool === 'models'">
-        <div class="mb-4 flex items-center gap-3 rounded-xl border border-[#3e4b62] bg-[#191d27] p-3.5" role="status">
-          <span class="grid size-8 place-items-center rounded-lg bg-[#2a3449] text-[#b7c8e4]">⌘</span>
-          <span><strong class="block font-display text-[16px] font-normal">{{ catalogPending ? 'Проверяю серверный контур' : aiCatalog?.available ? 'OpenRouter готов к AI-вызовам' : 'OpenRouter ожидает серверный ключ' }}</strong><small class="font-interface text-[7px] text-[#9ba9bf]">Ключ не передается в браузер</small></span>
-        </div>
-        <p class="mb-4 text-[16px] leading-relaxed text-fabula-300">Игровой ход подключен через защищенный Nitro route. Остальные модули показывают честный серверный статус.</p>
-        <div class="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
-          <div v-for="model in interactionConfig.models" :key="model.id" class="rounded-xl border border-white/10 bg-white/[.018] p-3">
-            <strong class="block font-display text-[14px] font-normal">{{ model.label }}</strong>
-            <small class="mt-1 block break-all font-interface text-[6px] text-fabula-500">{{ model.slug }}</small>
-            <b class="mt-2 block font-interface text-[6px] uppercase text-[var(--accent)]">{{ model.phase }} · {{ model.status }}</b>
-          </div>
-        </div>
-        <h3 class="mb-2 mt-5 font-interface text-[8px] uppercase tracking-[.1em] text-fabula-500">{{ interactionConfig.prompts.length }} файлов-промтов</h3>
-        <div class="space-y-2">
-          <div v-for="prompt in interactionConfig.prompts" :key="prompt.id" class="grid grid-cols-[34px_1fr_auto] items-center gap-3 rounded-xl border border-white/10 px-3 py-3">
-            <span class="font-interface text-[8px] text-[var(--accent)]">{{ prompt.number }}</span>
-            <span class="min-w-0"><strong class="block truncate font-display text-[15px] font-normal">{{ prompt.title }}</strong><small class="font-interface text-[7px] text-fabula-500">{{ prompt.contract }}</small></span>
-            <span class="rounded-md border border-white/10 px-2 py-1 font-interface text-[6px] text-fabula-300">{{ moduleStatus(prompt.id) }}</span>
-          </div>
-        </div>
-        <div class="mt-5 flex justify-end"><a class="rounded-xl bg-gradient-to-b from-[var(--accent-light)] to-[var(--accent)] px-4 py-3 font-interface text-[9px] text-[#201608] no-underline" href="https://openrouter.ai" target="_blank" rel="noopener">Открыть OpenRouter</a></div>
-      </template>
+    <nav class="flex shrink-0 gap-1 overflow-x-auto border-b border-white/8 px-3 py-2 [scrollbar-width:none] sm:px-5" aria-label="Разделы истории">
+      <button
+        v-for="tool in [
+          { id: 'inventory', label: 'Инвентарь', icon: '◫' },
+          { id: 'journal', label: 'Журнал', icon: '✒' },
+          { id: 'character', label: 'Персонажи', icon: '♙' },
+          { id: 'world', label: 'Мир', icon: '⌖' },
+          { id: 'settings', label: 'Настройки', icon: '⚙' },
+        ]"
+        :key="tool.id"
+        type="button"
+        class="shrink-0 rounded-lg px-3 py-1.5 font-interface text-[10px] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+        :class="activeTool === tool.id ? 'bg-[rgb(var(--accent-rgb)/.12)] text-[var(--accent-light)]' : 'text-[#9b9ba6] hover:bg-white/5'"
+        @click="emit('openTool', tool.id as InteractionToolName)"
+      >
+        <span class="mr-1.5 text-[14px]" aria-hidden="true">{{ tool.icon }}</span>{{ tool.label }}
+      </button>
+    </nav>
 
-      <template v-else-if="activeTool === 'inventory'">
-        <div class="mb-4 flex items-end justify-between"><div><span class="font-interface text-[8px] uppercase tracking-[.1em] text-fabula-500">РЮКЗАК · ЛОКАЛЬНАЯ ДЕМО-СЕССИЯ</span><strong class="mt-1 block font-display text-[20px] font-normal"><b class="text-[var(--accent-light)]">{{ tools.inventory.length }}</b> / 24 слота</strong></div><span class="rounded-full border border-[var(--accent)]/45 bg-[var(--accent-soft)] px-3 py-1 font-interface text-[8px] text-[var(--accent-light)]">{{ tools.currency }}</span></div>
-        <p class="mb-4 text-[15px] text-fabula-300">Предмет изменит мир только после подтвержденного сервером хода.</p>
-        <div class="mb-3 flex items-center gap-3"><label class="flex flex-1 items-center gap-2 rounded-xl border border-white/10 bg-white/[.02] px-3 py-2"><span>⌕</span><span class="sr-only">Поиск по инвентарю</span><input v-model="inventoryQuery" class="w-full bg-transparent text-sm outline-none" type="search" placeholder="Найти предмет" autocomplete="off"></label><span class="font-interface text-[7px] text-fabula-500">{{ filteredInventory.length }} из {{ tools.inventory.length }}</span></div>
-        <div class="mb-4 flex gap-1.5 overflow-x-auto" role="toolbar" aria-label="Фильтр инвентаря">
-          <button v-for="([value, label]) in inventoryCategories" :key="value" type="button" class="shrink-0 rounded-full border px-3 py-1.5 font-interface text-[7px]" :class="inventoryFilter === value ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-light)]' : 'border-white/10 text-fabula-500'" :aria-pressed="inventoryFilter === value" @click="inventoryFilter = value">{{ label }}</button>
-        </div>
-        <div class="grid gap-4 min-[700px]:grid-cols-[1fr_1fr]">
-          <div class="space-y-2" role="list" aria-label="Предметы">
-            <button v-for="item in filteredInventory" :key="item.id" type="button" class="flex w-full items-center gap-3 rounded-xl border p-3 text-left" :class="selectedInventoryItem?.id === item.id ? 'border-[var(--accent)] bg-[var(--accent-soft)]' : 'border-white/10'" @click="selectedInventoryId = item.id">
-              <span class="grid size-10 shrink-0 place-items-center rounded-xl border text-xl" :class="rarityClasses[item.rarity]">{{ item.icon }}</span>
-              <span class="min-w-0 flex-1"><strong class="block truncate font-display text-[15px] font-normal">{{ item.name }}</strong><small class="font-interface text-[7px] text-fabula-500">{{ item.rarityLabel }} · {{ item.categoryLabel }}</small></span><b class="font-interface text-[8px] text-fabula-300">×{{ item.quantity }}</b>
-            </button>
-          </div>
-          <section v-if="selectedInventoryItem" class="h-max rounded-[14px] border border-[var(--accent)]/40 bg-[var(--accent-soft)] p-4" aria-label="Выбранный предмет">
-            <div class="flex items-center gap-3"><span class="grid size-12 place-items-center rounded-xl border text-2xl" :class="rarityClasses[selectedInventoryItem.rarity]">{{ selectedInventoryItem.icon }}</span><span><span class="font-interface text-[7px] uppercase text-fabula-500">{{ selectedInventoryItem.categoryLabel }}</span><h3 class="font-display text-[19px]">{{ selectedInventoryItem.name }}</h3><b class="font-interface text-[7px] text-[var(--accent-light)]">{{ selectedInventoryItem.rarityLabel }}</b></span></div>
-            <p class="my-4 text-[15px] leading-relaxed text-fabula-300">{{ selectedInventoryItem.description }}</p>
-            <div class="grid grid-cols-3 gap-2"><span v-for="entry in [['Количество', `×${selectedInventoryItem.quantity}`], ['Состояние', selectedInventoryItem.condition], ['Вес', selectedInventoryItem.weight]]" :key="entry[0]" class="rounded-lg border border-white/10 p-2"><small class="block font-interface text-[6px] text-fabula-500">{{ entry[0] }}</small><strong class="font-display text-sm font-normal">{{ entry[1] }}</strong></span></div>
-            <div class="mt-4 flex gap-2"><button type="button" class="flex-1 rounded-xl bg-gradient-to-b from-[var(--accent-light)] to-[var(--accent)] p-2.5 font-interface text-[8px] text-[#201608]" @click="emit('compose', selectedInventoryItem.text)">Добавить в ход</button><button type="button" class="rounded-xl border border-white/10 px-3 font-interface text-[8px]" @click="emit('toast', selectedInventoryItem.inspect)">Осмотреть</button></div>
+    <div class="min-h-0 flex-1 overflow-y-auto p-4 [scrollbar-width:thin] sm:p-6">
+      <template v-if="activeTool === 'inventory'">
+        <div class="mb-5 grid gap-4 lg:grid-cols-[minmax(250px,.72fr)_minmax(0,1.28fr)]">
+          <section>
+            <h3 class="font-display text-[19px] text-fabula-100">Размещение</h3>
+            <p class="mt-1 text-[13px] leading-relaxed text-[#9b9ba6]">Только предметы из подтвержденного снимка сессии.</p>
+            <div class="mt-3 grid grid-cols-3 gap-2">
+              <div
+                v-for="slot in (['hand', 'body', 'bag'] as const)"
+                :key="slot"
+                class="min-h-[112px] rounded-xl border border-white/10 bg-white/[.025] p-3"
+              >
+                <span class="font-interface text-[10px] uppercase tracking-[.08em] text-[#9b9ba6]">{{ slotLabels[slot] }}</span>
+                <template v-if="itemsInSlot(slot).length">
+                  <button
+                    v-for="item in itemsInSlot(slot)"
+                    :key="item.id"
+                    type="button"
+                    class="mt-3 block w-full text-left"
+                    @click="selectedItemId = item.id"
+                  >
+                    <strong class="block font-display text-[15px] font-normal text-[var(--accent-light)]">{{ item.name }}</strong>
+                    <span class="mt-1 block text-[11px] text-[#9b9ba6]">×{{ item.quantity }} · {{ conditionLabels[item.condition] }}</span>
+                  </button>
+                </template>
+                <span v-else class="mt-4 block text-[12px] text-[#9b9ba6]">Пусто</span>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <div class="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h3 class="font-display text-[19px] text-fabula-100">Все предметы</h3>
+                <p class="mt-1 text-[13px] text-[#9b9ba6]">{{ playerInventory.length }} у персонажа</p>
+              </div>
+              <label class="flex min-h-10 min-w-[220px] flex-1 items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 text-[#9b9ba6] sm:max-w-[360px]">
+                <span aria-hidden="true">⌕</span>
+                <span class="sr-only">Найти предмет</span>
+                <input
+                  v-model="inventoryQuery"
+                  type="search"
+                  autocomplete="off"
+                  placeholder="Найти предмет"
+                  class="w-full bg-transparent text-[14px] text-fabula-100 outline-none placeholder:text-[#8f8f99]"
+                >
+              </label>
+            </div>
+
+            <div v-if="filteredInventory.length" class="mt-3 grid gap-2 sm:grid-cols-2">
+              <button
+                v-for="item in filteredInventory"
+                :key="item.id"
+                type="button"
+                class="rounded-xl border p-3 text-left transition"
+                :class="selectedItem?.id === item.id
+                  ? 'border-[rgb(var(--accent-rgb)/.55)] bg-[rgb(var(--accent-rgb)/.08)]'
+                  : 'border-white/8 bg-white/[.02] hover:border-white/16'"
+                @click="selectedItemId = item.id"
+              >
+                <span class="font-interface text-[10px] uppercase tracking-[.08em] text-[var(--accent-light)]">{{ categoryLabels[item.category] }}</span>
+                <strong class="mt-1 block font-display text-[16px] font-normal text-fabula-100">{{ item.name }}</strong>
+                <span class="mt-1 block text-[11px] text-[#9b9ba6]">×{{ item.quantity }} · {{ conditionLabels[item.condition] }}</span>
+              </button>
+            </div>
+            <p v-else class="mt-3 rounded-xl border border-dashed border-white/10 p-5 text-center text-[14px] text-[#9b9ba6]">Предметов не найдено.</p>
           </section>
         </div>
+
+        <section v-if="selectedItem" class="border-t border-white/10 pt-4">
+          <div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+            <div>
+              <p class="font-interface text-[10px] uppercase tracking-[.1em] text-[var(--accent-light)]">{{ categoryLabels[selectedItem.category] }}</p>
+              <h3 class="mt-1 font-display text-[20px] text-fabula-100">{{ selectedItem.name }}</h3>
+              <p class="mt-2 max-w-[70ch] text-[15px] leading-relaxed text-fabula-300">{{ selectedItem.description }}</p>
+              <p class="mt-2 text-[12px] text-[#9b9ba6]">
+                Держатель: {{ selectedItem.holder_name }} · место: {{ selectedItem.location_name }} · версия {{ selectedItem.version }}
+              </p>
+            </div>
+            <button
+              type="button"
+              class="min-h-11 rounded-xl bg-[var(--accent)] px-4 font-display text-[14px] text-[#101114] hover:bg-[var(--accent-light)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-light)]"
+              @click="addItemToTurn(selectedItem)"
+            >
+              Добавить в ход
+            </button>
+          </div>
+        </section>
       </template>
 
       <template v-else-if="activeTool === 'journal'">
-        <p class="mb-4 text-[15px] text-fabula-300">Это локальный демо-журнал. Записи только подставляют текст в поле хода.</p>
-        <div class="space-y-2">
-          <div v-for="item in tools.journal" :key="item.title" class="flex items-center gap-3 rounded-xl border border-white/10 p-3"><span class="text-[var(--accent)]">✒</span><span class="min-w-0 flex-1"><strong class="block font-display text-base font-normal">{{ item.title }}</strong><small class="block font-interface text-[7px] text-fabula-500">{{ item.meta }} · {{ item.text }}</small></span><button type="button" class="rounded-lg border border-[var(--accent)]/40 px-3 py-2 font-interface text-[7px] text-[var(--accent-light)]" @click="emit('compose', item.text)">В ход</button></div>
+        <p class="mb-4 max-w-[68ch] text-[15px] leading-relaxed text-fabula-300">
+          Запись появляется только после подтвержденного события. Предположения и сведения со слов отмечены отдельно.
+        </p>
+        <div class="divide-y divide-white/8 border-y border-white/8">
+          <article v-for="entry in session.journal" :key="entry.id" class="py-4">
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span class="font-interface text-[10px] uppercase tracking-[.08em] text-[var(--accent-light)]">{{ entryTypeLabels[entry.entry_type] }}</span>
+              <span class="font-interface text-[10px] text-[#9b9ba6]">{{ uncertaintyLabels[entry.uncertainty] }} · {{ entry.story_time }}</span>
+            </div>
+            <h3 class="mt-1.5 font-display text-[18px] text-fabula-100">{{ entry.title }}</h3>
+            <p class="mt-1 text-[15px] leading-relaxed text-fabula-300">{{ entry.summary }}</p>
+            <button
+              type="button"
+              class="mt-2 rounded-lg px-2 py-1 text-[12px] text-[var(--accent-light)] transition hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+              @click="emit('compose', { text: `Я опираюсь на запись «${entry.title}»: ${entry.summary}` })"
+            >
+              Использовать в ходе
+            </button>
+          </article>
         </div>
       </template>
 
       <template v-else-if="activeTool === 'character'">
-        <div class="flex gap-4 rounded-[15px] border border-[var(--accent)]/40 bg-[var(--accent-soft)] p-4"><img class="size-24 rounded-[14px] object-cover" src="/assets/avatar.jpg" alt="Портрет игрока"><div class="flex-1"><h3 class="font-display text-[26px]">Ты</h3><p class="text-fabula-300">{{ story.role }} · сцена 02</p><div class="mt-4 grid grid-cols-3 gap-2"><div v-for="entry in [['31', 'стойкость'], ['14', 'влияние'], [tools.currency, 'ресурс']]" :key="entry[1]" class="rounded-xl border border-white/10 p-2 text-center"><b class="block font-display text-lg font-normal text-[var(--accent-light)]">{{ entry[0] }}</b><small class="font-interface text-[6px] text-fabula-500">{{ entry[1] }}</small></div></div><div class="mt-3 h-1 overflow-hidden rounded-full bg-white/10"><i class="block h-full w-[64%] bg-gradient-to-r from-[var(--accent-deep)] to-[var(--accent-light)]" /></div></div></div>
-        <div class="mt-4 flex justify-end"><button type="button" class="rounded-xl bg-gradient-to-b from-[var(--accent-light)] to-[var(--accent)] px-4 py-3 font-interface text-[8px] text-[#201608]" @click="emit('openTool', 'inventory')">Открыть инвентарь</button></div>
+        <section class="border-b border-white/10 pb-5">
+          <p class="font-interface text-[10px] uppercase tracking-[.12em] text-[var(--accent-light)]">{{ session.persona.role_label }}</p>
+          <h3 class="mt-1 font-display text-[24px] text-fabula-100">{{ session.persona.name }}</h3>
+          <p class="mt-2 text-[15px] leading-relaxed text-fabula-300">{{ session.persona.motivation }}</p>
+          <div class="mt-4 grid gap-3 sm:grid-cols-2">
+            <div class="rounded-xl border border-white/8 bg-white/[.02] p-3">
+              <span class="font-interface text-[10px] uppercase text-[#9b9ba6]">Компетенция</span>
+              <p class="mt-1 text-[14px] leading-relaxed text-fabula-100">{{ session.persona.competence }}</p>
+            </div>
+            <div class="rounded-xl border border-white/8 bg-white/[.02] p-3">
+              <span class="font-interface text-[10px] uppercase text-[#9b9ba6]">Ограничение</span>
+              <p class="mt-1 text-[14px] leading-relaxed text-fabula-100">{{ session.persona.limitation }}</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="pt-5">
+          <h3 class="font-display text-[19px] text-fabula-100">Известные персонажи</h3>
+          <div class="mt-3 grid gap-2 sm:grid-cols-2">
+            <article v-for="character in session.characters" :key="character.id" class="rounded-xl border border-white/8 bg-white/[.02] p-3">
+              <p class="font-interface text-[10px] uppercase tracking-[.08em] text-[var(--accent-light)]">{{ character.relation }}</p>
+              <h4 class="mt-1 font-display text-[17px] text-fabula-100">{{ character.name }}</h4>
+              <p class="text-[12px] text-[#9b9ba6]">{{ character.role }}</p>
+              <p class="mt-2 text-[14px] leading-relaxed text-fabula-300">{{ character.description }}</p>
+            </article>
+          </div>
+        </section>
       </template>
 
-      <template v-else-if="activeTool === 'check'">
-        <p class="mb-4 text-[15px] text-fabula-300">Итоговый порог и typed operations решает сервер.</p>
-        <div class="grid gap-3 sm:grid-cols-2"><div v-for="check in tools.checks" :key="check.title" class="rounded-[14px] border border-white/10 p-4"><h3 class="font-display text-lg">{{ check.title }}</h3><p class="my-2 text-fabula-300">{{ check.text }}</p><b class="font-interface text-[7px] text-[var(--accent)]">{{ check.meta }}</b></div></div>
+      <template v-else-if="activeTool === 'world'">
+        <section class="border-b border-white/10 pb-5">
+          <p class="font-interface text-[10px] uppercase tracking-[.12em] text-[var(--accent-light)]">Текущая сцена · {{ session.scene.story_time }}</p>
+          <h3 class="mt-1 font-display text-[24px] text-fabula-100">{{ session.scene.title }}</h3>
+          <p class="mt-1 text-[14px] text-[#9b9ba6]">{{ session.scene.location_name }}</p>
+          <p class="mt-3 text-[16px] leading-relaxed text-fabula-300">{{ session.scene.objective }}</p>
+        </section>
+
+        <section class="pt-5">
+          <h3 class="font-display text-[19px] text-fabula-100">Известные места</h3>
+          <div class="mt-3 grid gap-2 sm:grid-cols-2">
+            <article v-for="location in session.locations" :key="location.id" class="rounded-xl border border-white/8 bg-white/[.02] p-3">
+              <p class="font-interface text-[10px] uppercase tracking-[.08em] text-[var(--accent-light)]">{{ location.status }}</p>
+              <h4 class="mt-1 font-display text-[17px] text-fabula-100">{{ location.name }}</h4>
+              <p class="mt-2 text-[14px] leading-relaxed text-fabula-300">{{ location.description }}</p>
+            </article>
+          </div>
+        </section>
       </template>
 
       <template v-else-if="activeTool === 'settings'">
-        <div><label class="mb-2 block font-interface text-[8px] uppercase tracking-[.1em] text-fabula-500">Размер текста</label><div class="flex overflow-hidden rounded-xl border border-white/10"><button v-for="option in (['normal', 'large', 'xlarge'] as InteractionFontScale[])" :key="option" type="button" class="flex-1 border-r border-white/10 px-3 py-3 font-interface text-[8px] last:border-0" :class="fontScale === option ? 'bg-[var(--accent)] text-[#201608]' : 'text-fabula-300'" :aria-pressed="fontScale === option" @click="emit('setFontScale', option)">{{ option === 'normal' ? 'Обычный' : option === 'large' ? 'Крупный' : 'Очень крупный' }}</button></div><small class="mt-2 block text-fabula-500">Масштаб сохраняется локально и не меняет канон.</small></div>
+        <section class="max-w-[620px]">
+          <label class="font-display text-[17px] text-fabula-100">Размер текста истории</label>
+          <p class="mt-1 text-[13px] leading-relaxed text-[#9b9ba6]">Меняется только чтение на этом устройстве и не влияет на канон.</p>
+          <div class="mt-3 grid grid-cols-3 overflow-hidden rounded-xl border border-white/10">
+            <button
+              v-for="option in (['normal', 'large', 'xlarge'] as InteractionFontScale[])"
+              :key="option"
+              type="button"
+              class="min-h-12 border-r border-white/10 px-2 font-display text-[13px] last:border-r-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[var(--accent)]"
+              :class="fontScale === option ? 'bg-[var(--accent)] text-[#101114]' : 'text-fabula-300 hover:bg-white/5'"
+              :aria-pressed="fontScale === option"
+              @click="emit('setFontScale', option)"
+            >
+              {{ option === 'normal' ? '17 px' : option === 'large' ? '19 px' : '21 px' }}
+            </button>
+          </div>
+
+          <div class="mt-6 border-t border-white/10 pt-5">
+            <p class="font-display text-[17px] text-fabula-100">Управление</p>
+            <dl class="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-[13px]">
+              <dt class="font-interface text-[10px] text-[var(--accent-light)]">Enter</dt><dd class="text-fabula-300">Отправить ход</dd>
+              <dt class="font-interface text-[10px] text-[var(--accent-light)]">Shift + Enter</dt><dd class="text-fabula-300">Новая строка</dd>
+              <dt class="font-interface text-[10px] text-[var(--accent-light)]">Ctrl / ⌘ + K</dt><dd class="text-fabula-300">Перейти к вводу</dd>
+              <dt class="font-interface text-[10px] text-[var(--accent-light)]">Esc</dt><dd class="text-fabula-300">Закрыть панель</dd>
+            </dl>
+          </div>
+        </section>
       </template>
     </div>
   </dialog>

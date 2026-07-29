@@ -1,83 +1,97 @@
 <script setup lang="ts">
+import { STORY_PACK_LIST } from '#shared/storypacks'
 import type { HubStoryId } from '~/types/hub'
 
 const emit = defineEmits<{
   openStory: [storyId: HubStoryId]
 }>()
 
-const packs: Array<{
-  id: HubStoryId
-  cover: string
-  genre: string
-  glyph: string
-  title: string
-  count: string
-  tagClass: string
-  titleClass: string
-}> = [
-  { id: 'fant', cover: '/assets/cover_fantasy.jpg', genre: 'Фэнтези', glyph: '⚔', title: 'Пепельные земли', count: '12 историй', tagClass: 'border-[#a97a2c] text-fabula-gold-light', titleClass: 'font-display text-fabula-gold-light' },
-  { id: 'scifi', cover: '/assets/cover_scifi.jpg', genre: 'Sci-Fi', glyph: '✧', title: 'Кассандра', count: '9 историй', tagClass: 'border-fabula-scifi/40 text-fabula-scifi font-interface', titleClass: 'font-interface font-bold uppercase text-fabula-scifi [text-shadow:0_0_12px_rgba(84,230,208,.4)]' },
-  { id: 'hist', cover: '/assets/cover_history.jpg', genre: 'История', glyph: '⚜', title: 'Восстание Спартака', count: '7 историй', tagClass: 'border-fabula-history/40 text-fabula-history', titleClass: 'font-display text-fabula-history' },
-  { id: 'post', cover: '/assets/cover_modern.png', genre: 'Современность', glyph: '◒', title: 'Линия разрыва', count: '6 историй', tagClass: 'border-fabula-post/40 text-fabula-post', titleClass: 'font-interface font-bold uppercase text-fabula-post' },
-]
-
-const filters = ['Все', 'Фэнтези', 'Sci-Fi', 'История', 'Современность']
-const activeFilter = ref(filters[0])
+const query = ref('')
+const filteredPacks = computed(() => {
+  const needle = query.value.trim().toLocaleLowerCase('ru')
+  if (!needle)
+    return STORY_PACK_LIST
+  return STORY_PACK_LIST.filter((pack) => {
+    const text = [
+      pack.title,
+      pack.shortTitle,
+      pack.genre,
+      pack.logline,
+      ...pack.systemFocus,
+    ].join(' ').toLocaleLowerCase('ru')
+    return text.includes(needle)
+  })
+})
 </script>
 
 <template>
-  <section data-hub-screen class="absolute inset-0 z-10 bg-[radial-gradient(120%_100%_at_50%_0%,#241a0c,#14100a_55%,#0b0806)]">
+  <section data-hub-screen class="absolute inset-0 z-10 bg-[#0b0906]">
     <div class="absolute inset-0 overflow-y-auto px-[22px] pb-[94px] [scrollbar-width:none] min-[900px]:left-[clamp(224px,17vw,280px)] min-[900px]:px-[max(4%,28px)] min-[900px]:pb-12">
-      <HubAppBar title="Паки историй" action="⚲" />
+      <HubAppBar title="Четыре мира" />
 
-      <div class="mx-auto mb-[14px] flex max-w-[1120px] items-center gap-2.5 rounded-xl border border-[#d9a94a2e] bg-white/[.03] px-[14px] py-[11px] text-[15px] text-[#8a7c60]">
-        <span>⚲</span><span>Найти историю…</span>
-      </div>
-      <div class="mx-auto mb-4 flex max-w-[1120px] gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none]">
-        <button
-          v-for="filter in filters"
-          :key="filter"
-          type="button"
-          class="shrink-0 rounded-full border px-[15px] py-2 font-display text-[13px]"
-          :class="activeFilter === filter ? 'border-transparent bg-gradient-to-b from-fabula-gold-light to-[#8a6122] text-[#12100a]' : 'border-[#d9a94a2e] bg-white/[.03] text-[#b6a88a]'"
-          @click="activeFilter = filter"
-        >
-          {{ filter }}
-        </button>
-      </div>
+      <div class="mx-auto max-w-[1120px]">
+        <header class="mb-6 max-w-[720px]">
+          <p class="font-interface text-[10px] uppercase tracking-[.18em] text-fabula-gold">StoryPack · версия 0.2</p>
+          <h1 class="mt-2 font-display text-[24px] text-fabula-100">Выбери мир, а не готовый ответ</h1>
+          <p class="mt-2 text-[15px] leading-relaxed text-fabula-500">
+            Каждый пак закрепляет собственный канон, причинность, роли и правила. Внутри него ты создаешь отдельную личную ветку.
+          </p>
+        </header>
 
-      <button
-        type="button"
-        class="relative mx-auto mb-[18px] flex min-h-[150px] w-full max-w-[1120px] flex-col justify-end overflow-hidden rounded-2xl p-[18px] text-left"
-        @click="emit('openStory', 'fant')"
-      >
-        <img class="absolute inset-0 h-full w-full object-cover" src="/assets/cover_fantasy.jpg" alt="">
-        <span class="absolute inset-0 bg-gradient-to-t from-[#0b0806f2] via-[#0b080640] to-[#0b080610]" />
-        <span class="absolute left-[14px] top-[14px] z-[2] rounded-full bg-gradient-to-b from-fabula-gold-light to-[#8a6122] px-[11px] py-[5px] font-display text-[10px] uppercase tracking-[.16em] text-[#1a1206]">Новинка недели</span>
-        <strong class="relative z-[2] font-display text-[23px] leading-[1.05] text-fabula-gold-light">Пепельные земли</strong>
-        <span class="relative z-[2] mt-1 text-sm text-[#b6a88a]">Темное фэнтези · 8 глав · рейтинг ★ 4.8</span>
-      </button>
+        <label class="mb-5 flex min-h-12 items-center gap-3 rounded-2xl border border-white/10 bg-white/[.025] px-4 text-fabula-500 transition focus-within:border-fabula-gold/55">
+          <span aria-hidden="true">⌕</span>
+          <span class="sr-only">Найти StoryPack</span>
+          <input
+            v-model="query"
+            type="search"
+            autocomplete="off"
+            placeholder="Название, жанр или игровая система"
+            class="w-full bg-transparent text-[15px] text-fabula-100 outline-none placeholder:text-fabula-500"
+          >
+        </label>
 
-      <div class="mx-auto mb-3 mt-1 flex max-w-[1120px] items-center justify-between">
-        <span class="font-display text-[13px] uppercase tracking-[.14em] text-[#e9dfc9]">Архижанры</span>
-        <span class="font-display text-xs text-fabula-gold">все →</span>
-      </div>
+        <div class="grid gap-4 md:grid-cols-2">
+          <article
+            v-for="pack in filteredPacks"
+            :key="pack.id"
+            class="group relative min-h-[360px] overflow-hidden rounded-3xl border border-white/10"
+            :style="{ '--card-accent': pack.theme.accent, '--card-accent-light': pack.theme.accentLight }"
+          >
+            <img :src="pack.cover" :alt="pack.title" class="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-[1.025]">
+            <div class="absolute inset-0 bg-gradient-to-t from-[#080706] via-[#080706b8] to-[#08070626]" />
+            <div class="relative flex min-h-[360px] flex-col justify-end p-5 sm:p-6">
+              <div class="mb-auto flex items-center justify-between gap-3">
+                <span class="rounded-full border border-white/15 bg-black/35 px-3 py-1.5 font-interface text-[10px] uppercase tracking-[.12em] text-[var(--card-accent-light)]">
+                  {{ pack.genre }}
+                </span>
+                <span class="text-[20px] text-[var(--card-accent)]" aria-hidden="true">{{ pack.theme.icon }}</span>
+              </div>
+              <p class="font-interface text-[10px] uppercase tracking-[.14em] text-[var(--card-accent-light)]">{{ pack.season }}</p>
+              <h2 class="mt-2 font-display text-[23px] leading-tight text-white">{{ pack.title }}</h2>
+              <p class="mt-3 text-[15px] leading-relaxed text-fabula-300">{{ pack.logline }}</p>
+              <div class="mt-4 flex flex-wrap gap-2">
+                <span
+                  v-for="focus in pack.systemFocus"
+                  :key="focus"
+                  class="rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-[10px] text-fabula-300"
+                >
+                  {{ focus }}
+                </span>
+              </div>
+              <button
+                type="button"
+                class="mt-5 min-h-11 w-full rounded-xl bg-[var(--card-accent)] px-4 font-display text-[14px] uppercase tracking-[.09em] text-[#0b0906] transition hover:bg-[var(--card-accent-light)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--card-accent-light)]"
+                @click="emit('openStory', pack.id)"
+              >
+                Создать свою ветку
+              </button>
+            </div>
+          </article>
+        </div>
 
-      <div class="mx-auto grid max-w-[1120px] grid-cols-2 gap-[13px] min-[900px]:grid-cols-4">
-        <button
-          v-for="pack in packs"
-          :key="pack.id"
-          type="button"
-          class="relative aspect-[3/4] overflow-hidden rounded-[14px] border border-[#d9a94a2e] p-3 text-left shadow-[0_12px_24px_-14px_#000] transition active:scale-[.97]"
-          @click="emit('openStory', pack.id)"
-        >
-          <img class="absolute inset-0 h-full w-full object-cover" :src="pack.cover" alt="">
-          <span class="absolute inset-0 bg-gradient-to-t from-[#0b0806f0] via-[#0b080630] to-[#0b080610]" />
-          <span class="absolute left-2.5 top-2.5 z-[2] rounded-full border bg-black/50 px-2 py-[3px] font-display text-[9px] uppercase tracking-[.1em]" :class="pack.tagClass">{{ pack.genre }}</span>
-          <span class="absolute right-3 top-3 z-[2] text-[19px] text-white/25">{{ pack.glyph }}</span>
-          <span class="absolute inset-x-3 bottom-8 z-[2] text-base leading-[1.05]" :class="pack.titleClass">{{ pack.title }}</span>
-          <span class="absolute inset-x-3 bottom-3 z-[2] text-[13px] text-[#8a7c60]">{{ pack.count }}</span>
-        </button>
+        <p v-if="!filteredPacks.length" class="rounded-2xl border border-white/8 bg-white/[.02] p-6 text-center text-[15px] text-fabula-500">
+          Среди четырех утвержденных StoryPack ничего не найдено.
+        </p>
       </div>
     </div>
   </section>

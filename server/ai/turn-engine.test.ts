@@ -3,7 +3,7 @@ import type { FabulaAiConfig } from './config'
 import type { TurnCommand } from './contracts'
 import { AiExecutionError } from './http'
 import type { OpenRouterClient } from './openrouter'
-import type { SessionSnapshot } from './session-store'
+import type { EngineSessionSnapshot } from '../game/session-repository'
 import { TurnEngine } from './turn-engine'
 
 const config: FabulaAiConfig = {
@@ -19,17 +19,53 @@ const command: TurnCommand = {
   expected_session_version: 0,
   mode: 'exploration',
   text: 'Я проверяю дверь.',
-  story_id: 'fant',
   selected_target_ids: [],
   selected_item_ids: [],
   selected_suggestion_id: null,
 }
 
-const snapshot: SessionSnapshot = {
+const snapshot: EngineSessionSnapshot = {
   sessionId: command.session_id,
-  storyId: command.story_id,
+  storyPackId: 'eighth-seal',
+  storyPackVersion: '0.2',
   version: 0,
+  persona: {
+    name: 'Лея',
+    role_id: 'eighth-seal:engineer',
+    role_label: 'Инженерное мышление',
+    competence: 'Разбирает задачу на этапы',
+    limitation: 'Нужны материалы и время',
+    motivation: 'Понять восьмой круг',
+    embodiment_note: '',
+    narration_density: 'balanced',
+  },
+  scene: {
+    id: 'scene:eighth-seal:summoning-hall',
+    title: 'Лишний круг',
+    location_id: 'location:summoning-hall',
+    location_name: 'Зал Призыва',
+    story_time: 'Первый час',
+    objective: 'Понять природу восьмого круга',
+    present_character_ids: [],
+  },
+  inventory: [],
+  characters: [],
+  locations: [{
+    id: 'location:summoning-hall',
+    name: 'Зал Призыва',
+    description: 'Зал восьми кругов.',
+    status: 'Текущая локация',
+  }],
   history: [],
+  confirmedEvents: [],
+  confirmedFacts: [],
+  reservedIds: {
+    events: ['event:reserved:0001'],
+    facts: ['fact:reserved:0001'],
+    itemInstances: [],
+    scenes: ['scene:reserved:0001'],
+  },
+  allowedOperationTypes: ['event.create', 'fact.create'],
 }
 
 describe('turn engine model telemetry', () => {

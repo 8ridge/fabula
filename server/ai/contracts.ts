@@ -1,18 +1,128 @@
+import type { GameTurnCommand } from '../../shared/game'
+
 export type JsonPrimitive = string | number | boolean | null
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue }
 
-export interface TurnCommand {
-  schema_version: 'turn-command@1.0'
-  session_id: string
-  idempotency_key: string
-  expected_session_version: number
-  mode: 'action' | 'speech' | 'exploration'
-  text: string
-  story_id: 'fant' | 'scifi' | 'hist' | 'post'
-  selected_target_ids: string[]
-  selected_item_ids: string[]
-  selected_suggestion_id: string | null
+export type TurnCommand = GameTurnCommand
+
+export interface ExpectedInventoryState {
+  owner_id: string
+  holder_id: string
+  location_id: string
+  container_id: string | null
+  quantity: number
+  charges: number | null
+  condition: 'pristine' | 'usable' | 'worn' | 'damaged' | 'spent'
+  version: number
 }
+
+export interface ExpectedSceneState {
+  scene_id: string
+  location_id: string
+  story_time: string
+}
+
+export interface ExpectedScenePresence {
+  scene_id: string
+  present_character_ids: string[]
+}
+
+export type TurnOperation =
+  | {
+    type: 'event.create'
+    operation_index: number
+    event_id: string
+    event_kind: string
+    actor_ids: string[]
+    target_ids: string[]
+    item_ids: string[]
+    location_id: string
+    source_turn_id: string
+  }
+  | {
+    type: 'scene.transition'
+    operation_index: number
+    source_event_id: string
+    scene_id: string
+    title: string
+    location_id: string
+    story_time: string
+    objective: string
+    present_character_ids: string[]
+    expected: ExpectedSceneState
+  }
+  | {
+    type: 'scene.update_presence'
+    operation_index: number
+    source_event_id: string
+    present_character_ids: string[]
+    departures: Array<{
+      character_id: string
+      destination_location_id: string
+    }>
+    expected: ExpectedScenePresence
+  }
+  | {
+    type: 'fact.create'
+    operation_index: number
+    fact_id: string
+    claim: string
+    truth_status: 'observed' | 'reported' | 'inferred' | 'contested'
+    source_event_ids: string[]
+  }
+  | {
+    type: 'knowledge.grant'
+    operation_index: number
+    character_id: string
+    fact_id: string
+    source_event_id: string
+    confidence: number
+  }
+  | {
+    type: 'inventory.create_instance'
+    operation_index: number
+    source_event_id: string
+    item_id: string
+    template_id: string
+    name: string
+    category: 'tool' | 'document' | 'medicine' | 'keepsake' | 'resource'
+    description: string
+    owner_id: string
+    holder_id: string
+    location_id: string
+    quantity: number
+    charges: number | null
+    condition: 'pristine' | 'usable' | 'worn' | 'damaged' | 'spent'
+    slot: 'hand' | 'body' | 'bag' | null
+  }
+  | {
+    type: 'inventory.transfer_custody'
+    operation_index: number
+    source_event_id: string
+    item_id: string
+    from_holder_id: string
+    to_holder_id: string
+    quantity: number
+    expected: ExpectedInventoryState
+  }
+  | {
+    type: 'inventory.transfer_ownership'
+    operation_index: number
+    source_event_id: string
+    item_id: string
+    from_owner_id: string
+    to_owner_id: string
+    quantity: number
+    expected: ExpectedInventoryState
+  }
+  | {
+    type: 'inventory.consume'
+    operation_index: number
+    source_event_id: string
+    item_id: string
+    amount: number
+    expected: ExpectedInventoryState
+  }
 
 export interface TurnOutput {
   schema_version: 'turn-output@0.2'
@@ -45,7 +155,7 @@ export interface TurnOutput {
     reason_codes: string[]
     costs_and_consequences: string[]
   }
-  operations: []
+  operations: TurnOperation[]
   narrative_brief: {
     must_include: string[]
     must_not_invent: string[]
@@ -89,7 +199,6 @@ export class ContractError extends Error {
 }
 
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9:_-]{7,127}$/
-const STORY_IDS = new Set(['fant', 'scifi', 'hist', 'post'])
 const MODES = new Set(['action', 'speech', 'exploration'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -127,6 +236,12 @@ function boundedInteger(value: unknown, path: string, min: number, max: number):
   return Number(value)
 }
 
+function boundedNumber(value: unknown, path: string, min: number, max: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max)
+    throw new ContractError('INVALID_FIELD', 'Некорректное число.', [path])
+  return value
+}
+
 export function parseTurnCommand(value: unknown): TurnCommand {
   if (!isRecord(value))
     throw new ContractError('INVALID_BODY', 'Ожидался JSON-объект.')
@@ -137,7 +252,6 @@ export function parseTurnCommand(value: unknown): TurnCommand {
     'expected_session_version',
     'mode',
     'text',
-    'story_id',
     'selected_target_ids',
     'selected_item_ids',
     'selected_suggestion_id',
@@ -153,8 +267,6 @@ export function parseTurnCommand(value: unknown): TurnCommand {
     throw new ContractError('INVALID_FIELD', 'Некорректный idempotency_key.', ['$.idempotency_key'])
   if (!MODES.has(String(value.mode)))
     throw new ContractError('INVALID_FIELD', 'Некорректный режим хода.', ['$.mode'])
-  if (!STORY_IDS.has(String(value.story_id)))
-    throw new ContractError('INVALID_FIELD', 'Неизвестный StoryPack.', ['$.story_id'])
   const text = boundedString(value.text, '$.text', 1, 1200)
   boundedInteger(value.expected_session_version, '$.expected_session_version', 0, 1_000_000)
   const selectedTargetIds = stringArray(value.selected_target_ids, '$.selected_target_ids', 16)
@@ -169,7 +281,6 @@ export function parseTurnCommand(value: unknown): TurnCommand {
     expected_session_version: Number(value.expected_session_version),
     mode: value.mode as TurnCommand['mode'],
     text: text.trim(),
-    story_id: value.story_id as TurnCommand['story_id'],
     selected_target_ids: selectedTargetIds,
     selected_item_ids: selectedItemIds,
     selected_suggestion_id: value.selected_suggestion_id as string | null,
@@ -282,6 +393,182 @@ function validateAtomicStep(value: unknown, path: string): void {
   stringArray(value.precondition_codes, `${path}.precondition_codes`, 32)
   stringArray(value.interruption_points, `${path}.interruption_points`, 32)
   stringArray(value.completion_evidence, `${path}.completion_evidence`, 32)
+}
+
+const inventoryExpectedKeys = [
+  'owner_id',
+  'holder_id',
+  'location_id',
+  'container_id',
+  'quantity',
+  'charges',
+  'condition',
+  'version',
+] as const
+
+function validateExpectedInventoryState(value: unknown, path: string): void {
+  if (!isRecord(value))
+    throw new ContractError('MODEL_CONTRACT_ERROR', 'Некорректный expected для предмета.', [path])
+  exactKeys(value, inventoryExpectedKeys, path)
+  requiredKeys(value, inventoryExpectedKeys, path)
+  boundedString(value.owner_id, `${path}.owner_id`, 1, 160)
+  boundedString(value.holder_id, `${path}.holder_id`, 1, 160)
+  boundedString(value.location_id, `${path}.location_id`, 1, 160)
+  if (value.container_id !== null)
+    boundedString(value.container_id, `${path}.container_id`, 1, 160)
+  boundedInteger(value.quantity, `${path}.quantity`, 0, 1_000_000)
+  if (value.charges !== null)
+    boundedInteger(value.charges, `${path}.charges`, 0, 1_000_000)
+  if (!['pristine', 'usable', 'worn', 'damaged', 'spent'].includes(String(value.condition)))
+    throw new ContractError('MODEL_CONTRACT_ERROR', 'Некорректное состояние предмета.', [`${path}.condition`])
+  boundedInteger(value.version, `${path}.version`, 0, 1_000_000)
+}
+
+function validateExpectedSceneState(value: unknown, path: string): void {
+  if (!isRecord(value))
+    throw new ContractError('MODEL_CONTRACT_ERROR', 'Некорректный expected для сцены.', [path])
+  const keys = ['scene_id', 'location_id', 'story_time'] as const
+  exactKeys(value, keys, path)
+  requiredKeys(value, keys, path)
+  boundedString(value.scene_id, `${path}.scene_id`, 1, 160)
+  boundedString(value.location_id, `${path}.location_id`, 1, 160)
+  boundedString(value.story_time, `${path}.story_time`, 1, 160)
+}
+
+function validateExpectedScenePresence(value: unknown, path: string): void {
+  if (!isRecord(value))
+    throw new ContractError('MODEL_CONTRACT_ERROR', 'Некорректный expected для состава сцены.', [path])
+  const keys = ['scene_id', 'present_character_ids'] as const
+  exactKeys(value, keys, path)
+  requiredKeys(value, keys, path)
+  boundedString(value.scene_id, `${path}.scene_id`, 1, 160)
+  const presentCharacterIds = stringArray(value.present_character_ids, `${path}.present_character_ids`, 16)
+  if (new Set(presentCharacterIds).size !== presentCharacterIds.length)
+    throw new ContractError('MODEL_CONTRACT_ERROR', 'Состав сцены не должен содержать повторяющиеся ID.', [`${path}.present_character_ids`])
+}
+
+function validateTurnOperation(value: unknown, path: string): void {
+  if (!isRecord(value))
+    throw new ContractError('MODEL_CONTRACT_ERROR', 'Некорректная операция хода.', [path])
+  boundedInteger(value.operation_index, `${path}.operation_index`, 0, 63)
+
+  switch (value.type) {
+    case 'event.create':
+      exactKeys(value, ['type', 'operation_index', 'event_id', 'event_kind', 'actor_ids', 'target_ids', 'item_ids', 'location_id', 'source_turn_id'], path)
+      requiredKeys(value, ['type', 'operation_index', 'event_id', 'event_kind', 'actor_ids', 'target_ids', 'item_ids', 'location_id', 'source_turn_id'], path)
+      boundedString(value.event_id, `${path}.event_id`, 1, 160)
+      boundedString(value.event_kind, `${path}.event_kind`, 1, 120)
+      stringArray(value.actor_ids, `${path}.actor_ids`, 16)
+      stringArray(value.target_ids, `${path}.target_ids`, 16)
+      stringArray(value.item_ids, `${path}.item_ids`, 16)
+      boundedString(value.location_id, `${path}.location_id`, 1, 160)
+      boundedString(value.source_turn_id, `${path}.source_turn_id`, 1, 160)
+      return
+    case 'scene.transition':
+      exactKeys(value, ['type', 'operation_index', 'source_event_id', 'scene_id', 'title', 'location_id', 'story_time', 'objective', 'present_character_ids', 'expected'], path)
+      requiredKeys(value, ['type', 'operation_index', 'source_event_id', 'scene_id', 'title', 'location_id', 'story_time', 'objective', 'present_character_ids', 'expected'], path)
+      boundedString(value.source_event_id, `${path}.source_event_id`, 1, 160)
+      boundedString(value.scene_id, `${path}.scene_id`, 1, 160)
+      boundedString(value.title, `${path}.title`, 1, 160)
+      boundedString(value.location_id, `${path}.location_id`, 1, 160)
+      boundedString(value.story_time, `${path}.story_time`, 1, 160)
+      boundedString(value.objective, `${path}.objective`, 1, 500)
+      stringArray(value.present_character_ids, `${path}.present_character_ids`, 16)
+      validateExpectedSceneState(value.expected, `${path}.expected`)
+      return
+    case 'scene.update_presence': {
+      exactKeys(value, ['type', 'operation_index', 'source_event_id', 'present_character_ids', 'departures', 'expected'], path)
+      requiredKeys(value, ['type', 'operation_index', 'source_event_id', 'present_character_ids', 'departures', 'expected'], path)
+      boundedString(value.source_event_id, `${path}.source_event_id`, 1, 160)
+      const presentCharacterIds = stringArray(value.present_character_ids, `${path}.present_character_ids`, 16)
+      if (new Set(presentCharacterIds).size !== presentCharacterIds.length)
+        throw new ContractError('MODEL_CONTRACT_ERROR', 'Состав сцены не должен содержать повторяющиеся ID.', [`${path}.present_character_ids`])
+      if (!Array.isArray(value.departures) || value.departures.length > 16)
+        throw new ContractError('MODEL_CONTRACT_ERROR', 'Некорректный список покинувших сцену персонажей.', [`${path}.departures`])
+      const departureIds: string[] = []
+      value.departures.forEach((departure, index) => {
+        const departurePath = `${path}.departures[${index}]`
+        if (!isRecord(departure))
+          throw new ContractError('MODEL_CONTRACT_ERROR', 'Некорректное перемещение персонажа.', [departurePath])
+        exactKeys(departure, ['character_id', 'destination_location_id'], departurePath)
+        requiredKeys(departure, ['character_id', 'destination_location_id'], departurePath)
+        departureIds.push(boundedString(departure.character_id, `${departurePath}.character_id`, 1, 160))
+        boundedString(departure.destination_location_id, `${departurePath}.destination_location_id`, 1, 160)
+      })
+      if (new Set(departureIds).size !== departureIds.length)
+        throw new ContractError('MODEL_CONTRACT_ERROR', 'Персонаж не может покинуть сцену дважды.', [`${path}.departures`])
+      validateExpectedScenePresence(value.expected, `${path}.expected`)
+      return
+    }
+    case 'fact.create':
+      exactKeys(value, ['type', 'operation_index', 'fact_id', 'claim', 'truth_status', 'source_event_ids'], path)
+      requiredKeys(value, ['type', 'operation_index', 'fact_id', 'claim', 'truth_status', 'source_event_ids'], path)
+      boundedString(value.fact_id, `${path}.fact_id`, 1, 160)
+      boundedString(value.claim, `${path}.claim`, 1, 1000)
+      if (!['observed', 'reported', 'inferred', 'contested'].includes(String(value.truth_status)))
+        throw new ContractError('MODEL_CONTRACT_ERROR', 'Некорректный truth_status.', [`${path}.truth_status`])
+      stringArray(value.source_event_ids, `${path}.source_event_ids`, 16)
+      return
+    case 'knowledge.grant':
+      exactKeys(value, ['type', 'operation_index', 'character_id', 'fact_id', 'source_event_id', 'confidence'], path)
+      requiredKeys(value, ['type', 'operation_index', 'character_id', 'fact_id', 'source_event_id', 'confidence'], path)
+      boundedString(value.character_id, `${path}.character_id`, 1, 160)
+      boundedString(value.fact_id, `${path}.fact_id`, 1, 160)
+      boundedString(value.source_event_id, `${path}.source_event_id`, 1, 160)
+      boundedNumber(value.confidence, `${path}.confidence`, 0, 1)
+      return
+    case 'inventory.create_instance':
+      exactKeys(value, ['type', 'operation_index', 'source_event_id', 'item_id', 'template_id', 'name', 'category', 'description', 'owner_id', 'holder_id', 'location_id', 'quantity', 'charges', 'condition', 'slot'], path)
+      requiredKeys(value, ['type', 'operation_index', 'source_event_id', 'item_id', 'template_id', 'name', 'category', 'description', 'owner_id', 'holder_id', 'location_id', 'quantity', 'charges', 'condition', 'slot'], path)
+      boundedString(value.source_event_id, `${path}.source_event_id`, 1, 160)
+      boundedString(value.item_id, `${path}.item_id`, 1, 160)
+      boundedString(value.template_id, `${path}.template_id`, 1, 160)
+      boundedString(value.name, `${path}.name`, 1, 160)
+      if (!['tool', 'document', 'medicine', 'keepsake', 'resource'].includes(String(value.category)))
+        throw new ContractError('MODEL_CONTRACT_ERROR', 'Некорректная категория предмета.', [`${path}.category`])
+      boundedString(value.description, `${path}.description`, 1, 1000)
+      boundedString(value.owner_id, `${path}.owner_id`, 1, 160)
+      boundedString(value.holder_id, `${path}.holder_id`, 1, 160)
+      boundedString(value.location_id, `${path}.location_id`, 1, 160)
+      boundedInteger(value.quantity, `${path}.quantity`, 1, 1_000_000)
+      if (value.charges !== null)
+        boundedInteger(value.charges, `${path}.charges`, 0, 1_000_000)
+      if (!['pristine', 'usable', 'worn', 'damaged', 'spent'].includes(String(value.condition)))
+        throw new ContractError('MODEL_CONTRACT_ERROR', 'Некорректное состояние предмета.', [`${path}.condition`])
+      if (value.slot !== null && !['hand', 'body', 'bag'].includes(String(value.slot)))
+        throw new ContractError('MODEL_CONTRACT_ERROR', 'Некорректный слот предмета.', [`${path}.slot`])
+      return
+    case 'inventory.transfer_custody':
+      exactKeys(value, ['type', 'operation_index', 'source_event_id', 'item_id', 'from_holder_id', 'to_holder_id', 'quantity', 'expected'], path)
+      requiredKeys(value, ['type', 'operation_index', 'source_event_id', 'item_id', 'from_holder_id', 'to_holder_id', 'quantity', 'expected'], path)
+      boundedString(value.source_event_id, `${path}.source_event_id`, 1, 160)
+      boundedString(value.item_id, `${path}.item_id`, 1, 160)
+      boundedString(value.from_holder_id, `${path}.from_holder_id`, 1, 160)
+      boundedString(value.to_holder_id, `${path}.to_holder_id`, 1, 160)
+      boundedInteger(value.quantity, `${path}.quantity`, 1, 1_000_000)
+      validateExpectedInventoryState(value.expected, `${path}.expected`)
+      return
+    case 'inventory.transfer_ownership':
+      exactKeys(value, ['type', 'operation_index', 'source_event_id', 'item_id', 'from_owner_id', 'to_owner_id', 'quantity', 'expected'], path)
+      requiredKeys(value, ['type', 'operation_index', 'source_event_id', 'item_id', 'from_owner_id', 'to_owner_id', 'quantity', 'expected'], path)
+      boundedString(value.source_event_id, `${path}.source_event_id`, 1, 160)
+      boundedString(value.item_id, `${path}.item_id`, 1, 160)
+      boundedString(value.from_owner_id, `${path}.from_owner_id`, 1, 160)
+      boundedString(value.to_owner_id, `${path}.to_owner_id`, 1, 160)
+      boundedInteger(value.quantity, `${path}.quantity`, 1, 1_000_000)
+      validateExpectedInventoryState(value.expected, `${path}.expected`)
+      return
+    case 'inventory.consume':
+      exactKeys(value, ['type', 'operation_index', 'source_event_id', 'item_id', 'amount', 'expected'], path)
+      requiredKeys(value, ['type', 'operation_index', 'source_event_id', 'item_id', 'amount', 'expected'], path)
+      boundedString(value.source_event_id, `${path}.source_event_id`, 1, 160)
+      boundedString(value.item_id, `${path}.item_id`, 1, 160)
+      boundedInteger(value.amount, `${path}.amount`, 1, 1_000_000)
+      validateExpectedInventoryState(value.expected, `${path}.expected`)
+      return
+    default:
+      throw new ContractError('MODEL_AUTHORITY_ERROR', 'Модель вернула запрещенный тип операции.', [`${path}.type`])
+  }
 }
 
 function validateTurnOutputShape(value: Record<string, unknown>, expectedTurnId: string, expectedVersion: number): void {
@@ -418,8 +705,14 @@ function validateTurnOutputShape(value: Record<string, unknown>, expectedTurnId:
     )
   }
 
-  if (!Array.isArray(value.operations) || value.operations.length !== 0)
-    throw new ContractError('MODEL_AUTHORITY_ERROR', 'Preview-сессия запрещает операции канона.', ['$.operations'])
+  if (!Array.isArray(value.operations) || value.operations.length > 24)
+    throw new ContractError('MODEL_CONTRACT_ERROR', 'Некорректный список операций.', ['$.operations'])
+  value.operations.forEach((operation, index) => validateTurnOperation(operation, `$.operations[${index}]`))
+  const operationIndexes = value.operations.map(operation => (operation as { operation_index: number }).operation_index)
+  if (new Set(operationIndexes).size !== operationIndexes.length
+    || operationIndexes.some((operationIndex, index) => operationIndex !== index)) {
+    throw new ContractError('MODEL_INVARIANT_ERROR', 'operation_index должен быть последовательным и уникальным.', ['$.operations'])
+  }
 
   if (!isRecord(value.narrative_brief))
     throw new ContractError('MODEL_CONTRACT_ERROR', 'Некорректный narrative_brief.', ['$.narrative_brief'])
@@ -447,8 +740,19 @@ function validateTurnOutputShape(value: Record<string, unknown>, expectedTurnId:
     boundedString(action.intent_hint, `${path}.intent_hint`, 1, 160)
   })
 
-  if (value.media_candidate !== null)
-    throw new ContractError('MODEL_AUTHORITY_ERROR', 'Preview-сессия не разрешает media_candidate без event_id.', ['$.media_candidate'])
+  if (value.media_candidate !== null) {
+    if (!isRecord(value.media_candidate))
+      throw new ContractError('MODEL_CONTRACT_ERROR', 'Некорректный media_candidate.', ['$.media_candidate'])
+    exactKeys(value.media_candidate, ['event_id', 'kind', 'salience', 'reason_codes', 'exclusive_event_hint'], '$.media_candidate')
+    requiredKeys(value.media_candidate, ['event_id', 'kind', 'salience', 'reason_codes', 'exclusive_event_hint'], '$.media_candidate')
+    boundedString(value.media_candidate.event_id, '$.media_candidate.event_id', 1, 160)
+    if (!['image', 'video'].includes(String(value.media_candidate.kind)))
+      throw new ContractError('MODEL_CONTRACT_ERROR', 'Некорректный тип media_candidate.', ['$.media_candidate.kind'])
+    boundedNumber(value.media_candidate.salience, '$.media_candidate.salience', 0, 1)
+    stringArray(value.media_candidate.reason_codes, '$.media_candidate.reason_codes')
+    if (typeof value.media_candidate.exclusive_event_hint !== 'boolean')
+      throw new ContractError('MODEL_CONTRACT_ERROR', 'Некорректный exclusive_event_hint.', ['$.media_candidate.exclusive_event_hint'])
+  }
   stringArray(value.safety_flags, '$.safety_flags')
 
   if (!isRecord(value.audit))
@@ -479,6 +783,151 @@ const strictObject = (properties: Record<string, unknown>, required = Object.key
   required,
   additionalProperties: false,
 })
+
+const inventoryConditionSchema = {
+  type: 'string',
+  enum: ['pristine', 'usable', 'worn', 'damaged', 'spent'],
+} as const
+
+const inventoryCategorySchema = {
+  type: 'string',
+  enum: ['tool', 'document', 'medicine', 'keepsake', 'resource'],
+} as const
+
+const inventorySlotSchema = {
+  anyOf: [
+    { type: 'string', enum: ['hand', 'body', 'bag'] },
+    { type: 'null' },
+  ],
+} as const
+
+const expectedInventorySchema = strictObject({
+  owner_id: stringSchema,
+  holder_id: stringSchema,
+  location_id: stringSchema,
+  container_id: { anyOf: [stringSchema, { type: 'null' }] },
+  quantity: { type: 'integer', minimum: 0 },
+  charges: { anyOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }] },
+  condition: inventoryConditionSchema,
+  version: { type: 'integer', minimum: 0 },
+})
+
+const expectedSceneSchema = strictObject({
+  scene_id: stringSchema,
+  location_id: stringSchema,
+  story_time: stringSchema,
+})
+
+const expectedScenePresenceSchema = strictObject({
+  scene_id: stringSchema,
+  present_character_ids: stringArraySchema,
+})
+
+const sceneDepartureSchema = strictObject({
+  character_id: stringSchema,
+  destination_location_id: stringSchema,
+})
+
+const turnOperationSchema = {
+  oneOf: [
+    strictObject({
+      type: { type: 'string', const: 'event.create' },
+      operation_index: { type: 'integer', minimum: 0 },
+      event_id: stringSchema,
+      event_kind: stringSchema,
+      actor_ids: stringArraySchema,
+      target_ids: stringArraySchema,
+      item_ids: stringArraySchema,
+      location_id: stringSchema,
+      source_turn_id: stringSchema,
+    }),
+    strictObject({
+      type: { type: 'string', const: 'scene.transition' },
+      operation_index: { type: 'integer', minimum: 0 },
+      source_event_id: stringSchema,
+      scene_id: stringSchema,
+      title: stringSchema,
+      location_id: stringSchema,
+      story_time: stringSchema,
+      objective: stringSchema,
+      present_character_ids: stringArraySchema,
+      expected: expectedSceneSchema,
+    }),
+    strictObject({
+      type: { type: 'string', const: 'scene.update_presence' },
+      operation_index: { type: 'integer', minimum: 0 },
+      source_event_id: stringSchema,
+      present_character_ids: stringArraySchema,
+      departures: {
+        type: 'array',
+        items: sceneDepartureSchema,
+        maxItems: 16,
+      },
+      expected: expectedScenePresenceSchema,
+    }),
+    strictObject({
+      type: { type: 'string', const: 'fact.create' },
+      operation_index: { type: 'integer', minimum: 0 },
+      fact_id: stringSchema,
+      claim: stringSchema,
+      truth_status: { type: 'string', enum: ['observed', 'reported', 'inferred', 'contested'] },
+      source_event_ids: stringArraySchema,
+    }),
+    strictObject({
+      type: { type: 'string', const: 'knowledge.grant' },
+      operation_index: { type: 'integer', minimum: 0 },
+      character_id: stringSchema,
+      fact_id: stringSchema,
+      source_event_id: stringSchema,
+      confidence: { type: 'number', minimum: 0, maximum: 1 },
+    }),
+    strictObject({
+      type: { type: 'string', const: 'inventory.create_instance' },
+      operation_index: { type: 'integer', minimum: 0 },
+      source_event_id: stringSchema,
+      item_id: stringSchema,
+      template_id: stringSchema,
+      name: stringSchema,
+      category: inventoryCategorySchema,
+      description: stringSchema,
+      owner_id: stringSchema,
+      holder_id: stringSchema,
+      location_id: stringSchema,
+      quantity: { type: 'integer', minimum: 1 },
+      charges: { anyOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }] },
+      condition: inventoryConditionSchema,
+      slot: inventorySlotSchema,
+    }),
+    strictObject({
+      type: { type: 'string', const: 'inventory.transfer_custody' },
+      operation_index: { type: 'integer', minimum: 0 },
+      source_event_id: stringSchema,
+      item_id: stringSchema,
+      from_holder_id: stringSchema,
+      to_holder_id: stringSchema,
+      quantity: { type: 'integer', minimum: 1 },
+      expected: expectedInventorySchema,
+    }),
+    strictObject({
+      type: { type: 'string', const: 'inventory.transfer_ownership' },
+      operation_index: { type: 'integer', minimum: 0 },
+      source_event_id: stringSchema,
+      item_id: stringSchema,
+      from_owner_id: stringSchema,
+      to_owner_id: stringSchema,
+      quantity: { type: 'integer', minimum: 1 },
+      expected: expectedInventorySchema,
+    }),
+    strictObject({
+      type: { type: 'string', const: 'inventory.consume' },
+      operation_index: { type: 'integer', minimum: 0 },
+      source_event_id: stringSchema,
+      item_id: stringSchema,
+      amount: { type: 'integer', minimum: 1 },
+      expected: expectedInventorySchema,
+    }),
+  ],
+} as const
 
 export const TURN_OUTPUT_JSON_SCHEMA = strictObject({
   schema_version: { type: 'string', const: 'turn-output@0.2' },
@@ -546,7 +995,7 @@ export const TURN_OUTPUT_JSON_SCHEMA = strictObject({
     reason_codes: stringArraySchema,
     costs_and_consequences: stringArraySchema,
   }),
-  operations: { type: 'array', maxItems: 0 },
+  operations: { type: 'array', maxItems: 24, items: turnOperationSchema },
   narrative_brief: strictObject({
     must_include: stringArraySchema,
     must_not_invent: stringArraySchema,
@@ -564,7 +1013,18 @@ export const TURN_OUTPUT_JSON_SCHEMA = strictObject({
       intent_hint: stringSchema,
     }),
   },
-  media_candidate: { type: 'null' },
+  media_candidate: {
+    anyOf: [
+      { type: 'null' },
+      strictObject({
+        event_id: stringSchema,
+        kind: { type: 'string', enum: ['image', 'video'] },
+        salience: { type: 'number', minimum: 0, maximum: 1 },
+        reason_codes: stringArraySchema,
+        exclusive_event_hint: { type: 'boolean' },
+      }),
+    ],
+  },
   safety_flags: stringArraySchema,
   audit: strictObject({
     canon_fact_ids_used: stringArraySchema,

@@ -1,3 +1,4 @@
+import { STORY_PACKS } from '../../shared/storypacks'
 import { AI_MODELS } from './catalog'
 import type { FabulaAiConfig } from './config'
 import type { JsonValue, TurnCommand } from './contracts'
@@ -6,7 +7,8 @@ import { AiExecutionError } from './http'
 import type { SafeModelRun } from './http'
 import { OpenRouterClient, OpenRouterError } from './openrouter'
 import { sanitizeNemotronPayload } from './security'
-import type { SessionSnapshot, SessionTurnResult } from './session-store'
+import type { EngineSessionSnapshot, SessionTurnResult } from '../game/session-repository'
+import { getStoryPackContext } from '../game/storypack-context'
 import { getStandaloneContract, parseStandaloneOutput } from './standalone-contracts'
 
 export interface TurnEngineResult extends SessionTurnResult {
@@ -14,53 +16,6 @@ export interface TurnEngineResult extends SessionTurnResult {
 }
 
 type PromptLoader = (moduleId: 'authoritative-turn' | 'scene-plan') => Promise<string>
-
-const STORY_CONTEXT: Record<TurnCommand['story_id'], {
-  packId: string
-  title: string
-  location: string
-  character: string
-  objective: string
-  state: string[]
-  overlay: string
-}> = {
-  fant: {
-    packId: 'eighth-seal',
-    title: 'Пепельные земли',
-    location: 'Руины Эхокарты',
-    character: 'Старик-хранитель',
-    objective: 'Решить, кому достанется право разбудить Цитадель',
-    state: ['Сумерки', 'Пепельный ветер', 'Клятва не названа'],
-    overlay: 'Договорная магия имеет заранее известную цену. Артефакты не меняют владельца без подтвержденного события.',
-  },
-  scifi: {
-    packId: 'zeroed',
-    title: 'Станция "Кассандра"',
-    location: 'Сектор D-17',
-    character: 'Кассандра / AI',
-    objective: 'Найти последний журнал экипажа и проверить память Кассандры',
-    state: ['Аварийный свет', 'Иней в шлюзе', 'Второй источник питания'],
-    overlay: 'Технологии физически ограничены. Цифровой доступ требует capability, а доказательства сохраняют provenance.',
-  },
-  hist: {
-    packId: 'road-from-capua',
-    title: 'Дорога из Капуи',
-    location: 'Дорога из Капуи',
-    character: 'Марк Лициний',
-    objective: 'Доставить табличку, не выдав заговор и своих людей',
-    state: ['Перед рассветом', 'Дорога без стражи', 'Свидетель у костра'],
-    overlay: 'Макроистория и подтвержденные источники важнее удобного поворота. Counterfactual обязан быть причинным.',
-  },
-  post: {
-    packId: 'history-of-how-i-got-here',
-    title: 'Линия разрыва',
-    location: 'Редакция "Север"',
-    character: 'Лера Орлова',
-    objective: 'Найти источник записи и защитить свидетеля',
-    state: ['Ночная смена', 'Закрытый канал', 'Свидетель пропал'],
-    overlay: 'Ресурсы, двери, свидетели, шум и следы изменяются только подтвержденными событиями.',
-  },
-}
 
 export class TurnEngine {
   private readonly client: OpenRouterClient
@@ -75,7 +30,7 @@ export class TurnEngine {
     this.promptLoader = promptLoader
   }
 
-  async execute(command: TurnCommand, snapshot: SessionSnapshot): Promise<TurnEngineResult> {
+  async execute(command: TurnCommand, snapshot: EngineSessionSnapshot): Promise<TurnEngineResult> {
     const modelRuns: SafeModelRun[] = []
     const advisory = await this.maybePlan(command, snapshot, modelRuns)
     const packet = buildTurnPacket(command, snapshot, advisory)
@@ -122,17 +77,17 @@ export class TurnEngine {
 
   private async maybePlan(
     command: TurnCommand,
-    snapshot: SessionSnapshot,
+    snapshot: EngineSessionSnapshot,
     modelRuns: SafeModelRun[],
   ): Promise<Record<string, JsonValue> | null> {
     const sanitized = sanitizeNemotronPayload({
-      story_pack_id: STORY_CONTEXT[command.story_id].packId,
-      scene_id: command.story_id,
+      story_pack_id: snapshot.storyPackId,
+      scene_id: snapshot.scene.id,
       entity_roles: ['player', 'present_npc'],
-      confirmed_fact_refs: [],
-      confirmed_event_refs: snapshot.history.map(turn => turn.turnId),
+      confirmed_fact_refs: snapshot.confirmedFacts.slice(-16).map(fact => fact.id),
+      confirmed_event_refs: snapshot.confirmedEvents.slice(-16).map(event => event.id),
       resource_bands: ['unknown'],
-      active_threads: ['primary_objective'],
+      active_threads: [snapshot.scene.objective],
       unresolved_callbacks: [],
       pack_constraints: ['no_new_canon', 'no_pii'],
       recent_outcome_bands: snapshot.history.slice(-6).map(turn => turn.outcome),
@@ -253,14 +208,15 @@ export class TurnEngine {
 
 function buildTurnPacket(
   command: TurnCommand,
-  snapshot: SessionSnapshot,
+  snapshot: EngineSessionSnapshot,
   scenePlan: Record<string, JsonValue> | null,
 ): Record<string, JsonValue> {
-  const story = STORY_CONTEXT[command.story_id]
+  const story = STORY_PACKS[snapshot.storyPackId]
+  const context = getStoryPackContext(snapshot.storyPackId)
   const failedAttempts = snapshot.history.filter(turn => turn.outcome === 'failure' || turn.outcome === 'impossible').length
   return {
     schema_version: 'turn-input@0.2',
-    prompt_version: 'turn-engine@0.2.0',
+    prompt_version: 'turn-engine@0.3.0',
     trace_id: `trace:${command.idempotency_key}`,
     turn_id: command.idempotency_key,
     session_id: command.session_id,
@@ -273,20 +229,81 @@ function buildTurnPacket(
       selected_suggestion_id: command.selected_suggestion_id,
     },
     scene: {
-      scene_id: `scene:${command.story_id}`,
+      scene_id: snapshot.scene.id,
       mode: command.mode,
-      location_id: `location:${command.story_id}`,
-      present_character_ids: [`character:${command.story_id}:primary`],
-      time: 'current_scene',
+      location_id: snapshot.scene.location_id,
+      present_character_ids: snapshot.scene.present_character_ids,
+      time: snapshot.scene.story_time,
       scene_plan: scenePlan,
     },
     canon_snapshot: {
       title: story.title,
-      location: story.location,
-      present_character: story.character,
-      objective: story.objective,
-      visible_state: story.state,
-      preview_only: true,
+      story_pack_id: snapshot.storyPackId,
+      story_pack_version: snapshot.storyPackVersion,
+      hard_canon: context.hardCanon.map((claim, index) => ({
+        fact_id: `canon:${snapshot.storyPackId}:${index + 1}`,
+        claim,
+      })),
+      state_catalog: context.stateCatalog,
+      player: {
+        id: 'player',
+        name: snapshot.persona.name,
+        role: snapshot.persona.role_label,
+        competence: snapshot.persona.competence,
+        limitation: snapshot.persona.limitation,
+        motivation: snapshot.persona.motivation,
+        embodiment_note: snapshot.persona.embodiment_note,
+      },
+      scene: {
+        id: snapshot.scene.id,
+        title: snapshot.scene.title,
+        location_id: snapshot.scene.location_id,
+        location_name: snapshot.scene.location_name,
+        story_time: snapshot.scene.story_time,
+        objective: snapshot.scene.objective,
+      },
+      inventory: snapshot.inventory.map(item => ({
+        id: item.id,
+        template_id: item.template_id,
+        name: item.name,
+        quantity: item.quantity,
+        charges: item.charges,
+        condition: item.condition,
+        owner_id: item.owner_id,
+        holder_id: item.holder_id,
+        location_id: item.location_id,
+        container_id: null,
+        version: item.version,
+      })),
+      characters: story.publicCharacters.map(character => ({
+        id: character.id,
+        name: character.name,
+        role: character.role,
+        relation: character.relation,
+        known_to_player: snapshot.characters.some(known => known.id === character.id),
+        present_in_scene: snapshot.scene.present_character_ids.includes(character.id),
+      })),
+      locations: story.publicLocations.map(location => ({
+        id: location.id,
+        name: location.name,
+        known_to_player: snapshot.locations.some(known => known.id === location.id),
+        current: snapshot.scene.location_id === location.id,
+      })),
+      confirmed_events: snapshot.confirmedEvents.slice(-24).map(event => ({
+        id: event.id,
+        kind: event.kind,
+        actor_ids: event.actorIds,
+        target_ids: event.targetIds,
+        item_ids: event.itemIds,
+        location_id: event.locationId,
+        source_turn_id: event.sourceTurnId,
+      })),
+      confirmed_facts: snapshot.confirmedFacts.slice(-32).map(fact => ({
+        id: fact.id,
+        claim: fact.claim,
+        truth_status: fact.truthStatus,
+        source_event_ids: fact.sourceEventIds,
+      })),
     },
     relevant_memories: snapshot.history.slice(-6).map(turn => ({
       turn_id: turn.turnId,
@@ -295,11 +312,11 @@ function buildTurnPacket(
       narrative_summary: turn.narrative.slice(0, 600),
     })),
     pack_rules: {
-      story_pack_id: story.packId,
-      story_pack_version: `${story.packId}@preview-0.1`,
-      prompt_overlay_version: `${story.packId}-overlay@preview-0.1`,
-      prompt_overlay: story.overlay,
-      operation_catalog_version: 'preview-no-operations@0.1',
+      story_pack_id: snapshot.storyPackId,
+      story_pack_version: snapshot.storyPackVersion,
+      prompt_overlay_version: context.promptOverlayVersion,
+      prompt_overlay: context.promptOverlay,
+      operation_catalog_version: 'fabula-beta-operations@0.2',
     },
     resolution_randomness: {
       mode: 'deterministic',
@@ -316,13 +333,29 @@ function buildTurnPacket(
       stuck_signal: failedAttempts >= 3,
     },
     authority: {
-      reserved_ids: { events: [], facts: [], item_instances: [] },
-      allowed_operation_types: [],
-      allowed_field_catalog: {},
+      reserved_ids: {
+        events: snapshot.reservedIds.events,
+        facts: snapshot.reservedIds.facts,
+        item_instances: snapshot.reservedIds.itemInstances,
+        scenes: snapshot.reservedIds.scenes,
+      },
+      allowed_operation_types: [...snapshot.allowedOperationTypes],
+      allowed_field_catalog: {
+        'event.create': ['event_id', 'event_kind', 'actor_ids', 'target_ids', 'item_ids', 'location_id', 'source_turn_id'],
+        'scene.transition': ['source_event_id', 'scene_id', 'title', 'location_id', 'story_time', 'objective', 'present_character_ids', 'expected'],
+        'scene.update_presence': ['source_event_id', 'present_character_ids', 'departures', 'expected'],
+        'fact.create': ['fact_id', 'claim', 'truth_status', 'source_event_ids'],
+        'knowledge.grant': ['character_id', 'fact_id', 'source_event_id', 'confidence'],
+        'inventory.create_instance': ['source_event_id', 'item_id', 'template_id', 'name', 'category', 'description', 'owner_id', 'holder_id', 'location_id', 'quantity', 'charges', 'condition', 'slot'],
+        'inventory.transfer_custody': ['source_event_id', 'item_id', 'from_holder_id', 'to_holder_id', 'quantity', 'expected'],
+        'inventory.transfer_ownership': ['source_event_id', 'item_id', 'from_owner_id', 'to_owner_id', 'quantity', 'expected'],
+        'inventory.consume': ['source_event_id', 'item_id', 'amount', 'expected'],
+      },
     },
     policy_hints: {
       media_may_be_suggested: false,
-      safety_profile: 'preview-default',
+      safety_profile: context.safetyProfile,
+      narration_density: snapshot.persona.narration_density,
     },
   }
 }

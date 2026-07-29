@@ -1,28 +1,38 @@
 <script setup lang="ts">
+import type { InventoryItemProjection, SuggestedAction } from '#shared/game'
 import type { InteractionMode, InteractionToolName } from '~/types/interaction-ui'
 
 const input = defineModel<string>({ required: true })
-const props = defineProps<{
+
+defineProps<{
   mode: InteractionMode
   turnPending: boolean
-  modeCopy: string[]
+  suggestions: SuggestedAction[]
+  selectedSuggestionId: string | null
+  selectedItems: InventoryItemProjection[]
 }>()
+
 const emit = defineEmits<{
   setMode: [mode: InteractionMode]
+  chooseSuggestion: [suggestion: SuggestedAction]
+  removeItem: [itemId: string]
   submit: []
   openTool: [tool: InteractionToolName]
-  rewrite: []
-  compose: [text: string]
 }>()
 
 const textarea = ref<HTMLTextAreaElement | null>(null)
+const modes: Array<{ id: InteractionMode, label: string, icon: string }> = [
+  { id: 'action', label: 'Действие', icon: '↗' },
+  { id: 'speech', label: 'Речь', icon: '❝' },
+  { id: 'exploration', label: 'Исследование', icon: '⌕' },
+]
 
 function resize() {
   nextTick(() => {
     if (!textarea.value)
       return
     textarea.value.style.height = 'auto'
-    textarea.value.style.height = `${Math.min(textarea.value.scrollHeight, 150)}px`
+    textarea.value.style.height = `${Math.min(textarea.value.scrollHeight, 132)}px`
   })
 }
 
@@ -41,52 +51,91 @@ defineExpose({ resize, focus, selectEnd })
 </script>
 
 <template>
-  <section class="border-t border-white/10 bg-[#0d0d11] px-[clamp(14px,3vw,58px)] pb-3 pt-4" aria-label="Ввод действия игрока">
-    <div class="mb-2 flex items-center gap-3 font-interface text-[8px]">
-      <span class="font-bold uppercase tracking-[.1em] text-[var(--accent)]">ТВОЙ ХОД</span>
-      <span class="flex-1 text-fabula-500">{{ modeCopy[0] }}</span>
-      <button type="button" disabled class="hidden items-center gap-1 text-[#8fcd78] opacity-90 min-[900px]:flex" title="Preview: функция не подключена"><i class="size-2 rounded-full bg-[#8fcd78]" />Автопродолжение</button>
-    </div>
-    <div class="flex w-max overflow-hidden rounded-t-xl border border-b-0 border-white/10 bg-[#111116]" role="tablist" aria-label="Режим действия">
+  <section class="shrink-0 border-t border-white/8 bg-[#0d0e12] px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-2.5 sm:px-5" aria-label="Ход игрока">
+    <div v-if="suggestions.length" class="mb-2 flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none]" aria-label="Предложенные действия">
       <button
-        v-for="entry in [{ id: 'action', icon: '↗', label: 'Действие' }, { id: 'speech', icon: '❝', label: 'Речь' }, { id: 'exploration', icon: '⌕', label: 'Исследование' }]"
-        :key="entry.id"
+        v-for="suggestion in suggestions"
+        :key="suggestion.id"
         type="button"
-        role="tab"
-        :aria-selected="mode === entry.id"
-        class="px-3 py-2 font-interface text-[8px] text-fabula-500"
-        :class="mode === entry.id ? 'bg-[#17171d] text-[var(--accent-light)]' : ''"
-        @click="emit('setMode', entry.id as InteractionMode)"
+        class="shrink-0 rounded-full border px-3 py-1.5 text-left text-[12px] leading-snug transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+        :class="selectedSuggestionId === suggestion.id
+          ? 'border-[var(--accent)] bg-[rgb(var(--accent-rgb)/.12)] text-[var(--accent-light)]'
+          : 'border-white/10 bg-white/[.025] text-fabula-300 hover:border-white/20'"
+        @click="emit('chooseSuggestion', suggestion)"
       >
-        <span class="mr-1">{{ entry.icon }}</span>{{ entry.label }}
+        {{ suggestion.label }}
       </button>
     </div>
-    <form class="rounded-[0_14px_14px_14px] border border-white/15 bg-[#14141a] p-3 transition focus-within:border-[var(--accent)] focus-within:shadow-[0_0_0_1px_var(--accent-soft)]" @submit.prevent="emit('submit')">
-      <label class="sr-only" for="playerInput">Опиши свое действие</label>
+
+    <div v-if="selectedItems.length" class="mb-2 flex flex-wrap gap-1.5" aria-label="Предметы в ходе">
+      <span
+        v-for="item in selectedItems"
+        :key="item.id"
+        class="inline-flex items-center gap-2 rounded-full border border-[rgb(var(--accent-rgb)/.4)] bg-[rgb(var(--accent-rgb)/.08)] px-3 py-1 text-[11px] text-[var(--accent-light)]"
+      >
+        {{ item.name }}
+        <button type="button" class="text-[14px]" :aria-label="`Убрать ${item.name} из хода`" @click="emit('removeItem', item.id)">×</button>
+      </span>
+    </div>
+
+    <form class="rounded-2xl border border-white/12 bg-[#15171d] p-2.5 transition focus-within:border-[rgb(var(--accent-rgb)/.65)]" @submit.prevent="emit('submit')">
+      <div class="mb-1.5 flex items-center gap-1 overflow-x-auto [scrollbar-width:none]" role="tablist" aria-label="Режим хода">
+        <button
+          v-for="entry in modes"
+          :key="entry.id"
+          type="button"
+          role="tab"
+          :aria-selected="mode === entry.id"
+          class="shrink-0 rounded-lg px-2.5 py-1.5 font-interface text-[10px] transition"
+          :class="mode === entry.id ? 'bg-[rgb(var(--accent-rgb)/.12)] text-[var(--accent-light)]' : 'text-[#9b9ba6] hover:text-fabula-100'"
+          @click="emit('setMode', entry.id)"
+        >
+          <span class="mr-1" aria-hidden="true">{{ entry.icon }}</span>{{ entry.label }}
+        </button>
+      </div>
+
+      <label class="sr-only" for="playerInput">Опиши действие, исследование или реплику</label>
       <textarea
         id="playerInput"
         ref="textarea"
         v-model="input"
         rows="1"
         maxlength="1200"
-        class="max-h-[150px] min-h-[46px] w-full resize-none bg-transparent font-story text-[20px] leading-[1.45] text-fabula-100 outline-none placeholder:text-fabula-500"
-        :placeholder="modeCopy[1]"
+        class="max-h-[132px] min-h-[48px] w-full resize-none bg-transparent px-1 font-story text-[18px] leading-[1.45] text-fabula-100 outline-none placeholder:text-[#8f8f99]"
+        placeholder="Что ты делаешь или говоришь?"
         @input="resize"
         @keydown.enter.exact.prevent="emit('submit')"
       />
-      <div class="mt-2 flex items-center justify-between gap-3">
-        <div class="flex items-center gap-1.5">
-          <button v-for="tool in [{ id: 'inventory', icon: '☙', label: 'Добавить предмет из инвентаря' }, { id: 'journal', icon: '✒', label: 'Добавить запись из журнала' }, { id: 'check', icon: '⚄', label: 'Открыть проверку навыка' }]" :key="tool.id" type="button" class="grid size-8 place-items-center rounded-lg text-fabula-300 hover:bg-white/[.05]" :aria-label="tool.label" @click="emit('openTool', tool.id as InteractionToolName)">{{ tool.icon }}</button>
-          <button type="button" class="grid size-8 place-items-center rounded-lg text-[var(--accent)] hover:bg-white/[.05]" aria-label="Показать локальный вариант текста" @click="emit('rewrite')">✧</button>
-          <span class="mx-1 h-5 w-px bg-white/10" />
-          <button type="button" class="grid size-8 place-items-center rounded-lg text-fabula-300 hover:bg-white/[.05]" aria-label="Подставить пример исследования" @click="emit('compose', 'Я осматриваю ближайшие следы и ищу безопасный путь.')">⌁</button>
+
+      <div class="mt-1 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-1">
+          <button
+            v-for="tool in [
+              { id: 'inventory', icon: '◫', label: 'Добавить предмет из инвентаря' },
+              { id: 'journal', icon: '✒', label: 'Открыть журнал' },
+            ]"
+            :key="tool.id"
+            type="button"
+            class="grid size-9 place-items-center rounded-lg text-[17px] text-[#9b9ba6] transition hover:bg-white/5 hover:text-fabula-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+            :aria-label="tool.label"
+            :title="tool.label"
+            @click="emit('openTool', tool.id as InteractionToolName)"
+          >
+            {{ tool.icon }}
+          </button>
         </div>
         <div class="flex items-center gap-2">
-          <span class="font-interface text-[8px] text-fabula-500">{{ input.length }} / 1200</span>
-          <button type="submit" class="grid size-10 place-items-center rounded-xl bg-gradient-to-b from-fabula-gold-light to-fabula-gold text-2xl text-[#22180a] shadow-[0_8px_24px_-10px_#d9a94a] disabled:opacity-40" aria-label="Отправить ход" :disabled="turnPending">↑</button>
+          <span class="font-interface text-[10px] text-[#9b9ba6]">{{ input.length }}/1200</span>
+          <button
+            type="submit"
+            class="grid size-10 place-items-center rounded-xl bg-[var(--accent)] text-[22px] text-[#111218] transition hover:bg-[var(--accent-light)] disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-light)]"
+            aria-label="Отправить ход"
+            :disabled="turnPending || !input.trim()"
+          >
+            {{ turnPending ? '…' : '↑' }}
+          </button>
         </div>
       </div>
     </form>
-    <div class="mt-2 hidden items-center gap-4 font-interface text-[7px] text-fabula-500 min-[700px]:flex"><span>Enter - отправить</span><span>Shift + Enter - новая строка</span><span class="ml-auto">Ключи OpenRouter не хранятся в браузере</span></div>
   </section>
 </template>

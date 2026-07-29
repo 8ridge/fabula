@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { HubScreenName, HubStoryId } from '~/types/hub'
+import type { HubScreenName } from '~/types/hub'
 
 const props = defineProps<{
   activeScreen: HubScreenName
-  storyId: HubStoryId
+  currentSessionId: string | null
 }>()
 
 const emit = defineEmits<{
@@ -17,7 +17,13 @@ type NavigationEntry
 const entries = computed<NavigationEntry[]>(() => [
   { kind: 'screen', id: 'home', icon: '✦', label: 'История' },
   { kind: 'screen', id: 'packs', icon: '▤', label: 'Паки' },
-  { kind: 'route', id: 'dialogue', icon: '❝', label: 'Диалог', to: `/interaction?story=${props.storyId}` },
+  {
+    kind: 'route',
+    id: 'dialogue',
+    icon: '❝',
+    label: 'Диалог',
+    to: props.currentSessionId ? `/interaction?session=${encodeURIComponent(props.currentSessionId)}` : '/story/eighth-seal',
+  },
   { kind: 'screen', id: 'profile', icon: '◇', label: 'Профиль' },
 ])
 </script>

@@ -1,70 +1,85 @@
 <script setup lang="ts">
-import type { HubStoryId } from '~/types/hub'
+import type { GameSessionSummary } from '#shared/game'
 
-const emit = defineEmits<{
-  openStory: [storyId: HubStoryId]
+defineProps<{
+  sessions: GameSessionSummary[]
+  loading: boolean
 }>()
 
-const activeStories: Array<{ id: HubStoryId, title: string, cover: string, chapter: string, progress: string, width: string }> = [
-  { id: 'fant', title: 'Королевство Пепельных земель', cover: '/assets/cover_fantasy.jpg', chapter: 'Глава 5 · 62%', progress: '62', width: 'w-[62%]' },
-  { id: 'scifi', title: 'Станция «Кассандра»', cover: '/assets/cover_scifi.jpg', chapter: 'Глава 2 · 28%', progress: '28', width: 'w-[28%]' },
-]
-
-const settings = [
-  ['☙', 'Подписка и грейды'],
-  ['♪', 'Звук и музыка'],
-  ['✦', 'Оформление'],
-  ['⤓', 'Установить приложение'],
-]
+const emit = defineEmits<{
+  openSession: [sessionId: string]
+  browsePacks: []
+}>()
 </script>
 
 <template>
-  <section data-hub-screen class="absolute inset-0 z-10 bg-[radial-gradient(120%_100%_at_50%_0%,#241a0c,#14100a_55%,#0b0806)]">
+  <section data-hub-screen class="absolute inset-0 z-10 bg-[#0b0906]">
     <div class="absolute inset-0 overflow-y-auto px-[22px] pb-[94px] [scrollbar-width:none] min-[900px]:left-[clamp(224px,17vw,280px)] min-[900px]:px-[max(4%,28px)] min-[900px]:pb-12">
-      <HubAppBar title="Профиль" action="⚙" />
+      <HubAppBar title="Мои истории" />
 
-      <div class="mx-auto flex max-w-[1120px] flex-col items-center pb-4 pt-1.5 text-center">
-        <div class="mb-3 size-[92px] overflow-hidden rounded-full border-2 border-fabula-gold bg-[radial-gradient(circle_at_50%_30%,#6a5230,#1c130a)] shadow-[0_0_0_5px_#0a0704,0_0_22px_-2px_#d9a94a]">
-          <img class="h-full w-full object-cover" src="/assets/avatar.jpg" alt="Безымянный">
+      <div class="mx-auto max-w-[920px]">
+        <header class="mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p class="font-interface text-[10px] uppercase tracking-[.18em] text-fabula-gold">Сохраненные ветки</p>
+            <h1 class="mt-2 font-display text-[24px] text-fabula-100">Вернуться в свой канон</h1>
+            <p class="mt-2 max-w-[62ch] text-[15px] leading-relaxed text-fabula-500">
+              Здесь нет демонстрационных историй: список собирается из сессий, которые ты действительно начал на этом устройстве.
+            </p>
+          </div>
+          <button
+            type="button"
+            class="min-h-11 rounded-xl border border-fabula-gold/45 px-4 font-display text-[14px] text-fabula-gold transition hover:bg-fabula-gold/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fabula-gold"
+            @click="emit('browsePacks')"
+          >
+            Новая история
+          </button>
+        </header>
+
+        <p v-if="loading" class="rounded-2xl border border-white/8 bg-white/[.02] p-6 text-[15px] text-fabula-500">
+          Загружаем сохраненные ветки…
+        </p>
+
+        <div v-else-if="sessions.length" class="grid gap-3">
+          <button
+            v-for="session in sessions"
+            :key="session.id"
+            type="button"
+            class="group grid w-full grid-cols-[72px_minmax(0,1fr)_auto] items-center gap-4 rounded-2xl border border-white/8 bg-white/[.025] p-3 text-left transition hover:border-fabula-gold/35 hover:bg-white/[.045] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fabula-gold sm:p-4"
+            @click="emit('openSession', session.id)"
+          >
+            <img :src="session.story_cover" alt="" class="h-[88px] w-[72px] rounded-xl object-cover">
+            <span class="min-w-0">
+              <span class="block truncate font-interface text-[10px] uppercase tracking-[.12em] text-fabula-gold">{{ session.role_label }}</span>
+              <strong class="mt-1 block truncate font-display text-[19px] font-normal text-fabula-100">{{ session.story_title }}</strong>
+              <span class="mt-1 block truncate text-[13px] text-fabula-500">{{ session.persona_name }} · {{ session.scene_title }}</span>
+              <span class="mt-2 line-clamp-2 text-[13px] leading-relaxed text-fabula-300">{{ session.last_excerpt }}</span>
+            </span>
+            <span class="text-[20px] text-fabula-gold transition group-hover:translate-x-1" aria-hidden="true">→</span>
+          </button>
         </div>
-        <h2 class="font-display text-[25px] leading-none text-fabula-gold-light">Безымянный</h2>
-        <p class="mt-2 rounded-full border border-[#a97a2c] bg-fabula-gold/[.06] px-3 py-1 font-display text-[11px] uppercase tracking-[.16em] text-fabula-gold">⚜ Подписка · Бард</p>
-        <div class="w-full">
-          <div class="mb-1 mt-[14px] flex justify-between font-display text-xs text-[#8a7c60]"><span>Уровень 7</span><span>1 840 / 2 800 XP</span></div>
-          <div class="h-[9px] overflow-hidden rounded-full border border-[#d9a94a2e] bg-[#0e0a06]"><span class="block h-full w-[64%] rounded-full bg-gradient-to-r from-[#8a6122] to-fabula-gold-light shadow-[0_0_10px_#d9a94a]" /></div>
+
+        <div v-else class="rounded-3xl border border-dashed border-white/12 bg-white/[.02] p-8 text-center">
+          <span class="text-[22px] text-fabula-gold" aria-hidden="true">✦</span>
+          <h2 class="mt-3 font-display text-[21px] text-fabula-100">Пока нет начатых историй</h2>
+          <p class="mx-auto mt-2 max-w-[52ch] text-[15px] leading-relaxed text-fabula-500">
+            Выбери один из четырех StoryPack, создай воплощение и начни личную ветку.
+          </p>
+          <button
+            type="button"
+            class="mt-5 min-h-11 rounded-xl bg-fabula-gold px-5 font-display text-[14px] uppercase tracking-[.09em] text-[#151006] hover:bg-fabula-gold-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fabula-gold-light"
+            @click="emit('browsePacks')"
+          >
+            Выбрать мир
+          </button>
         </div>
-      </div>
 
-      <div class="mx-auto my-[18px] grid max-w-[1120px] grid-cols-3 gap-2.5">
-        <div v-for="stat in [['12', 'историй'], ['34', 'часа'], ['8', 'достижений']]" :key="stat[1]" class="rounded-xl border border-[#d9a94a2e] bg-white/[.025] px-1.5 py-[14px] text-center">
-          <strong class="block font-display text-[22px] text-fabula-gold-light">{{ stat[0] }}</strong>
-          <span class="font-display text-[10px] uppercase tracking-[.08em] text-[#8a7c60]">{{ stat[1] }}</span>
-        </div>
+        <NuxtLink
+          to="/"
+          class="mt-6 inline-flex min-h-10 items-center rounded-xl px-3 font-display text-[14px] text-fabula-500 no-underline transition hover:bg-white/5 hover:text-fabula-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fabula-gold"
+        >
+          ← Вернуться на лендинг
+        </NuxtLink>
       </div>
-
-      <p class="mx-auto mb-2.5 mt-1.5 max-w-[1120px] font-display text-xs uppercase tracking-[.14em] text-[#e9dfc9]">Активные истории</p>
-      <button
-        v-for="story in activeStories"
-        :key="story.id"
-        type="button"
-        class="mx-auto mb-2.5 flex w-full max-w-[1120px] items-center gap-3 rounded-xl border border-[#d9a94a2e] bg-white/[.02] p-3 text-left"
-        @click="emit('openStory', story.id)"
-      >
-        <img class="h-14 w-11 shrink-0 rounded-[7px] object-cover" :src="story.cover" alt="">
-        <span class="flex-1">
-          <strong class="block font-display text-sm font-normal text-[#e9dfc9]">{{ story.title }}</strong>
-          <span class="mt-1.5 block h-[5px] overflow-hidden rounded-full bg-[#0e0a06]"><i class="block h-full bg-gradient-to-r from-[#8a6122] to-fabula-gold-light" :class="story.width" /></span>
-          <small class="mt-1 block font-display text-xs text-fabula-gold">{{ story.chapter }}</small>
-        </span>
-      </button>
-
-      <p class="mx-auto mb-2.5 mt-4 max-w-[1120px] font-display text-xs uppercase tracking-[.14em] text-[#e9dfc9]">Настройки</p>
-      <div v-for="setting in settings" :key="setting[1]" class="mx-auto flex max-w-[1120px] items-center justify-between border-b border-white/[.05] px-1 py-[14px] text-base text-[#b6a88a]">
-        <span class="flex items-center gap-3"><i class="w-5 text-center not-italic text-fabula-gold">{{ setting[0] }}</i>{{ setting[1] }}</span><span class="text-[#8a7c60]">›</span>
-      </div>
-      <NuxtLink class="mx-auto flex max-w-[1120px] items-center justify-between px-1 py-[14px] text-base text-[#b6a88a] no-underline" to="/">
-        <span class="flex items-center gap-3"><i class="w-5 text-center not-italic text-fabula-gold">⌂</i>Вернуться на сайт</span><span class="text-[#8a7c60]">›</span>
-      </NuxtLink>
     </div>
   </section>
 </template>

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { STORY_PACKS } from '#shared/storypacks'
+
 type DemoMessage = {
   id: string
   type: 'narrator' | 'context' | 'player' | 'system'
@@ -19,44 +21,41 @@ let generation = 0
 let resolveWait: (() => void) | null = null
 let observer: IntersectionObserver | null = null
 
-const choices = [
-  'Пойти к деревне - там могут быть выжившие.',
-  'Ступить на мост навстречу незнакомцу.',
-  'Расспросить старика, кто ты такой.',
-]
+const storyPack = STORY_PACKS['eighth-seal']
+const choices = storyPack.opening.suggestions.map(suggestion => suggestion.label)
 
 const opening: DemoMessage[] = [
   {
     id: 'opening',
     type: 'narrator',
-    title: 'Королевство Пепельных земель',
-    text: 'Древние хроники лгали - мир не погиб в одночасье. Он умирал медленно, век за веком, пока от цветущих долин Эхокарта не остался лишь серый пепел.',
+    title: storyPack.title,
+    text: 'Семь кругов горят ровно. Над каждым придворный писец записывает имя нового героя. Под твоими ногами линии восьмого круга обрываются, словно чертеж остановили на полуслове.',
   },
   {
     id: 'blade',
     type: 'narrator',
     image: '/assets/keyframe_01.jpg',
-    text: 'Среди обломков рука натыкается на сталь - теплый клинок, будто им только что рубили. На лезвии герб, которого ты не узнаешь: три звезды над разбитой короной.',
+    text: 'Защитные печати поворачиваются к тебе острыми гранями. Молодая архивистка роняет свиток и шепчет: «Не позволяй королю назвать тебя».',
   },
   {
     id: 'inventory',
     type: 'context',
-    label: 'Найден предмет',
-    text: 'Клинок Тихого Пепла',
-    detail: 'чужое клеймо у гарды, рукоять холодная на ощупь',
+    label: 'Предмет рядом',
+    text: 'Пустая медная печать',
+    detail: 'без имени, сформулированного договора и владельца',
   },
   {
     id: 'keeper',
     type: 'narrator',
     image: '/assets/keyframe_02.jpg',
-    text: '"Значит, ты все-таки проснулся", - раздается хриплый голос за спиной. Старик смотрит не на тебя - только на клинок в твоей руке.',
+    text: 'Рыцари еще не понимают, что произошло. Архивистка смотрит не на тебя, а на разрыв в восьмом круге и пустую печать у камня.',
   },
   {
     id: 'journal',
     type: 'context',
     label: 'Запись в журнале',
-    text: 'Старик-хранитель',
-    detail: 'двадцать лет ждал того, кто поднимет меч',
+    text: storyPack.opening.journalTitle,
+    detail: storyPack.opening.objective,
   },
 ]
 
@@ -114,7 +113,7 @@ async function choose(index: number) {
   visibleMessages.value.push({
     id: `system-${Date.now()}`,
     type: 'system',
-    text: 'ИИ дописывает следующую главу по твоему выбору…',
+    text: 'Движок проверяет канон, предметы и последствия выбранного действия…',
   })
   await wait(3600)
   if (running.value)

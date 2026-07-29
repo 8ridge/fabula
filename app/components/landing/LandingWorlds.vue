@@ -1,46 +1,13 @@
 <script setup lang="ts">
-const worlds = [
-  {
-    genre: 'Фэнтези',
-    title: 'Пепельные земли',
-    description: 'Ты очнулся в выгоревших руинах без имени и с чужим мечом в руке. Что здесь случилось двадцать лет назад, толком не помнит уже никто.',
-    image: '/assets/cover_fantasy.jpg',
-    video: '/assets/cover_fantasy.mp4?v2',
-    accent: '#d9a94a',
-    facts: ['12 историй', 'Тяжёлая', 'Мрачный'],
-    rating: '★ 4.8',
-  },
-  {
-    genre: 'Sci-Fi',
-    title: 'Станция «Кассандра»',
-    description: 'Тебя разбудили на 214 лет позже срока. Экипажа нет, а бортовой ИИ сомневается, что ты это ты.',
-    image: '/assets/cover_scifi.jpg',
-    video: '/assets/cover_scifi.mp4?v2',
-    accent: '#54e6d0',
-    facts: ['9 историй', 'Обычная', 'Напряжённый'],
-    rating: '★ 4.6',
-  },
-  {
-    genre: 'История',
-    title: 'Восстание Спартака',
-    description: 'Школа гладиаторов Батиата, 73 год до нашей эры. Ночью в казарме шепчутся о побеге, и завтра тебе решать, с кем ты.',
-    image: '/assets/cover_history.jpg',
-    video: '/assets/cover_history.mp4?v2',
-    accent: '#c9a865',
-    facts: ['7 историй', 'Тяжёлая', 'Драматичный'],
-    rating: '★ 4.7',
-  },
-  {
-    genre: 'Пост-апокалипсис',
-    title: 'После тишины',
-    description: 'Город зарос за двадцать лет, и сегодня ты впервые за долгое время услышал чужой голос.',
-    image: '/assets/cover_postapoc.jpg',
-    video: '/assets/cover_postapoc.mp4?v2',
-    accent: '#9bbf3a',
-    facts: ['6 историй', 'Обычная', 'Тревожный'],
-    rating: '★ 4.5',
-  },
-]
+import { STORY_PACK_LIST } from '#shared/storypacks'
+
+const worlds = STORY_PACK_LIST.map(pack => ({
+  ...pack,
+  description: pack.logline,
+  image: pack.cover,
+  accent: pack.theme.accent,
+  facts: [pack.rating, pack.version, ...pack.systemFocus.slice(0, 2)],
+}))
 </script>
 
 <template>
@@ -53,8 +20,8 @@ const worlds = [
       <div class="grid grid-cols-1 gap-[18px] sm:grid-cols-2 lg:grid-cols-4 [perspective:1100px]">
         <NuxtLink
           v-for="world in worlds"
-          :key="world.title"
-          to="/app"
+          :key="world.id"
+          :to="`/story/${world.id}`"
           data-reveal
           data-tilt-card
           :style="{ '--accent': world.accent }"
@@ -67,7 +34,7 @@ const worlds = [
               class="h-full w-full scale-[1.08] object-cover grayscale-[.5] brightness-[.74] contrast-[1.05] transition duration-1000 group-hover:scale-[1.13] group-hover:grayscale-0 group-hover:brightness-[.82]"
             >
             <video
-              :data-src="world.video"
+              :data-src="`${world.video}?v3`"
               muted
               loop
               playsinline
@@ -76,8 +43,8 @@ const worlds = [
             />
             <div class="absolute inset-0 bg-[linear-gradient(0deg,#0a0a0cfa_14%,#0a0a0ca8_44%,#0a0a0c1f_74%)]" />
           </div>
-          <span class="absolute left-[13px] top-[13px] z-[3] rounded-full border border-[var(--accent)] bg-[#0a0a0ccc] px-[11px] py-[5px] font-display text-[9px] uppercase tracking-[.16em] text-[var(--accent)]">
-            {{ world.genre }}
+          <span class="absolute left-[13px] top-[13px] z-[3] rounded-full border border-[var(--accent)] bg-[#0a0a0ccc] px-[11px] py-[5px] font-display text-[10px] uppercase tracking-[.14em] text-[var(--accent)]">
+            {{ world.eyebrow }}
           </span>
           <div class="relative z-[2] flex flex-col gap-2.5 p-[18px] lg:absolute lg:inset-x-0 lg:bottom-0 lg:p-5">
             <h3 class="font-display text-[21px] leading-[1.14] text-fabula-100">
@@ -97,8 +64,8 @@ const worlds = [
                 </span>
               </div>
               <div class="flex items-center justify-between pt-0.5 font-display text-[var(--accent)]">
-                <span class="text-[13px]">{{ world.rating }}</span>
-                <span class="text-xs tracking-[.1em]">Открыть →</span>
+                <span class="text-[13px]">{{ world.season }}</span>
+                <span class="text-xs tracking-[.1em]">Выбрать роль →</span>
               </div>
             </div>
           </div>

@@ -1,65 +1,73 @@
 <script setup lang="ts">
-import { interactionConfig } from '~/data/interaction'
-import type { InteractionStoryId, InteractionToolName } from '~/types/interaction-ui'
+import type { GameSessionSummary } from '#shared/game'
 
 defineProps<{
-  storyId: InteractionStoryId
-  storyIds: InteractionStoryId[]
+  sessions: GameSessionSummary[]
+  currentSessionId: string
   open: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
-  switchStory: [storyId: InteractionStoryId]
-  openTool: [tool: InteractionToolName]
-  newScene: []
-  search: []
+  selectSession: [sessionId: string]
+  newStory: []
 }>()
-
-const coverClasses: Record<InteractionStoryId, string> = {
-  fant: "bg-[url('/assets/cover_fantasy.jpg')]",
-  scifi: "bg-[url('/assets/cover_scifi.jpg')]",
-  hist: "bg-[url('/assets/cover_history.jpg')]",
-  post: "bg-[url('/assets/cover_modern.png')]",
-}
 </script>
 
 <template>
   <aside
-    class="fixed inset-y-[70px] left-0 z-60 flex w-[min(86vw,296px)] flex-col border-r border-white/10 bg-[#0d0d11] transition-transform duration-300 min-[761px]:static min-[761px]:inset-auto min-[761px]:z-auto min-[761px]:w-auto min-[761px]:translate-x-0"
+    class="fixed inset-y-16 left-0 z-60 flex w-[min(88vw,280px)] flex-col border-r border-white/8 bg-[#0c0d10] transition-transform duration-300 min-[900px]:static min-[900px]:inset-auto min-[900px]:z-auto min-[900px]:w-auto min-[900px]:translate-x-0"
     :class="open ? 'translate-x-0' : '-translate-x-full'"
-    aria-label="Истории и чаты"
+    aria-label="Начатые истории"
   >
-    <div class="flex items-center justify-between border-b border-white/10 p-4 font-display text-lg min-[761px]:hidden">
-      <span>Твои истории</span><button type="button" class="grid size-8 place-items-center rounded-lg border border-white/10" aria-label="Закрыть список чатов" @click="emit('close')">×</button>
-    </div>
-    <div class="flex items-center justify-between px-5 pb-3 pt-8">
-      <div><span class="font-interface text-[9px] uppercase tracking-[.11em] text-fabula-500">ЛИЧНЫЙ АРХИВ</span><h1 class="mt-1 font-display text-[24px] text-fabula-100">Твои истории</h1></div>
-      <button type="button" class="grid size-9 place-items-center rounded-xl border border-[var(--accent)]/60 bg-[var(--accent-soft)] text-xl text-[var(--accent-light)]" aria-label="Начать новую сцену" @click="emit('newScene')">+</button>
-    </div>
-    <button type="button" class="mx-[15px] mb-5 flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[.025] px-3 py-2.5 text-left font-interface text-[9px] text-fabula-500" @click="emit('search')">
-      <span class="text-[var(--accent)]">⌕</span><span class="flex-1">Найти сцену</span><kbd class="rounded border border-white/10 px-1.5 py-0.5">⌘ K</kbd>
-    </button>
-    <div class="px-2.5">
-      <div class="mb-2 flex justify-between px-2 font-interface text-[8px] uppercase tracking-[.1em] text-fabula-500"><span>ОСНОВНЫЕ ПАКИ</span><span>4</span></div>
+    <header class="flex items-start justify-between gap-3 px-4 pb-3 pt-5">
+      <div>
+        <p class="font-interface text-[10px] uppercase tracking-[.14em] text-[#9b9ba6]">Личный архив</p>
+        <h2 class="mt-1 font-display text-[21px] text-fabula-100">Начатые истории</h2>
+      </div>
       <button
-        v-for="id in storyIds"
-        :key="id"
         type="button"
-        class="mb-1 flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition"
-        :class="storyId === id ? 'border-[var(--accent)]/45 bg-[var(--accent-soft)]' : 'border-transparent hover:bg-white/[.025]'"
-        @click="emit('switchStory', id)"
+        class="grid size-9 shrink-0 place-items-center rounded-xl border border-white/10 text-[18px] text-fabula-300 min-[900px]:hidden"
+        aria-label="Закрыть список историй"
+        @click="emit('close')"
       >
-        <span class="size-10 shrink-0 rounded-lg bg-cover bg-center" :class="coverClasses[id]" />
-        <span class="min-w-0 flex-1"><strong class="block truncate font-display text-[16px] font-normal text-fabula-100">{{ interactionConfig.storyPacks[id].title }}</strong><small class="block truncate font-interface text-[8px] text-fabula-500">{{ interactionConfig.storyPacks[id].navSubtitle }}</small></span>
-        <span class="text-right font-interface text-[8px] text-fabula-500"><b v-if="id === 'fant'" class="mb-1 block rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-[#161006]">2</b><small>{{ id === 'fant' ? 'сейчас' : id === 'scifi' ? 'вчера' : id === 'hist' ? '22 июл' : 'новое' }}</small></span>
+        ×
       </button>
-    </div>
-    <div class="mt-auto border-t border-white/10 p-3">
-      <button type="button" class="flex w-full items-center gap-2.5 rounded-xl p-2 text-left hover:bg-white/[.03]" @click="emit('openTool', 'character')">
-        <span class="size-9 overflow-hidden rounded-full border border-[var(--accent)]"><img class="h-full w-full object-cover" src="/assets/avatar.jpg" alt=""></span>
-        <span class="flex-1"><strong class="block font-display text-sm font-normal">Безымянный</strong><small class="font-interface text-[8px] text-fabula-500">Бард · уровень 7</small></span><span class="text-fabula-500">•••</span>
+    </header>
+
+    <div class="min-h-0 flex-1 overflow-y-auto px-2.5 pb-3 [scrollbar-width:thin]">
+      <button
+        v-for="session in sessions"
+        :key="session.id"
+        type="button"
+        class="mb-1.5 flex w-full items-center gap-3 rounded-xl border p-2.5 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+        :class="currentSessionId === session.id
+          ? 'border-[rgb(var(--accent-rgb)/.45)] bg-[rgb(var(--accent-rgb)/.08)]'
+          : 'border-transparent hover:border-white/8 hover:bg-white/[.025]'"
+        @click="emit('selectSession', session.id)"
+      >
+        <img :src="session.story_cover" alt="" class="h-12 w-10 shrink-0 rounded-lg object-cover">
+        <span class="min-w-0 flex-1">
+          <strong class="block truncate font-display text-[16px] font-normal text-fabula-100">{{ session.story_title }}</strong>
+          <span class="mt-0.5 block truncate text-[11px] text-[#9b9ba6]">{{ session.persona_name }} · {{ session.scene_title }}</span>
+        </span>
+        <span v-if="currentSessionId === session.id" class="size-1.5 shrink-0 rounded-full bg-[var(--accent)]" aria-label="Текущая история" />
       </button>
+
+      <p v-if="!sessions.length" class="px-2 py-4 text-[13px] leading-relaxed text-[#9b9ba6]">
+        Начатых историй пока нет.
+      </p>
     </div>
+
+    <footer class="border-t border-white/8 p-3">
+      <button
+        type="button"
+        class="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-white/10 font-display text-[14px] text-fabula-300 transition hover:border-[rgb(var(--accent-rgb)/.45)] hover:text-[var(--accent-light)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+        @click="emit('newStory')"
+      >
+        <span aria-hidden="true">＋</span>
+        Новая история
+      </button>
+    </footer>
   </aside>
 </template>

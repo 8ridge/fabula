@@ -11,11 +11,30 @@ export default defineNuxtConfig({
     openrouterSiteUrl: '',
   },
   nitro: {
-    serverAssets: [{
-      baseName: 'fabula-prompts',
-      dir: new URL('./deliverables/PWA_AI_PRESENTATION_KIT/prompts', import.meta.url).pathname,
-      pattern: '*.md',
-    }],
+    storage: {
+      'fabula-sessions': {
+        driver: 'fs',
+        base: './.data/fabula-sessions',
+      },
+    },
+    devStorage: {
+      'fabula-sessions': {
+        driver: 'fs',
+        base: './.data/fabula-sessions',
+      },
+    },
+    serverAssets: [
+      {
+        baseName: 'fabula-prompts',
+        dir: new URL('./deliverables/PWA_AI_PRESENTATION_KIT/prompts', import.meta.url).pathname,
+        pattern: '*.md',
+      },
+      {
+        baseName: 'fabula-storypacks',
+        dir: new URL('./deliverables/PWA_AI_PRESENTATION_KIT/storypacks', import.meta.url).pathname,
+        pattern: '*.md',
+      },
+    ],
   },
   vite: {
     plugins: [tailwindcss()],
