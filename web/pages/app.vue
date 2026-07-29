@@ -112,6 +112,7 @@
             <div class="setrow" data-act="password"><span class="l"><span class="g">⚿</span>Пароль</span><span class="chev">Изменить ›</span></div>
             <div class="setrow"><span class="l"><span class="g">✉</span>Почта</span><span class="chev" style="color:#7cc47f">подключена</span></div>
             <div class="setrow" data-act="google"><span class="l"><span class="g">G</span>Google</span><span class="chev" data-p="google">скоро</span></div>
+            <div class="setrow" data-act="devices"><span class="l"><span class="g">🛡</span>Безопасность · устройства</span><span class="chev">›</span></div>
             <div class="setrow" data-act="logout-all"><span class="l"><span class="g">⎇</span>Выйти со всех устройств</span><span class="chev">›</span></div>
           </div>
           <div class="p-card" style="margin-top:12px">
@@ -240,6 +241,12 @@
           </div>
         </div>
       </div>
+      <div class="sheet2" id="devSheet">
+        <div class="sheet2-card">
+          <div class="sheet2-h">Устройства <button class="sheet2-x" id="devClose">✕</button></div>
+          <div id="devList" class="dev-list"></div>
+        </div>
+      </div>
       <div class="grain"><svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"><filter id="ng"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2"/></filter><rect width="100%" height="100%" filter="url(#ng)"/></svg></div>
       <div class="homebar"></div>
     </div>
@@ -355,12 +362,39 @@ onMounted(() => {
   if(fsSeg) fsSeg.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{ localStorage.setItem('fabula-fontsize', b.dataset.fs); applyFont(); }));
   applyFont();
 
+  const devSheet=document.getElementById('devSheet');
+  const devCloseBtn=document.getElementById('devClose'); if(devCloseBtn) devCloseBtn.addEventListener('click',()=>devSheet.classList.remove('on'));
+  function relTime(iso){ if(!iso) return ''; const d=new Date(iso), now=new Date(), days=Math.floor((now-d)/86400000);
+    if(days<=0) return 'сегодня'; if(days===1) return 'вчера'; if(days<7) return days+' дн. назад'; return d.toLocaleDateString('ru-RU'); }
+  async function openDevices(){
+    devSheet.classList.add('on');
+    const list=document.getElementById('devList'); list.innerHTML='<div class="dev-empty">Загрузка…</div>';
+    const { res, data } = await apiAuth('/auth/sessions','GET');
+    if(!res.ok || !Array.isArray(data)){ list.innerHTML='<div class="dev-empty">Не удалось загрузить</div>'; return; }
+    if(!data.length){ list.innerHTML='<div class="dev-empty">Нет активных устройств</div>'; return; }
+    list.innerHTML='';
+    data.forEach(s=>{
+      const row=document.createElement('div'); row.className='dev-row';
+      const info=document.createElement('div'); info.className='dev-info';
+      const name=document.createElement('div'); name.className='dev-name'; name.textContent=s.device||'Устройство';
+      if(s.current){ const b=document.createElement('span'); b.className='dev-cur'; b.textContent='это устройство'; name.appendChild(document.createTextNode(' ')); name.appendChild(b); }
+      const meta=document.createElement('div'); meta.className='dev-meta';
+      meta.textContent=(s.country_name||'—')+' · вход '+relTime(s.created_at)+' · активно '+relTime(s.last_seen_at);
+      info.appendChild(name); info.appendChild(meta); row.appendChild(info);
+      if(!s.current){ const kill=document.createElement('button'); kill.className='dev-kill'; kill.textContent='Выйти';
+        kill.addEventListener('click', async ()=>{ const { res }=await apiAuth('/auth/sessions/'+s.id,'DELETE'); if(res.ok){ toast('Устройство отключено'); openDevices(); } });
+        row.appendChild(kill); }
+      list.appendChild(row);
+    });
+  }
+
   function clearSession(){ try{ localStorage.removeItem('fabula-token'); localStorage.removeItem('fabula-user'); }catch(_){}; location.href='/'; }
 
   document.querySelectorAll('[data-scr="profile"] [data-act]').forEach(row => {
     row.addEventListener('click', async () => {
       const act = row.dataset.act;
       if (act === 'logout') { clearSession(); return; }
+      if (act === 'devices') { openDevices(); return; }
       if (act === 'logout-all') {
         const { res } = await apiAuth('/auth/logout-all', 'POST');
         if (res.ok) { toast('Вышли со всех устройств'); clearSession(); }

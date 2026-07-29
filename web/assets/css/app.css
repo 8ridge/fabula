@@ -822,3 +822,12 @@
   .set-hint{font-family:'Forum',serif;font-size:12px;color:#6d6d78;margin-top:8px}
   .set-row-soon{display:flex;justify-content:space-between;padding:12px 2px;font-family:'Forum',serif;font-size:15px;color:#eaeaee}
   .set-row-soon .soon{color:#6d6d78}
+  .dev-list{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+  .dev-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 2px;border-bottom:1px solid rgba(255,255,255,.07)}
+  .dev-row:last-child{border-bottom:none}
+  .dev-name{font-family:'Forum',serif;font-size:15px;color:#eaeaee}
+  .dev-cur{font-family:'Forum',serif;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#7cc47f;margin-left:8px}
+  .dev-meta{font-family:'Forum',serif;font-size:12px;color:#6d6d78;margin-top:3px}
+  .dev-kill{background:#ffffff08;border:1px solid rgba(255,255,255,.14);color:#d9655f;border-radius:9px;padding:7px 14px;font-family:'Forum',serif;font-size:13px;cursor:pointer;flex:none}
+  .dev-kill:hover{background:#ffffff12}
+  .dev-empty{font-family:'Forum',serif;font-size:14px;color:#6d6d78;padding:14px 2px}
