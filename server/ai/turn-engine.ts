@@ -1,4 +1,5 @@
 import { STORY_PACKS } from '../../shared/storypacks'
+import type { StoryPackId } from '../../shared/storypacks'
 import { AI_MODELS } from './catalog'
 import type { FabulaAiConfig } from './config'
 import type { JsonValue, TurnCommand, TurnOutput } from './contracts'
@@ -6,16 +7,22 @@ import { ContractError, parseTurnOutput, TURN_OUTPUT_JSON_SCHEMA } from './contr
 import { AiExecutionError, FabulaApiError } from './http'
 import type { SafeModelRun } from './http'
 import { OpenRouterClient, OpenRouterError } from './openrouter'
+import { sanitizeNemotronPayload } from './security'
+import { parseStandaloneOutput } from './standalone-contracts'
 import type { EngineSessionSnapshot, SessionTurnResult, TurnOutputValidator } from '../game/session-repository'
 import { getStoryPackContext } from '../game/storypack-context'
+import type { RuntimeStoryPackSource } from '../game/storypack-source'
+import { loadRuntimeStoryPack } from '../game/storypack-source'
 
 export interface TurnEngineResult extends SessionTurnResult {
   modelRuns: SafeModelRun[]
 }
 
 type PromptLoader = (moduleId: 'authoritative-turn' | 'scene-plan') => Promise<string>
+type StoryPackSourceLoader = (storyPackId: StoryPackId) => Promise<RuntimeStoryPackSource>
 
 export const TURN_MODEL_TIMEOUTS = {
+  advisoryMs: 8_000,
   primaryMs: 55_000,
   fallbackMs: 25_000,
 } as const
@@ -23,14 +30,17 @@ export const TURN_MODEL_TIMEOUTS = {
 export class TurnEngine {
   private readonly client: OpenRouterClient
   private readonly promptLoader: PromptLoader
+  private readonly storyPackSourceLoader: StoryPackSourceLoader
 
   constructor(
     config: FabulaAiConfig,
     client = new OpenRouterClient(config),
     promptLoader: PromptLoader = async moduleId => (await import('./prompts')).getSystemPrompt(moduleId),
+    storyPackSourceLoader: StoryPackSourceLoader = loadRuntimeStoryPack,
   ) {
     this.client = client
     this.promptLoader = promptLoader
+    this.storyPackSourceLoader = storyPackSourceLoader
   }
 
   async execute(
@@ -40,7 +50,9 @@ export class TurnEngine {
     validateOutput?: TurnOutputValidator,
   ): Promise<TurnEngineResult> {
     const modelRuns: SafeModelRun[] = []
-    const packet = buildTurnPacket(command, snapshot, null)
+    const storyPackSource = await this.storyPackSourceLoader(snapshot.storyPackId)
+    const advisory = await this.maybePlan(snapshot, modelRuns, signal)
+    const packet = buildTurnPacket(command, snapshot, advisory, storyPackSource)
     const primary = await this.tryTurnModel(
       AI_MODELS.deepseek.slug,
       'primary',
@@ -48,6 +60,7 @@ export class TurnEngine {
       command,
       modelRuns,
       snapshot,
+      storyPackSource,
       validateOutput,
       signal,
     )
@@ -56,7 +69,7 @@ export class TurnEngine {
         output: primary,
         model: AI_MODELS.deepseek.slug,
         fallbackUsed: false,
-        advisoryUsed: false,
+        advisoryUsed: advisory !== null,
         modelRuns,
       }
     }
@@ -68,6 +81,7 @@ export class TurnEngine {
       command,
       modelRuns,
       snapshot,
+      storyPackSource,
       validateOutput,
       signal,
     )
@@ -76,7 +90,7 @@ export class TurnEngine {
         output: fallback,
         model: AI_MODELS.mistral.slug,
         fallbackUsed: true,
-        advisoryUsed: false,
+        advisoryUsed: advisory !== null,
         modelRuns,
       }
     }
@@ -90,6 +104,7 @@ export class TurnEngine {
         command,
         modelRuns,
         snapshot,
+        storyPackSource,
         validateOutput,
         signal,
       )
@@ -98,7 +113,7 @@ export class TurnEngine {
           output: repairedFallback,
           model: AI_MODELS.mistral.slug,
           fallbackUsed: true,
-          advisoryUsed: false,
+          advisoryUsed: advisory !== null,
           modelRuns,
         }
       }
@@ -114,6 +129,74 @@ export class TurnEngine {
     }
   }
 
+  private async maybePlan(
+    snapshot: EngineSessionSnapshot,
+    modelRuns: SafeModelRun[],
+    signal?: AbortSignal,
+  ): Promise<Record<string, JsonValue> | null> {
+    const lastTurn = snapshot.history.at(-1)
+    if (lastTurn?.sceneId === snapshot.scene.id)
+      return null
+
+    const sanitized = sanitizeNemotronPayload({
+      story_pack_id: snapshot.storyPackId,
+      scene_id: snapshot.scene.id,
+      entity_roles: ['player', ...snapshot.scene.present_character_ids.map(() => 'present_npc')],
+      confirmed_fact_refs: snapshot.confirmedFacts.slice(-16).map(fact => fact.id),
+      confirmed_event_refs: snapshot.confirmedEvents.slice(-16).map(event => event.id),
+      resource_bands: [
+        snapshot.inventory.length === 0 ? 'inventory_empty' : 'inventory_available',
+      ],
+      active_threads: ['current_scene_objective'],
+      unresolved_callbacks: snapshot.history.slice(-6).flatMap(turn =>
+        turn.unresolvedAmbiguities.map((_, index) => `${turn.turnId}:u${index}`)),
+      pack_constraints: ['no_new_canon', 'no_pii', 'advisory_only'],
+      recent_outcome_bands: snapshot.history.slice(-6).map(turn => turn.outcome),
+      available_paths: ['action', 'speech', 'exploration'],
+      allowed_difficulty_knobs: ['clarity', 'time_pressure', 'opposition'],
+    }) as Record<string, JsonValue>
+
+    let result: Awaited<ReturnType<OpenRouterClient['chatJson']>> | null = null
+    try {
+      result = await this.client.chatJson({
+        model: AI_MODELS.nemotronFree.slug,
+        system: await this.promptLoader('scene-plan'),
+        payload: sanitized,
+        maxOutputTokens: 1800,
+        timeoutMs: TURN_MODEL_TIMEOUTS.advisoryMs,
+        signal,
+        maxPrice: { prompt: 0, completion: 0 },
+        sanitizedFreeEndpoint: true,
+        jsonMode: AI_MODELS.nemotronFree.jsonMode,
+      })
+      const output = parseStandaloneOutput('scene-plan', result.output)
+      modelRuns.push({
+        role: 'advisory',
+        model: result.model,
+        request_id: result.requestId,
+        usage: result.usage,
+        status: 'accepted',
+        error_code: null,
+        validation_errors: [],
+      })
+      return output
+    }
+    catch (error) {
+      modelRuns.push({
+        role: 'advisory',
+        model: result?.model || openRouterModel(error) || AI_MODELS.nemotronFree.slug,
+        request_id: result?.requestId || openRouterRequestId(error),
+        usage: result?.usage || openRouterUsage(error),
+        status: 'discarded',
+        error_code: safeErrorCode(error),
+        validation_errors: safeValidationErrors(error),
+      })
+      if (signal?.aborted)
+        throw error
+      return null
+    }
+  }
+
   private async tryTurnModel(
     model: string,
     role: 'primary' | 'fallback',
@@ -121,6 +204,7 @@ export class TurnEngine {
     command: TurnCommand,
     modelRuns: SafeModelRun[],
     snapshot: EngineSessionSnapshot,
+    storyPackSource: RuntimeStoryPackSource,
     validateOutput?: TurnOutputValidator,
     signal?: AbortSignal,
   ) {
@@ -142,7 +226,7 @@ export class TurnEngine {
         },
       })
       const output = parseTurnOutput(
-        withServerEnvelope(result.output, command, snapshot),
+        withServerEnvelope(result.output, command, snapshot, storyPackSource),
         command.idempotency_key,
         command.expected_session_version,
       )
@@ -180,6 +264,7 @@ function buildTurnPacket(
   command: TurnCommand,
   snapshot: EngineSessionSnapshot,
   scenePlan: Record<string, JsonValue> | null,
+  storyPackSource: RuntimeStoryPackSource,
 ): Record<string, JsonValue> {
   const story = STORY_PACKS[snapshot.storyPackId]
   const context = getStoryPackContext(snapshot.storyPackId)
@@ -210,7 +295,7 @@ function buildTurnPacket(
       title: story.title,
       story_pack_id: snapshot.storyPackId,
       story_pack_version: snapshot.storyPackVersion,
-      hard_canon: context.hardCanon.map((claim, index) => ({
+      hard_canon: storyPackSource.hardCanon.map((claim, index) => ({
         fact_id: `canon:${snapshot.storyPackId}:${index + 1}`,
         claim,
       })),
@@ -274,18 +359,35 @@ function buildTurnPacket(
         truth_status: fact.truthStatus,
         source_event_ids: fact.sourceEventIds,
       })),
+      per_character_knowledge: snapshot.knowledge.slice(-48).map((knowledge) => {
+        const fact = snapshot.confirmedFacts.find(candidate => candidate.id === knowledge.factId)
+        return {
+          character_id: knowledge.characterId,
+          fact_id: knowledge.factId,
+          claim: fact?.claim || null,
+          source_event_id: knowledge.sourceEventId,
+          confidence: knowledge.confidence,
+        }
+      }),
     },
     relevant_memories: snapshot.history.slice(-6).map(turn => ({
       turn_id: turn.turnId,
       mode: turn.mode,
+      player_input: turn.playerText.slice(0, 1000),
       outcome: turn.outcome,
       narrative_summary: turn.narrative.slice(0, 600),
+      costs_and_consequences: turn.costsAndConsequences,
+      unresolved_ambiguities: turn.unresolvedAmbiguities,
     })),
     pack_rules: {
       story_pack_id: snapshot.storyPackId,
       story_pack_version: snapshot.storyPackVersion,
-      prompt_overlay_version: context.promptOverlayVersion,
-      prompt_overlay: context.promptOverlay,
+      technical_pack_id: storyPackSource.technicalPackId,
+      source_file: storyPackSource.sourceFile,
+      source_hash: storyPackSource.sourceHash,
+      prompt_overlay_version: storyPackSource.promptOverlayVersion,
+      prompt_overlay: storyPackSource.promptOverlay,
+      canonical_core_markdown: storyPackSource.canonicalCore,
       operation_catalog_version: 'fabula-beta-operations@0.2',
     },
     resolution_randomness: {
@@ -359,10 +461,10 @@ function withServerEnvelope(
   output: unknown,
   command: TurnCommand,
   snapshot: EngineSessionSnapshot,
+  storyPackSource: RuntimeStoryPackSource,
 ): unknown {
   if (!output || typeof output !== 'object' || Array.isArray(output))
     return output
-  const storyContext = getStoryPackContext(snapshot.storyPackId)
   const allowedIds = new Set([
     command.idempotency_key,
     snapshot.scene.id,
@@ -373,7 +475,7 @@ function withServerEnvelope(
     ...snapshot.reservedIds.scenes,
     ...snapshot.confirmedEvents.map(event => event.id),
     ...snapshot.confirmedFacts.map(fact => fact.id),
-    ...storyContext.hardCanon.map((_, index) => `canon:${snapshot.storyPackId}:${index + 1}`),
+    ...storyPackSource.hardCanon.map((_, index) => `canon:${snapshot.storyPackId}:${index + 1}`),
   ])
   const record = canonicalizeModelIds(output, null, allowedIds) as Record<string, unknown>
   const rawContextCheck = record.context_check
@@ -397,6 +499,37 @@ function withServerEnvelope(
   const normalizedContextCheck = contextCheck && contextCheckKeys.every(key => contextCheck[key] === true)
     ? { ...contextCheck, blocking_reasons: [] }
     : rawContextCheck
+  const rawDifficulty = record.difficulty
+  const difficulty = rawDifficulty && typeof rawDifficulty === 'object' && !Array.isArray(rawDifficulty)
+    ? rawDifficulty as Record<string, unknown>
+    : null
+  const difficultyParts = [
+    'base',
+    'environment',
+    'time_pressure',
+    'injury',
+    'opposition',
+    'skill',
+    'tools',
+    'preparation',
+    'help',
+  ]
+  const normalizedDifficulty = difficulty && difficultyParts.every(key => typeof difficulty[key] === 'number')
+    ? {
+        ...difficulty,
+        final_band: Math.max(0, Math.min(5,
+          Number(difficulty.base)
+          + Number(difficulty.environment)
+          + Number(difficulty.time_pressure)
+          + Number(difficulty.injury)
+          + Number(difficulty.opposition)
+          - Number(difficulty.skill)
+          - Number(difficulty.tools)
+          - Number(difficulty.preparation)
+          - Number(difficulty.help),
+        )),
+      }
+    : rawDifficulty
   const operations = Array.isArray(record.operations)
     ? record.operations.map((operation) => {
         if (!operation || typeof operation !== 'object' || Array.isArray(operation))
@@ -413,6 +546,7 @@ function withServerEnvelope(
     expected_session_version: command.expected_session_version,
     operations,
     context_check: normalizedContextCheck,
+    difficulty: normalizedDifficulty,
   }
 }
 

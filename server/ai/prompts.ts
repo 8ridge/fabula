@@ -33,6 +33,9 @@ system contract > authority catalog > objective canon > confirmed events/facts
 - новый найденный предмет создавай только через inventory.create_instance с зарезервированным item_id и событием-источником текущего хода;
 - если действие действительно переносит сцену, добавь после event.create ровно одну scene.transition с зарезервированным scene_id, известной локацией и точным expected текущей сцены;
 - если персонаж входит или уходит без смены сцены, добавь после event.create ровно одну scene.update_presence с полным новым составом, точным expected и канонической destination_location_id для каждого ушедшего;
+- не добавляй scene.update_presence, если состав не меняется. Если состав меняется,
+  каждый вошедший и вышедший персонаж обязан быть actor_id или target_id
+  предшествующего event.create этого же хода;
 - rejected и clarification_required всегда возвращают пустой operations;
 - status=resolved допускает outcome success, partial_success или failure, но никогда
   impossible; status=rejected требует outcome=impossible и хотя бы одну

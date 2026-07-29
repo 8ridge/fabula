@@ -5,6 +5,7 @@ import { AiExecutionError, FabulaApiError } from './http'
 import { OpenRouterError } from './openrouter'
 import type { ChatJsonRequest, OpenRouterClient } from './openrouter'
 import type { EngineSessionSnapshot } from '../game/session-repository'
+import type { RuntimeStoryPackSource } from '../game/storypack-source'
 import { TURN_MODEL_TIMEOUTS, TurnEngine } from './turn-engine'
 
 const config: FabulaAiConfig = {
@@ -57,9 +58,19 @@ const snapshot: EngineSessionSnapshot = {
     description: 'Зал восьми кругов.',
     status: 'Текущая локация',
   }],
-  history: [],
+  history: [{
+    turnId: 'turn:scene-opened',
+    sceneId: 'scene:eighth-seal:summoning-hall',
+    mode: 'exploration',
+    playerText: 'Я осматриваюсь.',
+    outcome: 'success',
+    narrative: 'Зал остается тихим.',
+    costsAndConsequences: [],
+    unresolvedAmbiguities: [],
+  }],
   confirmedEvents: [],
   confirmedFacts: [],
+  knowledge: [],
   reservedIds: {
     events: ['event:reserved:0001'],
     facts: ['fact:reserved:0001'],
@@ -67,6 +78,26 @@ const snapshot: EngineSessionSnapshot = {
     scenes: ['scene:reserved:0001'],
   },
   allowedOperationTypes: ['event.create', 'fact.create'],
+}
+
+const storyPackSource: RuntimeStoryPackSource = {
+  storyPackId: snapshot.storyPackId,
+  sourceFile: '04_storypack_eighth_seal.md',
+  sourceHash: `sha256:${'a'.repeat(64)}`,
+  technicalPackId: 'fantasy-eighth-seal@0.2',
+  promptOverlayVersion: 'fantasy-eighth-seal@0.2#aaaaaaaaaaaa',
+  promptOverlay: 'PACK_ID: fantasy-eighth-seal@0.2',
+  hardCanon: ['Восьмой круг не дает игроку скрытой божественности.'],
+  canonicalCore: '# StoryPack 04\n\n## Сюжет по восьми актам',
+}
+
+function createEngine(client: OpenRouterClient): TurnEngine {
+  return new TurnEngine(
+    config,
+    client,
+    async () => 'system prompt',
+    async () => storyPackSource,
+  )
 }
 
 function successfulTurnOutput(): TurnOutput {
@@ -138,6 +169,151 @@ function successfulTurnOutput(): TurnOutput {
 }
 
 describe('turn engine model telemetry', () => {
+  test('uses sanitized free Nemotron only at a scene boundary before the authoritative turn', async () => {
+    const requests: ChatJsonRequest[] = []
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        requests.push(request)
+        if (request.model === 'nvidia/nemotron-3-ultra-550b-a55b:free') {
+          return {
+            requestId: 'request:advisory',
+            model: request.model,
+            output: {
+              plan_version: 'scene-plan@0.2',
+              scene_goal: 'Проверить границы восьмого круга',
+              dramatic_question: 'Почему круг ответил игроку?',
+              active_world_pressures: [],
+              npc_intentions: [],
+              unresolved_consequences: [],
+              allowed_directions: [{
+                direction: 'Осмотреть печать',
+                type: 'safe',
+                required_facts: [],
+                pressure_advanced: [],
+              }],
+              avoid_repetition: [],
+              forbidden_next_moves: ['Не объявлять игрока богом'],
+              climax_conditions: [],
+              potential_media_trigger: {
+                event_ref: null,
+                eligible_only_if: [],
+                visual_uniqueness: 'none',
+              },
+              expires_after_turns: 4,
+            },
+            usage: { total_tokens: 20, cost: 0 },
+          }
+        }
+        return {
+          requestId: 'request:primary',
+          model: request.model,
+          output: successfulTurnOutput(),
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+
+    const result = await createEngine(client).execute(command, {
+      ...snapshot,
+      history: [],
+    })
+
+    expect(requests.map(request => request.model)).toEqual([
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'deepseek/deepseek-v4-flash',
+    ])
+    expect(requests[0]).toMatchObject({
+      sanitizedFreeEndpoint: true,
+      jsonMode: 'prompt-only',
+      timeoutMs: TURN_MODEL_TIMEOUTS.advisoryMs,
+      payload: {
+        story_pack_id: 'eighth-seal',
+        scene_id: snapshot.scene.id,
+        active_threads: ['current_scene_objective'],
+        pack_constraints: ['no_new_canon', 'no_pii', 'advisory_only'],
+      },
+    })
+    expect(JSON.stringify(requests[0]?.payload)).not.toContain(command.text)
+    expect(requests[1]?.payload.scene).toMatchObject({
+      scene_plan: {
+        plan_version: 'scene-plan@0.2',
+        expires_after_turns: 4,
+      },
+    })
+    expect(result.advisoryUsed).toBe(true)
+  })
+
+  test('builds the model packet from the canonical StoryPack source', async () => {
+    const requests: ChatJsonRequest[] = []
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        requests.push(request)
+        return {
+          requestId: 'request:canonical-pack',
+          model: request.model,
+          output: successfulTurnOutput(),
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+    const contextualSnapshot: EngineSessionSnapshot = {
+      ...snapshot,
+      history: [{
+        turnId: 'turn:previous',
+        sceneId: snapshot.scene.id,
+        mode: 'exploration',
+        playerText: 'Я проверил печать у восьмого круга.',
+        outcome: 'partial_success',
+        narrative: 'Печать ответила слабым свечением.',
+        costsAndConsequences: ['След на ладони'],
+        unresolvedAmbiguities: ['Кто нарушил клятву'],
+      }],
+      confirmedFacts: [{
+        id: 'fact:previous',
+        claim: 'Печать реагирует на игрока.',
+        truthStatus: 'observed',
+        sourceEventIds: ['event:previous'],
+        createdAt: '2026-01-01T00:00:00.000Z',
+      }],
+      knowledge: [{
+        characterId: 'character:maelis',
+        factId: 'fact:previous',
+        sourceEventId: 'event:previous',
+        confidence: 0.8,
+      }],
+    }
+
+    await createEngine(client).execute(command, contextualSnapshot)
+
+    expect(requests[0]?.payload.pack_rules).toMatchObject({
+      technical_pack_id: storyPackSource.technicalPackId,
+      source_file: storyPackSource.sourceFile,
+      source_hash: storyPackSource.sourceHash,
+      prompt_overlay: storyPackSource.promptOverlay,
+      canonical_core_markdown: storyPackSource.canonicalCore,
+    })
+    expect(requests[0]?.payload.canon_snapshot).toMatchObject({
+      hard_canon: [{
+        fact_id: 'canon:eighth-seal:1',
+        claim: storyPackSource.hardCanon[0],
+      }],
+      per_character_knowledge: [{
+        character_id: 'character:maelis',
+        fact_id: 'fact:previous',
+        claim: 'Печать реагирует на игрока.',
+      }],
+    })
+    expect(requests[0]?.payload.relevant_memories).toEqual([{
+      turn_id: 'turn:previous',
+      mode: 'exploration',
+      player_input: 'Я проверил печать у восьмого круга.',
+      outcome: 'partial_success',
+      narrative_summary: 'Печать ответила слабым свечением.',
+      costs_and_consequences: ['След на ладони'],
+      unresolved_ambiguities: ['Кто нарушил клятву'],
+    }])
+  })
+
   test('runs only the authoritative model on a normal turn with a bounded timeout', async () => {
     const calls: Array<Pick<ChatJsonRequest, 'model' | 'timeoutMs'>> = []
     const client = {
@@ -151,7 +327,7 @@ describe('turn engine model telemetry', () => {
         }
       },
     } as unknown as OpenRouterClient
-    const engine = new TurnEngine(config, client, async () => 'system prompt')
+    const engine = createEngine(client)
 
     const result = await engine.execute(command, snapshot)
 
@@ -176,7 +352,7 @@ describe('turn engine model telemetry', () => {
         }
       },
     } as unknown as OpenRouterClient
-    const engine = new TurnEngine(config, client, async () => 'system prompt')
+    const engine = createEngine(client)
 
     let thrown: unknown
     try {
@@ -229,7 +405,7 @@ describe('turn engine model telemetry', () => {
         }
       },
     } as unknown as OpenRouterClient
-    const engine = new TurnEngine(config, client, async () => 'system prompt')
+    const engine = createEngine(client)
 
     const result = await engine.execute(command, snapshot)
 
@@ -266,7 +442,7 @@ describe('turn engine model telemetry', () => {
         }
       },
     } as unknown as OpenRouterClient
-    const engine = new TurnEngine(config, client, async () => 'system prompt')
+    const engine = createEngine(client)
     let validations = 0
 
     const result = await engine.execute(command, snapshot, undefined, () => {
@@ -297,6 +473,7 @@ describe('turn engine model telemetry', () => {
         const output = successfulTurnOutput()
         output.turn_id = 'turn:model-invented'
         output.expected_session_version = 999
+        output.difficulty.final_band = 5
         output.operations = [{
           type: 'event.create',
           operation_index: 0,
@@ -316,12 +493,13 @@ describe('turn engine model telemetry', () => {
         }
       },
     } as unknown as OpenRouterClient
-    const engine = new TurnEngine(config, client, async () => 'system prompt')
+    const engine = createEngine(client)
 
     const result = await engine.execute(command, snapshot)
 
     expect(result.output.turn_id).toBe(command.idempotency_key)
     expect(result.output.expected_session_version).toBe(command.expected_session_version)
+    expect(result.output.difficulty.final_band).toBe(1)
     expect(result.output.operations[0]).toMatchObject({
       type: 'event.create',
       source_turn_id: command.idempotency_key,
@@ -344,7 +522,7 @@ describe('turn engine model telemetry', () => {
         }
       },
     } as unknown as OpenRouterClient
-    const engine = new TurnEngine(config, client, async () => 'system prompt')
+    const engine = createEngine(client)
     let validations = 0
 
     const result = await engine.execute(command, snapshot, undefined, () => {
@@ -383,7 +561,7 @@ describe('turn engine model telemetry', () => {
         })
       },
     } as unknown as OpenRouterClient
-    const engine = new TurnEngine(config, client, async () => 'system prompt')
+    const engine = createEngine(client)
     const controller = new AbortController()
     const request = engine.execute(command, snapshot, controller.signal)
     while (calls === 0)

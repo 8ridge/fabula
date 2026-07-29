@@ -41,13 +41,17 @@ export interface EngineSessionSnapshot {
   locations: LocationProjection[]
   history: Array<{
     turnId: string
+    sceneId: string | null
     mode: GameTurnCommand['mode']
     playerText: string
     outcome: string
     narrative: string
+    costsAndConsequences: string[]
+    unresolvedAmbiguities: string[]
   }>
   confirmedEvents: StoredEvent[]
   confirmedFacts: StoredFact[]
+  knowledge: StoredKnowledge[]
   reservedIds: {
     events: string[]
     facts: string[]
@@ -85,10 +89,13 @@ interface StoredKnowledge {
 
 interface StoredTurn {
   turnId: string
+  sceneId?: string
   mode: GameTurnCommand['mode']
   playerText: string
   outcome: string
   narrative: string
+  costsAndConsequences?: string[]
+  unresolvedAmbiguities?: string[]
 }
 
 interface StoredIdempotencyRecord {
@@ -824,9 +831,15 @@ export class GameSessionRepository {
       inventory: clone(session.snapshot.inventory),
       characters: clone(session.snapshot.characters),
       locations: clone(session.snapshot.locations),
-      history: clone(session.turns.slice(-12)),
+      history: session.turns.slice(-12).map(turn => ({
+        ...clone(turn),
+        sceneId: turn.sceneId || null,
+        costsAndConsequences: [...(turn.costsAndConsequences || [])],
+        unresolvedAmbiguities: [...(turn.unresolvedAmbiguities || [])],
+      })),
       confirmedEvents: clone(session.events.slice(-24)),
       confirmedFacts: clone(session.facts.slice(-32)),
+      knowledge: clone(session.knowledge),
       reservedIds,
       allowedOperationTypes: ALLOWED_TURN_OPERATION_TYPES,
     }
@@ -899,10 +912,13 @@ export class GameSessionRepository {
     nextSession.snapshot.updated_at = createdAt
     nextSession.turns.push({
       turnId: command.idempotency_key,
+      sceneId: session.snapshot.scene.id,
       mode: command.mode,
       playerText: command.text,
       outcome: result.output.resolution.outcome,
       narrative: result.output.narrative_text,
+      costsAndConsequences: [...result.output.resolution.costs_and_consequences],
+      unresolvedAmbiguities: [...result.output.audit.unresolved_ambiguities],
     })
     if (nextSession.turns.length > 40)
       nextSession.turns.splice(0, nextSession.turns.length - 40)
