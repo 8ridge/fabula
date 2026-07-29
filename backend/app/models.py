@@ -55,3 +55,21 @@ class OAuthAccount(Base):
     __table_args__ = (
         UniqueConstraint("provider", "provider_user_id", name="uq_oauth_provider_uid"),
     )
+
+
+class UserSession(Base):
+    __tablename__ = "sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    device: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    country: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
