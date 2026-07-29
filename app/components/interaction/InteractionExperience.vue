@@ -366,8 +366,15 @@ onBeforeUnmount(() => {
                 @edit="editMessage"
               />
 
-              <div v-if="game.sending.value" class="py-2 font-interface text-[11px] text-[#9b9ba6]" role="status">
-                <span class="mr-2 text-[var(--accent)]">● ● ●</span>Мир проверяет действие и его последствия
+              <div v-if="game.sending.value" class="flex items-center gap-3 py-2 font-interface text-[11px] text-[#9b9ba6]" role="status">
+                <span><span class="mr-2 text-[var(--accent)]">● ● ●</span>Мир проверяет последствия · {{ game.turnElapsedSeconds.value }} с</span>
+                <button
+                  type="button"
+                  class="rounded-lg border border-white/10 px-2.5 py-1 text-[10px] text-fabula-300 transition hover:border-red-300/35 hover:text-red-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                  @click="game.cancelTurn()"
+                >
+                  Остановить
+                </button>
               </div>
             </div>
           </div>
@@ -384,6 +391,7 @@ onBeforeUnmount(() => {
             @choose-suggestion="chooseSuggestion"
             @remove-item="removeItem"
             @submit="submitTurn"
+            @cancel="game.cancelTurn()"
             @open-tool="openTool"
           />
         </section>

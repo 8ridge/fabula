@@ -6,16 +6,19 @@ import { ContractError, parseTurnOutput, TURN_OUTPUT_JSON_SCHEMA } from './contr
 import { AiExecutionError } from './http'
 import type { SafeModelRun } from './http'
 import { OpenRouterClient, OpenRouterError } from './openrouter'
-import { sanitizeNemotronPayload } from './security'
 import type { EngineSessionSnapshot, SessionTurnResult } from '../game/session-repository'
 import { getStoryPackContext } from '../game/storypack-context'
-import { getStandaloneContract, parseStandaloneOutput } from './standalone-contracts'
 
 export interface TurnEngineResult extends SessionTurnResult {
   modelRuns: SafeModelRun[]
 }
 
 type PromptLoader = (moduleId: 'authoritative-turn' | 'scene-plan') => Promise<string>
+
+export const TURN_MODEL_TIMEOUTS = {
+  primaryMs: 45_000,
+  fallbackMs: 25_000,
+} as const
 
 export class TurnEngine {
   private readonly client: OpenRouterClient
@@ -30,23 +33,27 @@ export class TurnEngine {
     this.promptLoader = promptLoader
   }
 
-  async execute(command: TurnCommand, snapshot: EngineSessionSnapshot): Promise<TurnEngineResult> {
+  async execute(
+    command: TurnCommand,
+    snapshot: EngineSessionSnapshot,
+    signal?: AbortSignal,
+  ): Promise<TurnEngineResult> {
     const modelRuns: SafeModelRun[] = []
-    const advisory = await this.maybePlan(command, snapshot, modelRuns)
-    const packet = buildTurnPacket(command, snapshot, advisory)
+    const packet = buildTurnPacket(command, snapshot, null)
     const primary = await this.tryTurnModel(
       AI_MODELS.deepseek.slug,
       'primary',
       packet,
       command,
       modelRuns,
+      signal,
     )
     if (primary) {
       return {
         output: primary,
         model: AI_MODELS.deepseek.slug,
         fallbackUsed: false,
-        advisoryUsed: advisory !== null,
+        advisoryUsed: false,
         modelRuns,
       }
     }
@@ -57,6 +64,7 @@ export class TurnEngine {
       packet,
       command,
       modelRuns,
+      signal,
     )
     if (!fallback) {
       throw new AiExecutionError(
@@ -70,90 +78,8 @@ export class TurnEngine {
       output: fallback,
       model: AI_MODELS.mistral.slug,
       fallbackUsed: true,
-      advisoryUsed: advisory !== null,
+      advisoryUsed: false,
       modelRuns,
-    }
-  }
-
-  private async maybePlan(
-    command: TurnCommand,
-    snapshot: EngineSessionSnapshot,
-    modelRuns: SafeModelRun[],
-  ): Promise<Record<string, JsonValue> | null> {
-    const sanitized = sanitizeNemotronPayload({
-      story_pack_id: snapshot.storyPackId,
-      scene_id: snapshot.scene.id,
-      entity_roles: ['player', 'present_npc'],
-      confirmed_fact_refs: snapshot.confirmedFacts.slice(-16).map(fact => fact.id),
-      confirmed_event_refs: snapshot.confirmedEvents.slice(-16).map(event => event.id),
-      resource_bands: ['unknown'],
-      active_threads: [snapshot.scene.objective],
-      unresolved_callbacks: [],
-      pack_constraints: ['no_new_canon', 'no_pii'],
-      recent_outcome_bands: snapshot.history.slice(-6).map(turn => turn.outcome),
-      available_paths: ['action', 'speech', 'exploration'],
-      allowed_difficulty_knobs: ['clarity', 'time_pressure', 'opposition'],
-    }) as Record<string, JsonValue>
-    const freePlan = await this.tryScenePlan(
-      AI_MODELS.nemotronFree,
-      sanitized,
-      true,
-      modelRuns,
-    )
-    if (freePlan)
-      return freePlan
-    return this.tryScenePlan(
-      AI_MODELS.nemotronPaid,
-      sanitized,
-      false,
-      modelRuns,
-    )
-  }
-
-  private async tryScenePlan(
-    model: typeof AI_MODELS.nemotronFree | typeof AI_MODELS.nemotronPaid,
-    payload: Record<string, JsonValue>,
-    freeEndpoint: boolean,
-    modelRuns: SafeModelRun[],
-  ): Promise<Record<string, JsonValue> | null> {
-    let result: Awaited<ReturnType<OpenRouterClient['chatJson']>> | null = null
-    try {
-      const contract = getStandaloneContract('scene-plan')
-      result = await this.client.chatJson({
-        model: model.slug,
-        system: await this.promptLoader('scene-plan'),
-        payload,
-        maxOutputTokens: 1800,
-        maxPrice: freeEndpoint
-          ? { prompt: 0, completion: 0 }
-          : { prompt: 0.55, completion: 2.3 },
-        sanitizedFreeEndpoint: freeEndpoint,
-        jsonMode: model.jsonMode,
-        schema: model.jsonMode === 'json-schema' ? contract : undefined,
-      })
-      const output = parseStandaloneOutput('scene-plan', result.output)
-      modelRuns.push({
-        role: 'advisory',
-        model: result.model,
-        request_id: result.requestId,
-        usage: result.usage,
-        status: 'accepted',
-        error_code: null,
-        validation_errors: [],
-      })
-      return output
-    }
-    catch (error) {
-      modelRuns.push({
-        role: 'advisory',
-        model: result?.model || openRouterModel(error) || model.slug,
-        request_id: result?.requestId || openRouterRequestId(error),
-        usage: result?.usage || openRouterUsage(error),
-        status: 'discarded',
-        error_code: safeErrorCode(error),
-        validation_errors: safeValidationErrors(error),
-      })
-      return null
     }
   }
 
@@ -163,6 +89,7 @@ export class TurnEngine {
     packet: Record<string, JsonValue>,
     command: TurnCommand,
     modelRuns: SafeModelRun[],
+    signal?: AbortSignal,
   ) {
     let result: Awaited<ReturnType<OpenRouterClient['chatJson']>> | null = null
     try {
@@ -171,6 +98,8 @@ export class TurnEngine {
         system: await this.promptLoader('authoritative-turn'),
         payload: packet,
         maxOutputTokens: 4000,
+        timeoutMs: role === 'primary' ? TURN_MODEL_TIMEOUTS.primaryMs : TURN_MODEL_TIMEOUTS.fallbackMs,
+        signal,
         maxPrice: role === 'primary'
           ? { prompt: 0.15, completion: 0.3 }
           : { prompt: 0.25, completion: 0.8 },
@@ -201,6 +130,8 @@ export class TurnEngine {
         error_code: safeErrorCode(error),
         validation_errors: safeValidationErrors(error),
       })
+      if (signal?.aborted)
+        throw error
       return null
     }
   }

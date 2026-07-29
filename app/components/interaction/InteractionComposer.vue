@@ -17,6 +17,7 @@ const emit = defineEmits<{
   chooseSuggestion: [suggestion: SuggestedAction]
   removeItem: [itemId: string]
   submit: []
+  cancel: []
   openTool: [tool: InteractionToolName]
 }>()
 
@@ -127,12 +128,24 @@ defineExpose({ resize, focus, selectEnd })
         <div class="flex items-center gap-2">
           <span class="font-interface text-[10px] text-[#9b9ba6]">{{ input.length }}/1200</span>
           <button
-            type="submit"
-            class="grid size-10 place-items-center rounded-xl bg-[var(--accent)] text-[22px] text-[#111218] transition hover:bg-[var(--accent-light)] disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-light)]"
-            aria-label="Отправить ход"
-            :disabled="turnPending || !input.trim()"
+            v-if="turnPending"
+            type="button"
+            class="grid size-10 place-items-center rounded-xl border border-red-300/35 bg-red-300/10 text-[20px] text-red-100 transition hover:bg-red-300/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-light)]"
+            aria-label="Остановить генерацию"
+            title="Остановить генерацию"
+            @click.stop="emit('cancel')"
           >
-            {{ turnPending ? '…' : '↑' }}
+            ■
+          </button>
+          <button
+            v-else
+            type="submit"
+            class="grid size-10 place-items-center rounded-xl bg-[var(--accent)] text-[20px] text-[#111218] transition hover:bg-[var(--accent-light)] disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-light)]"
+            aria-label="Отправить ход"
+            title="Отправить ход"
+            :disabled="!input.trim()"
+          >
+            ↑
           </button>
         </div>
       </div>

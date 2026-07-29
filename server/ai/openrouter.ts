@@ -13,6 +13,8 @@ export interface ChatJsonRequest {
   system: string
   payload: Record<string, JsonValue>
   maxOutputTokens: number
+  timeoutMs?: number
+  signal?: AbortSignal
   maxPrice?: {
     prompt?: number
     completion?: number
@@ -169,9 +171,26 @@ export class OpenRouterClient {
     return headers
   }
 
-  private async request(path: string, init: RequestInit, timeoutMs: number): Promise<{ body: unknown, requestId: string | null }> {
+  private async request(
+    path: string,
+    init: RequestInit,
+    timeoutMs: number,
+    externalSignal?: AbortSignal,
+  ): Promise<{ body: unknown, requestId: string | null }> {
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    let timedOut = false
+    const abortFromExternal = () => controller.abort()
+    if (externalSignal?.aborted)
+      abortFromExternal()
+    else
+      externalSignal?.addEventListener('abort', abortFromExternal, { once: true })
+    const timer = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, timeoutMs)
+    const abortedError = () => externalSignal?.aborted && !timedOut
+      ? new OpenRouterError('UPSTREAM_ABORTED', 'Запрос к OpenRouter отменен.', 499, true)
+      : new OpenRouterError('UPSTREAM_TIMEOUT', 'OpenRouter не ответил вовремя.', 504, true)
     let response: Response | undefined
     let body: unknown = null
     try {
@@ -183,11 +202,11 @@ export class OpenRouterClient {
       try {
         body = await response.json()
         if (controller.signal.aborted)
-          throw new OpenRouterError('UPSTREAM_TIMEOUT', 'OpenRouter не ответил вовремя.', 504, true)
+          throw abortedError()
       }
       catch (error) {
         if (controller.signal.aborted || (error instanceof Error && error.name === 'AbortError'))
-          throw new OpenRouterError('UPSTREAM_TIMEOUT', 'OpenRouter не ответил вовремя.', 504, true)
+          throw abortedError()
         if (response.ok)
           throw new OpenRouterError('UPSTREAM_INVALID_RESPONSE', 'OpenRouter вернул некорректный ответ.')
       }
@@ -196,11 +215,12 @@ export class OpenRouterClient {
       if (error instanceof OpenRouterError)
         throw error
       if (error instanceof Error && error.name === 'AbortError')
-        throw new OpenRouterError('UPSTREAM_TIMEOUT', 'OpenRouter не ответил вовремя.', 504, true)
+        throw abortedError()
       throw new OpenRouterError('UPSTREAM_UNAVAILABLE', 'Не удалось связаться с OpenRouter.', 502, true)
     }
     finally {
       clearTimeout(timer)
+      externalSignal?.removeEventListener('abort', abortFromExternal)
     }
 
     if (!response)
@@ -259,7 +279,8 @@ export class OpenRouterClient {
     const { body: responseBody, requestId } = await this.request(
       '/chat/completions',
       { method: 'POST', body: JSON.stringify(body) },
-      this.timeouts.chatMs,
+      request.timeoutMs ?? this.timeouts.chatMs,
+      request.signal,
     )
     if (!isRecord(responseBody) || !Array.isArray(responseBody.choices) || !isRecord(responseBody.choices[0])) {
       throw new OpenRouterError('UPSTREAM_INVALID_RESPONSE', 'OpenRouter вернул неожиданный формат ответа.')

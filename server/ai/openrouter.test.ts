@@ -138,6 +138,44 @@ describe('OpenRouter transport', () => {
     })).rejects.toMatchObject({ code: 'UPSTREAM_TIMEOUT' })
   })
 
+  test('allows the turn orchestrator to impose a shorter per-call timeout', async () => {
+    const fakeFetch = async () => new Response(new ReadableStream({
+      start(controller) {
+        setTimeout(() => {
+          controller.enqueue(new TextEncoder().encode('{"choices":[]}'))
+          controller.close()
+        }, 30)
+      },
+    }), { status: 200, headers: { 'content-type': 'application/json' } })
+
+    await expect(new OpenRouterClient(config, fakeFetch as typeof fetch).chatJson({
+      model: 'deepseek/deepseek-v4-flash',
+      system: 'system',
+      payload: {},
+      maxOutputTokens: 100,
+      timeoutMs: 5,
+    })).rejects.toMatchObject({ code: 'UPSTREAM_TIMEOUT' })
+  })
+
+  test('distinguishes caller cancellation from an upstream timeout', async () => {
+    const fakeFetch = async (_url: string | URL | Request, init?: RequestInit) =>
+      await new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+      })
+    const controller = new AbortController()
+    const request = new OpenRouterClient(config, fakeFetch as typeof fetch).chatJson({
+      model: 'deepseek/deepseek-v4-flash',
+      system: 'system',
+      payload: {},
+      maxOutputTokens: 100,
+      signal: controller.signal,
+    })
+
+    controller.abort()
+
+    await expect(request).rejects.toMatchObject({ code: 'UPSTREAM_ABORTED' })
+  })
+
   test('preflights image pricing and pins the provider before a paid request', async () => {
     const calls: Array<{ url: string, body: Record<string, unknown> | null }> = []
     const fakeFetch = async (url: string | URL | Request, init?: RequestInit) => {

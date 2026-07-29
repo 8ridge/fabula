@@ -22,6 +22,19 @@ interface SubmitTurnInput {
 }
 
 const SESSION_ID = /^session:[0-9a-f-]{36}$/i
+const TURN_CLIENT_TIMEOUT_MS = 75_000
+
+type TurnAbortReason = 'user' | 'deadline' | 'unmount' | null
+
+function isAbortError(error: unknown): boolean {
+  let current = error as { name?: string, cause?: unknown } | null
+  for (let depth = 0; current && depth < 4; depth += 1) {
+    if (current.name === 'AbortError')
+      return true
+    current = current.cause as { name?: string, cause?: unknown } | null
+  }
+  return false
+}
 
 function apiMessage(error: unknown): string {
   const data = (error as { data?: { code?: string, message?: string } })?.data
@@ -29,6 +42,10 @@ function apiMessage(error: unknown): string {
     return 'Нейросетевой контур еще не подключен на этом сервере. История сохранена, но новый ход пока недоступен.'
   if (data?.code === 'SESSION_VERSION_CONFLICT')
     return 'История уже изменилась в другой вкладке. Свежая версия загружена; проверь текст и отправь его снова.'
+  if (data?.code === 'MODEL_FALLBACK_EXHAUSTED' || data?.code === 'UPSTREAM_TIMEOUT')
+    return 'Нейросети не завершили ход вовремя. Текст сохранен — можно повторить без создания дубликата.'
+  if (data?.code === 'UPSTREAM_RATE_LIMITED')
+    return 'OpenRouter временно ограничил запросы. Текст сохранен — повтори ход немного позже.'
   return data?.message || 'Не удалось получить продолжение. Текст сохранен — можно повторить отправку.'
 }
 
@@ -37,8 +54,13 @@ export function useGameSession(sessionId: Ref<string | null>) {
   const startedSessions = ref<GameSessionSummary[]>([])
   const loading = ref(true)
   const sending = ref(false)
+  const turnElapsedSeconds = ref(0)
   const errorMessage = ref('')
   const pendingTurn = ref<PendingTurn | null>(null)
+  let activeTurnController: AbortController | null = null
+  let turnElapsedTimer: ReturnType<typeof setInterval> | null = null
+  let turnDeadlineTimer: ReturnType<typeof setTimeout> | null = null
+  let turnAbortReason: TurnAbortReason = null
 
   const draftKey = computed(() => sessionId.value ? `fabula:draft:${sessionId.value}` : '')
   const pendingKey = computed(() => sessionId.value ? `fabula:pending:${sessionId.value}` : '')
@@ -66,6 +88,22 @@ export function useGameSession(sessionId: Ref<string | null>) {
       localStorage.setItem(pendingKey.value, JSON.stringify(value))
     else
       localStorage.removeItem(pendingKey.value)
+  }
+
+  function clearTurnTimers() {
+    if (turnElapsedTimer)
+      clearInterval(turnElapsedTimer)
+    if (turnDeadlineTimer)
+      clearTimeout(turnDeadlineTimer)
+    turnElapsedTimer = null
+    turnDeadlineTimer = null
+  }
+
+  function cancelTurn() {
+    if (!sending.value || !activeTurnController)
+      return
+    turnAbortReason = 'user'
+    activeTurnController.abort()
   }
 
   async function loadStartedSessions() {
@@ -129,15 +167,30 @@ export function useGameSession(sessionId: Ref<string | null>) {
     if (!session.value || sending.value || !input.text.trim())
       return false
     sending.value = true
+    turnElapsedSeconds.value = 0
     errorMessage.value = ''
     const command = buildCommand(input)
     writePending({ command, created_at: new Date().toISOString() })
+    const controller = new AbortController()
+    activeTurnController = controller
+    turnAbortReason = null
+    const startedAt = Date.now()
+    turnElapsedTimer = setInterval(() => {
+      turnElapsedSeconds.value = Math.floor((Date.now() - startedAt) / 1000)
+    }, 1000)
+    turnDeadlineTimer = setTimeout(() => {
+      if (activeTurnController !== controller)
+        return
+      turnAbortReason = 'deadline'
+      controller.abort()
+    }, TURN_CLIENT_TIMEOUT_MS)
     try {
       const response = await $fetch<GameTurnResponse>(
         `/api/game/sessions/${encodeURIComponent(session.value.id)}/turns`,
         {
           method: 'POST',
           body: command,
+          signal: controller.signal,
         },
       )
       session.value = response.session
@@ -148,6 +201,13 @@ export function useGameSession(sessionId: Ref<string | null>) {
       return true
     }
     catch (error) {
+      if (isAbortError(error)) {
+        if (turnAbortReason === 'user')
+          errorMessage.value = 'Ход остановлен. Текст сохранен — повторная отправка продолжит тот же запрос без дубликата.'
+        else if (turnAbortReason === 'deadline')
+          errorMessage.value = 'Ход не завершился за 75 секунд и был остановлен. Текст сохранен для повтора.'
+        return false
+      }
       const message = apiMessage(error)
       const code = (error as { data?: { code?: string } })?.data?.code
       if (code === 'SESSION_VERSION_CONFLICT' || code === 'INVENTORY_VERSION_CONFLICT') {
@@ -158,7 +218,11 @@ export function useGameSession(sessionId: Ref<string | null>) {
       return false
     }
     finally {
-      sending.value = false
+      if (activeTurnController === controller) {
+        activeTurnController = null
+        clearTurnTimers()
+        sending.value = false
+      }
     }
   }
 
@@ -181,16 +245,25 @@ export function useGameSession(sessionId: Ref<string | null>) {
     void load()
   })
 
+  onScopeDispose(() => {
+    turnAbortReason = 'unmount'
+    activeTurnController?.abort()
+    activeTurnController = null
+    clearTurnTimers()
+  })
+
   return {
     session,
     startedSessions,
     loading,
     sending,
+    turnElapsedSeconds,
     errorMessage,
     pendingTurn,
     load,
     loadStartedSessions,
     submit,
+    cancelTurn,
     readDraft,
     saveDraft,
   }

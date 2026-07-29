@@ -14,6 +14,10 @@ export async function handleGameTurn(event: H3Event, pathSessionId?: string) {
   const config = resolveAiConfig(useRuntimeConfig(event) as unknown as Record<string, unknown>)
   assertAiConfigured(config)
   const release = acquireRateLimit(event)
+  const controller = new AbortController()
+  const abortTurn = () => controller.abort()
+  event.node.req.once('aborted', abortTurn)
+  event.node.res.once('close', abortTurn)
   try {
     const command = parseTurnCommand(await readBody(event))
     if (pathSessionId && command.session_id !== pathSessionId)
@@ -24,13 +28,15 @@ export async function handleGameTurn(event: H3Event, pathSessionId?: string) {
     const response = await getGameSessionRepository().executeTurn(
       ownerId,
       command,
-      snapshot => engine.execute(command, snapshot),
+      snapshot => engine.execute(command, snapshot, controller.signal),
       requestId,
     )
     setHeader(event, 'Cache-Control', 'no-store')
     return response
   }
   finally {
+    event.node.req.off('aborted', abortTurn)
+    event.node.res.off('close', abortTurn)
     release()
   }
 }
