@@ -7,13 +7,15 @@ from .database import get_db
 from .models import User
 from .security import decode_access_token
 
-bearer = HTTPBearer(auto_error=True)
+bearer = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    creds: HTTPAuthorizationCredentials = Depends(bearer),
+    creds: HTTPAuthorizationCredentials | None = Depends(bearer),
     db: AsyncSession = Depends(get_db),
 ) -> User:
+    if creds is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Требуется авторизация")
     payload = decode_access_token(creds.credentials)
     if payload is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Недействительный токен")

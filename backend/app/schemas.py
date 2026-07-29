@@ -34,6 +34,8 @@ class UserOut(BaseModel):
     avatar_url: str | None = None
     created_at: datetime
     providers: list[str] = []
+    has_avatar: bool = False
+    avatar_v: int | None = None
 
     model_config = {"from_attributes": True}
 

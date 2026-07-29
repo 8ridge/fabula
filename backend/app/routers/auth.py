@@ -1,5 +1,18 @@
 """Роуты аутентификации и профиля."""
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from datetime import datetime, timezone
+from io import BytesIO
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
+from PIL import Image
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -67,6 +80,8 @@ async def _user_out(db: AsyncSession, user: User) -> UserOut:
         avatar_url=user.avatar_url,
         created_at=user.created_at,
         providers=await _providers(db, user),
+        has_avatar=user.avatar_data is not None,
+        avatar_v=int(user.avatar_updated_at.timestamp()) if user.avatar_updated_at else None,
     )
 
 
@@ -269,3 +284,62 @@ async def unlink_google(
         )
     )
     await db.commit()
+
+
+MAX_AVATAR_BYTES = 3 * 1024 * 1024
+MAX_AVATAR_DIM = 6000
+
+
+def _process_avatar(raw: bytes) -> bytes:
+    """Валидирует картинку и возвращает webp 256x256 (квадрат, центр-кроп)."""
+    if len(raw) > MAX_AVATAR_BYTES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Файл слишком большой (макс 3 МБ)")
+    try:
+        Image.open(BytesIO(raw)).verify()
+        img = Image.open(BytesIO(raw))
+        if img.width > MAX_AVATAR_DIM or img.height > MAX_AVATAR_DIM:
+            raise ValueError("too large")
+        img = img.convert("RGB")
+    except Exception:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Файл не является картинкой")
+    side = min(img.width, img.height)
+    left = (img.width - side) // 2
+    top = (img.height - side) // 2
+    img = img.crop((left, top, left + side, top + side)).resize((256, 256))
+    out = BytesIO()
+    img.save(out, format="WEBP", quality=90)
+    return out.getvalue()
+
+
+@router.post("/avatar")
+async def upload_avatar(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    raw = await file.read()
+    user.avatar_data = _process_avatar(raw)
+    user.avatar_updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    return {"avatar": True, "v": int(user.avatar_updated_at.timestamp())}
+
+
+@router.delete("/avatar", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_avatar(
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    user.avatar_data = None
+    user.avatar_updated_at = None
+    await db.commit()
+
+
+@router.get("/avatar/{user_id}")
+async def get_avatar(user_id: int, db: AsyncSession = Depends(get_db)):
+    u = await db.get(User, user_id)
+    if u is None or u.avatar_data is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Нет аватара")
+    return Response(
+        content=u.avatar_data,
+        media_type="image/webp",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
