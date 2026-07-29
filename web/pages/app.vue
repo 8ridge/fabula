@@ -98,7 +98,7 @@
           <div class="setrow" data-act="username"><span class="l"><span class="g">◈</span>Никнейм</span><span class="chev" data-p="username-mini"></span></div>
           <div class="setrow" data-act="password"><span class="l"><span class="g">⚿</span>Пароль</span><span class="chev">Изменить ›</span></div>
           <div class="setrow"><span class="l"><span class="g">✉</span>Почта</span><span class="chev" style="color:#7cc47f">подключена</span></div>
-          <div class="setrow"><span class="l"><span class="g">G</span>Google</span><span class="chev" data-p="google">скоро</span></div>
+          <div class="setrow" data-act="google"><span class="l"><span class="g">G</span>Google</span><span class="chev" data-p="google">скоро</span></div>
           <div class="setrow" data-act="logout"><span class="l"><span class="g">⎋</span>Выйти</span><span class="chev">›</span></div>
           <div class="setrow" data-act="logout-all"><span class="l"><span class="g">⎇</span>Выйти со всех устройств</span><span class="chev">›</span></div>
           <div class="list-h" style="margin-top:16px">Настройки</div>
@@ -220,6 +220,8 @@ useHead({
   link: [{ rel: 'stylesheet', href: '/assets/fonts/fonts.css' }]
 })
 
+const googleClientId = useRuntimeConfig().public.googleClientId || ''
+
 onMounted(() => {
   /* ===== сессия: читаем JWT-токен, положенный лендингом ===== */
   let session = null;
@@ -256,7 +258,7 @@ onMounted(() => {
     const badge = document.querySelector('[data-p="verified"]');
     if (badge) badge.style.display = data.email_verified ? '' : 'none';
     const gp = document.querySelector('[data-p="google"]');
-    if (gp) gp.textContent = data.providers.includes('google') ? 'подключён' : 'скоро';
+    if (gp) gp.textContent = data.providers.includes('google') ? 'привязан · отвязать' : 'привязать';
   }
   loadProfile();
 
@@ -288,6 +290,23 @@ onMounted(() => {
         const { res } = await apiAuth('/auth/change-password', 'POST', { current_password: cur, new_password: nw });
         if (res.ok) { toast('Пароль изменён, войдите заново'); clearSession(); }
         else toast('Неверный текущий пароль');
+        return;
+      }
+      if (act === 'google') {
+        const u = window.__fabulaUser || {};
+        if ((u.providers||[]).includes('google')) {
+          const { res } = await apiAuth('/auth/link/google', 'DELETE');
+          if (res.status === 400) toast('Сначала добавь пароль'); else if (res.ok) { toast('Google отвязан'); loadProfile(); }
+          return;
+        }
+        const clientId = googleClientId;
+        if (!clientId) { toast('Google-вход скоро'); return; }
+        await new Promise((resolve)=>{ if(window.google&&window.google.accounts) return resolve(); const s=document.createElement('script'); s.src='https://accounts.google.com/gsi/client'; s.async=true; s.defer=true; s.onload=()=>resolve(); document.head.appendChild(s); });
+        window.google.accounts.id.initialize({ client_id: clientId, callback: async (resp)=>{
+          const { res } = await apiAuth('/auth/link/google', 'POST', { id_token: resp.credential });
+          if (res.status === 409) toast('Этот Google уже привязан к другому'); else if (res.ok) { toast('Google привязан'); loadProfile(); }
+        }});
+        window.google.accounts.id.prompt();
         return;
       }
       if (act === 'delete') {
