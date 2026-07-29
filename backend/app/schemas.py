@@ -3,9 +3,11 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field
 
+USERNAME_PATTERN = r"^[A-Za-z0-9_]{3,20}$"
+
 
 class RegisterIn(BaseModel):
-    name: str = Field(min_length=1, max_length=80)
+    username: str = Field(pattern=USERNAME_PATTERN)
     email: EmailStr
     password: str = Field(min_length=6, max_length=128)
 
@@ -15,11 +17,23 @@ class LoginIn(BaseModel):
     password: str
 
 
+class UsernameIn(BaseModel):
+    username: str = Field(pattern=USERNAME_PATTERN)
+
+
+class ChangePasswordIn(BaseModel):
+    current_password: str | None = None
+    new_password: str = Field(min_length=6, max_length=128)
+
+
 class UserOut(BaseModel):
     id: int
+    username: str
     email: EmailStr
-    name: str
+    email_verified: bool
+    avatar_url: str | None = None
     created_at: datetime
+    providers: list[str] = []
 
     model_config = {"from_attributes": True}
 
