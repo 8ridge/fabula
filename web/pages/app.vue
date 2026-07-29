@@ -83,7 +83,8 @@
             <div class="p-actions"><button class="p-act" data-act="logout" title="Выйти"><span class="g">🚪</span>Выйти</button><button class="p-act p-gear" data-act="open-settings" title="Настройки">⚙</button></div>
           </div>
           <div class="p-top">
-            <div class="avatar"><img src="/assets/avatar.jpg" onerror="this.style.display='none'"><span class="fb">♞</span><span class="ring"></span></div>
+            <div class="avatar" id="avaBtn" title="Загрузить фото"><img id="avaImg" src="/assets/avatar.jpg" onerror="this.style.display='none'"><span class="fb">♞</span><span class="ring"></span><span class="ava-cam">✎</span></div>
+            <input type="file" id="avaFile" accept="image/*" style="display:none">
             <div class="p-name" data-p="username">@…</div>
             <div class="p-tier"><span data-p="email">…</span> <span data-p="verified" style="color:#7cc47f">✓ подтверждена</span></div>
             <div class="p-joined" data-p="joined" style="font-size:12px;color:var(--ink-mute)"></div>
@@ -251,7 +252,8 @@ onMounted(() => {
   async function apiAuth(path, method='GET', body=null){
     const token = localStorage.getItem('fabula-token') || '';
     const opt = { method, headers: { 'Authorization': 'Bearer ' + token } };
-    if (body){ opt.headers['Content-Type']='application/json'; opt.body = JSON.stringify(body); }
+    if (body instanceof FormData){ opt.body = body; }
+    else if (body){ opt.headers['Content-Type']='application/json'; opt.body = JSON.stringify(body); }
     const res = await fetch(AUTH_API + path, opt);
     let data = null; try { data = await res.json(); } catch(_){}
     return { res, data };
@@ -275,8 +277,30 @@ onMounted(() => {
     if (badge) badge.style.display = data.email_verified ? '' : 'none';
     const gp = document.querySelector('[data-p="google"]');
     if (gp) gp.textContent = data.providers.includes('google') ? 'привязан · отвязать' : 'привязать';
+    const av=document.getElementById('avaImg');
+    if(av && data.has_avatar){ av.style.display=''; av.src=AUTH_API + '/auth/avatar/'+data.id+'?v='+(data.avatar_v||''); }
   }
   loadProfile();
+
+  const avaBtn=document.getElementById('avaBtn'), avaFile=document.getElementById('avaFile');
+  if(avaBtn&&avaFile){
+    avaBtn.addEventListener('click', ()=>avaFile.click());
+    avaFile.addEventListener('change', async ()=>{
+      const f=avaFile.files&&avaFile.files[0]; if(!f) return;
+      if(f.size>3*1024*1024){ toast('Файл больше 3 МБ'); return; }
+      const img=new Image(); img.onload=async ()=>{
+        const s=Math.min(img.width,img.height), c=document.createElement('canvas'); c.width=256; c.height=256;
+        c.getContext('2d').drawImage(img,(img.width-s)/2,(img.height-s)/2,s,s,0,0,256,256);
+        c.toBlob(async (blob)=>{
+          const fd=new FormData(); fd.append('file', blob, 'avatar.webp');
+          const { res, data } = await apiAuth('/auth/avatar','POST',fd);
+          if(res.ok){ toast('Аватар обновлён'); const id=(window.__fabulaUser||{}).id; const el=document.getElementById('avaImg'); if(el&&id){ el.style.display=''; el.src=AUTH_API + '/auth/avatar/'+id+'?v='+((data&&data.v)||Date.now()); } }
+          else toast('Не удалось загрузить');
+        }, 'image/webp', 0.9);
+      };
+      img.src=URL.createObjectURL(f);
+    });
+  }
 
   function toast(msg){ const t=document.getElementById('toast'); if(!t) return; t.textContent=msg; t.classList.add('on'); setTimeout(()=>t.classList.remove('on'),2200); }
 
