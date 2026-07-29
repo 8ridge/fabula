@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # Откуда фронту разрешено стучаться (CORS). Через запятую.
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
+    google_client_id: str = ""
+    rate_limit_enabled: bool = True
+
     @property
     def cors_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
