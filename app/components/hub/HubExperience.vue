@@ -111,7 +111,7 @@ onBeforeUnmount(() => {
       {{ soundEnabled ? '🔊' : '🔇' }}
     </button>
 
-    <HubNavigation v-if="!readerOpen" :active-screen="activeScreen" @navigate="go" />
+    <HubNavigation v-if="!readerOpen" :active-screen="activeScreen" :story-id="selectedStoryId" @navigate="go" />
     <HubReader
       v-else
       :story-id="selectedStoryId"
@@ -135,6 +135,7 @@ onBeforeUnmount(() => {
     <HubSheet
       :view="sheetView"
       :story="selectedStory"
+      :story-id="selectedStoryId"
       @close="sheetView = null"
       @start="startStory"
       @open-inventory="openInventory"
