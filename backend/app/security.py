@@ -39,3 +39,26 @@ def decode_access_token(token: str) -> dict | None:
         return {"user_id": int(payload["sub"]), "ver": int(payload["ver"])}
     except (jwt.PyJWTError, KeyError, ValueError):
         return None
+
+
+def create_registration_token(google_sub: str, email: str) -> str:
+    now = datetime.now(timezone.utc)
+    payload = {
+        "purpose": "google_register",
+        "gsub": google_sub,
+        "email": email,
+        "iat": now,
+        "exp": now + timedelta(minutes=10),
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_alg)
+
+
+def decode_registration_token(token: str) -> dict | None:
+    """{'google_sub','email'} из валидного токена регистрации или None."""
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_alg])
+        if payload.get("purpose") != "google_register":
+            return None
+        return {"google_sub": payload["gsub"], "email": payload["email"]}
+    except (jwt.PyJWTError, KeyError):
+        return None
