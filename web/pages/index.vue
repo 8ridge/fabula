@@ -832,7 +832,7 @@ if('serviceWorker' in navigator){
   }
 
   // открытие по «Войти»
-  document.querySelectorAll('[data-auth]').forEach(a=>a.addEventListener('click',e=>{ e.preventDefault(); open(a.dataset.auth); }));
+  document.querySelectorAll('[data-auth]').forEach(a=>a.addEventListener('click',e=>{ if(!a.dataset.auth) return; e.preventDefault(); open(a.dataset.auth); }));
   $('authClose').addEventListener('click', close);
   scrim.addEventListener('click', e=>{ if(e.target===scrim) close(); });
   addEventListener('keydown', e=>{ if(e.key==='Escape' && scrim.classList.contains('on')) close(); });
