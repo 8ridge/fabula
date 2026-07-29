@@ -19,12 +19,38 @@ export class FabulaApiError extends Error {
   }
 }
 
+export interface SafeModelRun {
+  role: 'advisory' | 'primary' | 'fallback'
+  model: string
+  request_id: string | null
+  usage: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    total_tokens?: number
+    cost?: number
+  } | null
+  status: 'accepted' | 'discarded'
+  error_code: string | null
+  validation_errors: string[]
+}
+
+export class AiExecutionError extends FabulaApiError {
+  readonly modelRuns: SafeModelRun[]
+
+  constructor(code: string, message: string, modelRuns: SafeModelRun[], retryable = false) {
+    super(code, message, 502, retryable)
+    this.name = 'AiExecutionError'
+    this.modelRuns = modelRuns
+  }
+}
+
 export function respondWithError(event: H3Event, error: unknown, requestId: string, turnId?: string) {
   let code = 'INTERNAL_ERROR'
   let message = 'Не удалось обработать запрос.'
   let status = 500
   let retryable = false
   let fieldErrors: string[] = []
+  let modelRuns: SafeModelRun[] = []
 
   if (error instanceof FabulaApiError) {
     code = error.code
@@ -32,6 +58,8 @@ export function respondWithError(event: H3Event, error: unknown, requestId: stri
     status = error.status
     retryable = error.retryable
     fieldErrors = error.fieldErrors
+    if (error instanceof AiExecutionError)
+      modelRuns = error.modelRuns
   }
   else if (error instanceof ContractError) {
     code = error.code
@@ -59,5 +87,6 @@ export function respondWithError(event: H3Event, error: unknown, requestId: stri
     request_id: requestId,
     turn_id: turnId || null,
     field_errors: fieldErrors,
+    model_runs: modelRuns,
   }
 }

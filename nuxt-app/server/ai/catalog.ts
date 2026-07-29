@@ -1,5 +1,6 @@
 export type AiModuleKind = 'text' | 'image' | 'video'
-export type AiModuleGate = 'core' | 'nemotron' | 'aion' | 'media' | 'premium-media'
+export type AiModuleGate = 'core' | 'nemotron' | 'nemotron-paid' | 'aion' | 'media' | 'premium-media'
+export type AiJsonMode = 'json-schema' | 'json-object' | 'prompt-only'
 
 export interface AiModelDefinition {
   id: string
@@ -7,6 +8,7 @@ export interface AiModelDefinition {
   slug: string
   role: string
   modality: AiModuleKind
+  jsonMode: AiJsonMode
 }
 
 export interface AiModuleDefinition {
@@ -25,6 +27,12 @@ export interface AiModuleDefinition {
     image?: number
     request?: number
   }
+  estimatedMaxCostUsd?: number
+  maxInputReferences?: number
+  requiresInputReference?: boolean
+  fallbackModelId?: string
+  fallbackPolicy: string
+  disabledReason?: string
 }
 
 export const AI_MODELS = {
@@ -34,6 +42,7 @@ export const AI_MODELS = {
     slug: 'deepseek/deepseek-v4-flash',
     role: 'Авторитетный ход и структурные модули',
     modality: 'text',
+    jsonMode: 'json-schema',
   },
   nemotronFree: {
     id: 'nemotron-free',
@@ -41,6 +50,7 @@ export const AI_MODELS = {
     slug: 'nvidia/nemotron-3-ultra-550b-a55b:free',
     role: 'Обезличенный планировщик и директор сложности',
     modality: 'text',
+    jsonMode: 'prompt-only',
   },
   nemotronPaid: {
     id: 'nemotron-paid',
@@ -48,13 +58,15 @@ export const AI_MODELS = {
     slug: 'nvidia/nemotron-3-ultra-550b-a55b',
     role: 'Платный fallback планировщика',
     modality: 'text',
+    jsonMode: 'json-schema',
   },
   aion: {
     id: 'aion',
     label: 'Aion 3.0 Mini',
     slug: 'aion-labs/aion-3.0-mini',
-    role: 'Рассказчик подтвержденного исхода',
+    role: 'Рассказчик, отключенный до появления ZDR endpoint',
     modality: 'text',
+    jsonMode: 'json-object',
   },
   mistral: {
     id: 'mistral',
@@ -62,6 +74,7 @@ export const AI_MODELS = {
     slug: 'mistralai/mistral-small-2603',
     role: 'Fallback хода и QA',
     modality: 'text',
+    jsonMode: 'json-schema',
   },
   kreaScene: {
     id: 'krea-scene',
@@ -69,6 +82,7 @@ export const AI_MODELS = {
     slug: 'krea/krea-2-medium-turbo',
     role: 'Дешевый ключевой кадр',
     modality: 'image',
+    jsonMode: 'prompt-only',
   },
   kreaHero: {
     id: 'krea-hero',
@@ -76,6 +90,31 @@ export const AI_MODELS = {
     slug: 'krea/krea-2-large',
     role: 'Premium key art',
     modality: 'image',
+    jsonMode: 'prompt-only',
+  },
+  kreaPack: {
+    id: 'krea-pack',
+    label: 'Krea 2 Medium',
+    slug: 'krea/krea-2-medium',
+    role: 'Визуальная библия, окружение и паковый арт',
+    modality: 'image',
+    jsonMode: 'prompt-only',
+  },
+  riverflow: {
+    id: 'riverflow',
+    label: 'Riverflow V2.5 Fast',
+    slug: 'sourceful/riverflow-v2.5-fast',
+    role: 'Ремонт и согласование изображений',
+    modality: 'image',
+    jsonMode: 'prompt-only',
+  },
+  recraft: {
+    id: 'recraft',
+    label: 'Recraft V4.1 Utility',
+    slug: 'recraft/recraft-v4.1-utility',
+    role: 'Предметные иконки и Premium item art',
+    modality: 'image',
+    jsonMode: 'prompt-only',
   },
   grokVideo: {
     id: 'grok-video',
@@ -83,6 +122,7 @@ export const AI_MODELS = {
     slug: 'x-ai/grok-imagine-video',
     role: 'Эксклюзивное видео',
     modality: 'video',
+    jsonMode: 'prompt-only',
   },
   grokVideoPremium: {
     id: 'grok-video-premium',
@@ -90,6 +130,7 @@ export const AI_MODELS = {
     slug: 'x-ai/grok-imagine-video-1.5',
     role: 'Premium-видео кульминации',
     modality: 'video',
+    jsonMode: 'prompt-only',
   },
 } as const satisfies Record<string, AiModelDefinition>
 
@@ -104,6 +145,8 @@ export const AI_MODULES = {
     contract: 'turn-output@0.2',
     maxOutputTokens: 4000,
     maxPrice: { prompt: 0.15, completion: 0.3 },
+    fallbackModelId: 'mistral',
+    fallbackPolicy: 'same-contract-model',
   },
   'scene-plan': {
     id: 'scene-plan',
@@ -112,9 +155,23 @@ export const AI_MODULES = {
     modelId: 'nemotron-free',
     kind: 'text',
     gate: 'nemotron',
-    contract: 'scene-plan@1.0',
+    contract: 'scene-plan@0.2',
     maxOutputTokens: 1800,
     maxPrice: { prompt: 0, completion: 0 },
+    fallbackModelId: 'nemotron-paid',
+    fallbackPolicy: 'paid-model-when-enabled-otherwise-null',
+  },
+  'scene-plan-paid': {
+    id: 'scene-plan-paid',
+    promptNumber: '02',
+    title: 'Платный fallback плана сцены',
+    modelId: 'nemotron-paid',
+    kind: 'text',
+    gate: 'nemotron-paid',
+    contract: 'scene-plan@0.2',
+    maxOutputTokens: 1800,
+    maxPrice: { prompt: 0.55, completion: 2.3 },
+    fallbackPolicy: 'discard-advisory',
   },
   narration: {
     id: 'narration',
@@ -123,9 +180,11 @@ export const AI_MODULES = {
     modelId: 'aion',
     kind: 'text',
     gate: 'aion',
-    contract: 'narration@1.0',
+    contract: 'aion-narrative@0.2',
     maxOutputTokens: 1600,
     maxPrice: { prompt: 0.8, completion: 1.6 },
+    fallbackPolicy: 'disabled-no-zdr-endpoint',
+    disabledReason: 'AION_ZDR_ENDPOINT_UNAVAILABLE',
   },
   'turn-qa': {
     id: 'turn-qa',
@@ -134,9 +193,11 @@ export const AI_MODULES = {
     modelId: 'mistral',
     kind: 'text',
     gate: 'core',
-    contract: 'turn-qa@1.0',
+    contract: 'canon-audit@0.2',
     maxOutputTokens: 2200,
     maxPrice: { prompt: 0.25, completion: 0.8 },
+    fallbackModelId: 'deepseek',
+    fallbackPolicy: 'same-contract-model',
   },
   'scene-image': {
     id: 'scene-image',
@@ -147,6 +208,22 @@ export const AI_MODULES = {
     gate: 'media',
     contract: 'media-job-result@1.0',
     maxPrice: { image: 0.025 },
+    estimatedMaxCostUsd: 0.025,
+    maxInputReferences: 1,
+    fallbackPolicy: 'keep-existing-scene-without-new-image',
+  },
+  'pack-image': {
+    id: 'pack-image',
+    promptNumber: '13',
+    title: 'Паковый арт и визуальная библия',
+    modelId: 'krea-pack',
+    kind: 'image',
+    gate: 'premium-media',
+    contract: 'media-job-result@1.0',
+    maxPrice: { image: 0.05 },
+    estimatedMaxCostUsd: 0.05,
+    maxInputReferences: 1,
+    fallbackPolicy: 'keep-text-visual-bible',
   },
   'hero-image': {
     id: 'hero-image',
@@ -157,6 +234,36 @@ export const AI_MODULES = {
     gate: 'premium-media',
     contract: 'media-job-result@1.0',
     maxPrice: { image: 0.1 },
+    estimatedMaxCostUsd: 0.1,
+    maxInputReferences: 1,
+    fallbackPolicy: 'keep-approved-lower-tier-art',
+  },
+  'image-repair': {
+    id: 'image-repair',
+    promptNumber: '14',
+    title: 'Ремонт и согласование изображения',
+    modelId: 'riverflow',
+    kind: 'image',
+    gate: 'premium-media',
+    contract: 'media-job-result@1.0',
+    maxPrice: { image: 0.025 },
+    estimatedMaxCostUsd: 0.025,
+    maxInputReferences: 4,
+    requiresInputReference: true,
+    fallbackPolicy: 'keep-source-image-and-flag-review',
+  },
+  'item-image': {
+    id: 'item-image',
+    promptNumber: '15',
+    title: 'Предметная иконка',
+    modelId: 'recraft',
+    kind: 'image',
+    gate: 'premium-media',
+    contract: 'media-job-result@1.0',
+    maxPrice: { image: 0.04 },
+    estimatedMaxCostUsd: 0.035,
+    maxInputReferences: 1,
+    fallbackPolicy: 'use-generic-library-icon',
   },
   'exclusive-video': {
     id: 'exclusive-video',
@@ -166,6 +273,9 @@ export const AI_MODULES = {
     kind: 'video',
     gate: 'media',
     contract: 'media-job-result@1.0',
+    estimatedMaxCostUsd: 0.152,
+    fallbackPolicy: 'keep-approved-still',
+    disabledReason: 'VIDEO_REQUIRES_DURABLE_IDEMPOTENCY_AND_HTTPS_ASSET_ORIGIN',
   },
   'exclusive-video-premium': {
     id: 'exclusive-video-premium',
@@ -175,6 +285,9 @@ export const AI_MODULES = {
     kind: 'video',
     gate: 'premium-media',
     contract: 'media-job-result@1.0',
+    estimatedMaxCostUsd: 0.25,
+    fallbackPolicy: 'keep-approved-still',
+    disabledReason: 'VIDEO_REQUIRES_DURABLE_IDEMPOTENCY_AND_HTTPS_ASSET_ORIGIN',
   },
   inventory: {
     id: 'inventory',
@@ -187,6 +300,7 @@ export const AI_MODULES = {
     standalone: false,
     maxOutputTokens: 1800,
     maxPrice: { prompt: 0.15, completion: 0.3 },
+    fallbackPolicy: 'authoritative-turn-only',
   },
   journal: {
     id: 'journal',
@@ -195,9 +309,11 @@ export const AI_MODULES = {
     modelId: 'deepseek',
     kind: 'text',
     gate: 'core',
-    contract: 'journal-projection@1.0',
+    contract: 'journal-compiler@0.2',
     maxOutputTokens: 1800,
     maxPrice: { prompt: 0.15, completion: 0.3 },
+    fallbackModelId: 'mistral',
+    fallbackPolicy: 'same-contract-model',
   },
   'world-compiler': {
     id: 'world-compiler',
@@ -207,8 +323,11 @@ export const AI_MODULES = {
     kind: 'text',
     gate: 'core',
     contract: 'storypack-compiled@1.0',
+    standalone: false,
+    disabledReason: 'FIXED_STORYPACK_SCHEMA_REQUIRED',
     maxOutputTokens: 4000,
     maxPrice: { prompt: 0.15, completion: 0.3 },
+    fallbackPolicy: 'manual-author-review',
   },
   'action-tracker': {
     id: 'action-tracker',
@@ -221,6 +340,7 @@ export const AI_MODULES = {
     standalone: false,
     maxOutputTokens: 1800,
     maxPrice: { prompt: 0.15, completion: 0.3 },
+    fallbackPolicy: 'authoritative-turn-only',
   },
   difficulty: {
     id: 'difficulty',
@@ -232,6 +352,8 @@ export const AI_MODULES = {
     contract: 'difficulty-advisory@0.2',
     maxOutputTokens: 1400,
     maxPrice: { prompt: 0, completion: 0 },
+    fallbackModelId: 'nemotron-paid',
+    fallbackPolicy: 'paid-model-when-enabled-otherwise-no-adjustment',
   },
 } as const satisfies Record<string, AiModuleDefinition>
 

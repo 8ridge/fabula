@@ -1,7 +1,7 @@
 # Каталог моделей и промтов PWA AI Game
 
-**Снимок цен:** 24 июля 2026 года  
-**Источник тарифов:** официальные карточки OpenRouter  
+**Снимок цен и возможностей:** 29 июля 2026 года
+**Источник:** официальные Models API, Image Models API, Video Models API и endpoint-каталог OpenRouter
 **Назначение:** презентация, планирование бюджета и передача разработчикам  
 
 ## Как читать цену
@@ -19,28 +19,33 @@
 
 | Модель | Ценность | Официальная цена | Расчётный диапазон нашего вызова | Качество для роли | Скорость |
 |---|---|---:|---:|---|---|
-| [`deepseek/deepseek-v4-flash`](https://openrouter.ai/deepseek/deepseek-v4-flash) | авторитетный игровой ход и структурные изменения мира | $0.09 input / $0.18 output за 1M | $0.00072–$0.00522 | высокое | быстро |
+| [`deepseek/deepseek-v4-flash`](https://openrouter.ai/deepseek/deepseek-v4-flash) | авторитетный игровой ход и структурные изменения мира | $0.14 input / $0.28 output за 1M | $0.00112–$0.00812 | высокое | быстро |
 | [`nvidia/nemotron-3-ultra-550b-a55b:free`](https://openrouter.ai/nvidia/nemotron-3-ultra-550b-a55b%3Afree) | планирование, поиск сюжетных дыр, регулировка давления | $0 / $0 | $0 | высокое для анализа; не проверено как рассказчик | средне-быстро, но free endpoint вариативен |
 | [`nvidia/nemotron-3-ultra-550b-a55b`](https://openrouter.ai/nvidia/nemotron-3-ultra-550b-a55b) | платный fallback того же планировщика | $0.50 input / $2.20 output за 1M | $0.0052–$0.0338 | высокое | средне-быстро |
-| [`aion-labs/aion-3.0-mini`](https://openrouter.ai/aion-labs/aion-3.0-mini) | художественная сцена по утверждённому brief | $0.70 input / $1.40 output за 1M | $0.0049–$0.0252 | потенциально очень высокое для roleplay; нужен A/B | средне/медленно |
+| [`aion-labs/aion-3.0-mini`](https://openrouter.ai/aion-labs/aion-3.0-mini) | художественная сцена по утверждённому brief; runtime отключен без ZDR endpoint | $0.70 input / $1.40 output за 1M | вызов заблокирован | потенциально очень высокое для roleplay; нужен A/B после снятия блокера | средне/медленно |
 | [`mistralai/mistral-small-2603`](https://openrouter.ai/mistralai/mistral-small-2603) | fallback, каноническая проверка и сложный сценарный черновик | $0.15 input / $0.60 output за 1M | $0.0015–$0.0099 | высокое и универсальное | быстро |
-| [`krea/krea-2-medium-turbo`](https://openrouter.ai/krea/krea-2-medium-turbo) | дешёвые ключевые кадры и быстрые превью | от $0.015 / image | минимум $0.015; публичный максимум не указан; cap $0.025 | средне-высокое | очень быстро |
-| [`krea/krea-2-large`](https://openrouter.ai/krea/krea-2-large) | редкий Premium/hero-art | от $0.06 / image | минимум $0.06; публичный максимум не указан; cap $0.10 | высокое/очень высокое | средне |
-| [`x-ai/grok-imagine-video`](https://openrouter.ai/x-ai/grok-imagine-video) | экономичное редкое видео | от $0.05 / sec | 3–5 sec: $0.15–$0.25 | высокое | медленно, async |
-| [`x-ai/grok-imagine-video-1.5`](https://openrouter.ai/x-ai/grok-imagine-video-1.5) | эксклюзивная кульминация с лучшей непрерывностью | от $0.08 / sec | 3–5 sec: $0.24–$0.40 + стартовый кадр | очень высокое | медленно, async |
+| [`krea/krea-2-medium-turbo`](https://openrouter.ai/krea/krea-2-medium-turbo) | дешевые ключевые кадры и быстрые preview | endpoint-каталог не публикует проверяемую цену | сервер блокирует вызов до появления цены; проектный cap $0.025 | средне-высокое | очень быстро |
+| [`krea/krea-2-medium`](https://openrouter.ai/krea/krea-2-medium) | визуальная библия и паковый арт | endpoint-каталог не публикует проверяемую цену | сервер блокирует вызов до появления цены; проектный cap $0.05 | высокое | быстро |
+| [`krea/krea-2-large`](https://openrouter.ai/krea/krea-2-large) | редкий Premium/hero-art | endpoint-каталог не публикует проверяемую цену | сервер блокирует вызов до появления цены; проектный cap $0.10 | высокое/очень высокое | средне |
+| [`sourceful/riverflow-v2.5-fast`](https://openrouter.ai/sourceful/riverflow-v2.5-fast) | ремонт и согласование утвержденного изображения | $0.019 за 1K; $0.021 за 2K | cap $0.025; 1–4 HTTPS reference с origin проекта | высокое для точечного ремонта | быстро |
+| [`recraft/recraft-v4.1-utility`](https://openrouter.ai/recraft/recraft-v4.1-utility) | предметная иконка и общая библиотека | $0.035 / image | cap $0.035; один результат | высокое для item art | быстро |
+| [`x-ai/grok-imagine-video`](https://openrouter.ai/x-ai/grok-imagine-video) | экономичное редкое видео | $0.05 / sec в 480p + $0.002 за input image | 3 sec: $0.152 | высокое | медленно, async |
+| [`x-ai/grok-imagine-video-1.5`](https://openrouter.ai/x-ai/grok-imagine-video-1.5) | эксклюзивная кульминация с лучшей непрерывностью | $0.08 / sec в 480p + $0.01 за input image | 3 sec: $0.25 | очень высокое | медленно, async |
 
 ## Расчёты текстовых вызовов
 
 ### DeepSeek
 
-- типовой ход: `6000 input + 1000 output` → `6000 × 0.09/1M + 1000 × 0.18/1M = $0.00072`;
-- верхняя граница runtime: `50000 input + 4000 output` → `$0.00522`;
+- типовой ход: `6000 input + 1000 output` → `6000 × 0.14/1M + 1000 × 0.28/1M = $0.00112`;
+- верхняя граница runtime: `50000 input + 4000 output` → `$0.00812`;
 - компиляция StoryPack может использовать иной отдельный лимит, но не должна проходить как обычный ход.
 
 ### Aion
 
 - типовая художественная сцена: `5000 input + 1000 output` → `$0.00490`;
 - длинная контрольная сцена: `30000 input + 3000 output` → `$0.02520`.
+- 29 июля 2026 года модель отсутствует в официальном `/endpoints/zdr`;
+  серверный модуль `narration` отключен и не ослабляет privacy policy.
 
 ### Mistral
 
@@ -59,7 +64,7 @@
 |---:|---|---|---|
 | 01 | Авторитетный игровой ход | DeepSeek V4 Flash | каждый осмысленный ход |
 | 02 | План сцены и сюжетной дуги | Nemotron 3 Ultra Free | граница сцены / сложный ход / экспериментально каждый ход |
-| 03 | Художественный рассказчик | Aion 3.0 Mini | feature flag, A/B или Premium |
+| 03 | Художественный рассказчик | Aion 3.0 Mini | отключен до появления ZDR endpoint |
 | 04 | Сценарный fallback и канонический аудитор | Mistral Small 4 | только при отказе или контрольной проверке |
 | 05 | Дешёвый ключевой кадр | Krea 2 Medium Turbo | асинхронно по media policy |
 | 06 | Premium/hero-art | Krea 2 Large | редкая кульминация или производство контента |
@@ -69,13 +74,30 @@
 | 10 | Компилятор мира | DeepSeek V4 Flash | pre-production StoryPack |
 | 11 | Трекер действий и микросостояний | DeepSeek V4 Flash | модуль авторитетного хода |
 | 12 | Директор сложности | Nemotron 3 Ultra Free | advisory; сервер решает, что применять |
+| 13 | Паковый арт и визуальная библия | Krea 2 Medium | производство контента; блокировка без проверяемой цены |
+| 14 | Ремонт изображения | Riverflow V2.5 Fast | только с approved HTTPS reference и отдельным бюджетом |
+| 15 | Предметная иконка | Recraft V4.1 Utility | общая библиотека или Premium item-art бюджет |
 
 ## Правило маршрутизации
 
 - Основной ход использует DeepSeek.
+- Mistral получает тот же `turn-output@0.2` только как fallback авторитетного
+  хода. Универсальный module route не может вызвать авторитетный ход.
 - Nemotron не получает реальные имена, лица, голоса и сырой персональный текст: free endpoint журналирует запросы.
-- Aion получает только утверждённый `narrative_brief` и не меняет канон.
+- Бесплатный Nemotron вызывается без `response_format`, потому что текущий
+  Models API его не заявляет. Ответ все равно проходит строгий локальный
+  `scene-plan@0.2` или `difficulty-advisory@0.2`.
+- Платный Nemotron имеет отдельный feature flag и реальный module ID
+  `scene-plan-paid`; также он служит fallback бесплатного advisory-маршрута.
+- Aion не вызывается, пока OpenRouter не публикует ZDR-совместимый endpoint;
+  Prompt 03 и строгий `aion-narrative@0.2` сохранены как честно заблокированный маршрут.
 - Mistral возвращает тот же типизированный контракт, а не отдельную версию мира.
 - Media policy принадлежит серверу, а не модели.
-- Для текста следует включить budget reservation, `max_tokens` и `provider.max_price`.
+- Standalone-текст возвращается наружу только после строгой структурной
+  проверки; `json_syntax_only` в runtime больше не используется.
+- Для текста включены `max_tokens` и `provider.max_price`. Для dedicated Image
+  API, где `max_price` не заявлен, сервер проверяет endpoint pricing перед
+  платным POST и отказывает при неизвестной цене.
+- Видео программно заблокировано до durable idempotency, HTTPS origin,
+  утвержденного первого кадра и отдельного лимита расходов.
 - Для минимальной задержки OpenRouter позволяет сортировать провайдеров по `latency` или `throughput`; текущие метрики нужно читать во время bake-off, а не фиксировать навсегда: [Provider Routing](https://openrouter.ai/docs/guides/routing/provider-selection).

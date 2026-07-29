@@ -57,4 +57,35 @@ describe('preview session idempotency', () => {
     })).rejects.toMatchObject({ code: 'SESSION_VERSION_CONFLICT' })
     expect(called).toBe(false)
   })
+
+  test('replays a cached failure without a second paid call', async () => {
+    const store = new PreviewSessionStore()
+    const command = validTurnCommand() as TurnCommand
+    let calls = 0
+    const worker = async (): Promise<SessionTurnResult> => {
+      calls += 1
+      throw new Error('upstream failed after the request')
+    }
+    await expect(store.execute(command, worker)).rejects.toThrow('upstream failed')
+    await expect(store.execute(command, worker)).rejects.toThrow('upstream failed')
+    expect(calls).toBe(1)
+  })
+
+  test('fails closed at session capacity and prunes expired idle sessions', async () => {
+    let now = 1_000
+    const store = new PreviewSessionStore({
+      maxSessions: 1,
+      sessionTtlMs: 100,
+      now: () => now,
+    })
+    const first = validTurnCommand() as TurnCommand
+    store.snapshot(first)
+    const second = validTurnCommand({
+      session_id: 'session:other-12345678',
+      idempotency_key: 'turn:other-12345678',
+    }) as TurnCommand
+    expect(() => store.snapshot(second)).toThrow()
+    now += 101
+    expect(store.snapshot(second).sessionId).toBe(second.session_id)
+  })
 })

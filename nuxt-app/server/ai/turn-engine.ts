@@ -2,24 +2,18 @@ import { AI_MODELS } from './catalog'
 import type { FabulaAiConfig } from './config'
 import type { JsonValue, TurnCommand } from './contracts'
 import { ContractError, parseTurnOutput, TURN_OUTPUT_JSON_SCHEMA } from './contracts'
-import type { OpenRouterUsage } from './openrouter'
+import { AiExecutionError } from './http'
+import type { SafeModelRun } from './http'
 import { OpenRouterClient, OpenRouterError } from './openrouter'
-import { getSystemPrompt } from './prompts'
 import { sanitizeNemotronPayload } from './security'
 import type { SessionSnapshot, SessionTurnResult } from './session-store'
-
-interface ModelRunSummary {
-  role: 'advisory' | 'primary' | 'fallback'
-  model: string
-  requestId: string | null
-  usage: OpenRouterUsage | null
-  status: 'accepted' | 'discarded'
-  errorCode: string | null
-}
+import { getStandaloneContract, parseStandaloneOutput } from './standalone-contracts'
 
 export interface TurnEngineResult extends SessionTurnResult {
-  modelRuns: ModelRunSummary[]
+  modelRuns: SafeModelRun[]
 }
+
+type PromptLoader = (moduleId: 'authoritative-turn' | 'scene-plan') => Promise<string>
 
 const STORY_CONTEXT: Record<TurnCommand['story_id'], {
   packId: string
@@ -71,14 +65,20 @@ const STORY_CONTEXT: Record<TurnCommand['story_id'], {
 export class TurnEngine {
   private readonly config: FabulaAiConfig
   private readonly client: OpenRouterClient
+  private readonly promptLoader: PromptLoader
 
-  constructor(config: FabulaAiConfig, client = new OpenRouterClient(config)) {
+  constructor(
+    config: FabulaAiConfig,
+    client = new OpenRouterClient(config),
+    promptLoader: PromptLoader = async moduleId => (await import('./prompts')).getSystemPrompt(moduleId),
+  ) {
     this.config = config
     this.client = client
+    this.promptLoader = promptLoader
   }
 
   async execute(command: TurnCommand, snapshot: SessionSnapshot): Promise<TurnEngineResult> {
-    const modelRuns: ModelRunSummary[] = []
+    const modelRuns: SafeModelRun[] = []
     const advisory = await this.maybePlan(command, snapshot, modelRuns)
     const packet = buildTurnPacket(command, snapshot, advisory)
     const primary = await this.tryTurnModel(
@@ -105,8 +105,14 @@ export class TurnEngine {
       command,
       modelRuns,
     )
-    if (!fallback)
-      throw new ContractError('MODEL_FALLBACK_EXHAUSTED', 'Основная и резервная модели не вернули безопасный ход.')
+    if (!fallback) {
+      throw new AiExecutionError(
+        'MODEL_FALLBACK_EXHAUSTED',
+        'Основная и резервная модели не вернули безопасный ход.',
+        modelRuns,
+        modelRuns.some(run => run.error_code === 'UPSTREAM_TIMEOUT' || run.error_code === 'UPSTREAM_RATE_LIMITED'),
+      )
+    }
     return {
       output: fallback,
       model: AI_MODELS.mistral.slug,
@@ -119,7 +125,7 @@ export class TurnEngine {
   private async maybePlan(
     command: TurnCommand,
     snapshot: SessionSnapshot,
-    modelRuns: ModelRunSummary[],
+    modelRuns: SafeModelRun[],
   ): Promise<Record<string, JsonValue> | null> {
     if (!this.config.nemotronEnabled)
       return null
@@ -137,44 +143,66 @@ export class TurnEngine {
       available_paths: ['action', 'speech', 'exploration'],
       allowed_difficulty_knobs: ['clarity', 'time_pressure', 'opposition'],
     }) as Record<string, JsonValue>
+    const freePlan = await this.tryScenePlan(
+      AI_MODELS.nemotronFree,
+      sanitized,
+      true,
+      modelRuns,
+    )
+    if (freePlan)
+      return freePlan
+    if (!this.config.nemotronPaidEnabled)
+      return null
+    return this.tryScenePlan(
+      AI_MODELS.nemotronPaid,
+      sanitized,
+      false,
+      modelRuns,
+    )
+  }
+
+  private async tryScenePlan(
+    model: typeof AI_MODELS.nemotronFree | typeof AI_MODELS.nemotronPaid,
+    payload: Record<string, JsonValue>,
+    freeEndpoint: boolean,
+    modelRuns: SafeModelRun[],
+  ): Promise<Record<string, JsonValue> | null> {
+    let result: Awaited<ReturnType<OpenRouterClient['chatJson']>> | null = null
     try {
-      const result = await this.client.chatJson({
-        model: AI_MODELS.nemotronFree.slug,
-        system: await getSystemPrompt('scene-plan'),
-        payload: sanitized,
+      const contract = getStandaloneContract('scene-plan')
+      result = await this.client.chatJson({
+        model: model.slug,
+        system: await this.promptLoader('scene-plan'),
+        payload,
         maxOutputTokens: 1800,
-        maxPrice: { prompt: 0, completion: 0 },
-        sanitizedFreeEndpoint: true,
+        maxPrice: freeEndpoint
+          ? { prompt: 0, completion: 0 }
+          : { prompt: 0.55, completion: 2.3 },
+        sanitizedFreeEndpoint: freeEndpoint,
+        jsonMode: model.jsonMode,
+        schema: model.jsonMode === 'json-schema' ? contract : undefined,
       })
-      if (!isScenePlan(result.output)) {
-        modelRuns.push({
-          role: 'advisory',
-          model: result.model,
-          requestId: result.requestId,
-          usage: result.usage,
-          status: 'discarded',
-          errorCode: 'SCENE_PLAN_INVALID',
-        })
-        return null
-      }
+      const output = parseStandaloneOutput('scene-plan', result.output)
       modelRuns.push({
         role: 'advisory',
         model: result.model,
-        requestId: result.requestId,
+        request_id: result.requestId,
         usage: result.usage,
         status: 'accepted',
-        errorCode: null,
+        error_code: null,
+        validation_errors: [],
       })
-      return result.output
+      return output
     }
     catch (error) {
       modelRuns.push({
         role: 'advisory',
-        model: AI_MODELS.nemotronFree.slug,
-        requestId: null,
-        usage: null,
+        model: result?.model || openRouterModel(error) || model.slug,
+        request_id: result?.requestId || openRouterRequestId(error),
+        usage: result?.usage || openRouterUsage(error),
         status: 'discarded',
-        errorCode: safeErrorCode(error),
+        error_code: safeErrorCode(error),
+        validation_errors: safeValidationErrors(error),
       })
       return null
     }
@@ -185,12 +213,13 @@ export class TurnEngine {
     role: 'primary' | 'fallback',
     packet: Record<string, JsonValue>,
     command: TurnCommand,
-    modelRuns: ModelRunSummary[],
+    modelRuns: SafeModelRun[],
   ) {
+    let result: Awaited<ReturnType<OpenRouterClient['chatJson']>> | null = null
     try {
-      const result = await this.client.chatJson({
+      result = await this.client.chatJson({
         model,
-        system: await getSystemPrompt('authoritative-turn'),
+        system: await this.promptLoader('authoritative-turn'),
         payload: packet,
         maxOutputTokens: 4000,
         maxPrice: role === 'primary'
@@ -205,21 +234,23 @@ export class TurnEngine {
       modelRuns.push({
         role,
         model: result.model,
-        requestId: result.requestId,
+        request_id: result.requestId,
         usage: result.usage,
         status: 'accepted',
-        errorCode: null,
+        error_code: null,
+        validation_errors: [],
       })
       return output
     }
     catch (error) {
       modelRuns.push({
         role,
-        model,
-        requestId: null,
-        usage: null,
+        model: result?.model || openRouterModel(error) || model,
+        request_id: result?.requestId || openRouterRequestId(error),
+        usage: result?.usage || openRouterUsage(error),
         status: 'discarded',
-        errorCode: safeErrorCode(error),
+        error_code: safeErrorCode(error),
+        validation_errors: safeValidationErrors(error),
       })
       return null
     }
@@ -302,31 +333,24 @@ function buildTurnPacket(
   }
 }
 
-function isScenePlan(value: unknown): value is Record<string, JsonValue> {
-  if (!value || typeof value !== 'object' || Array.isArray(value))
-    return false
-  const record = value as Record<string, unknown>
-  const required = [
-    'schema_version',
-    'status',
-    'scene_goal',
-    'independent_npc_intentions',
-    'world_pressure_if_player_waits',
-    'plausible_developments',
-    'relevant_refs',
-    'callbacks_potentially_relevant',
-    'continuity_checks',
-    'dead_end_risks',
-    'forbidden_shortcuts',
-  ]
-  return record.schema_version === 'scene-plan@1.0'
-    && (record.status === 'ready' || record.status === 'invalid')
-    && required.every(key => key in record)
-    && Object.keys(record).every(key => required.includes(key))
-}
-
 function safeErrorCode(error: unknown): string {
   if (error instanceof ContractError || error instanceof OpenRouterError)
     return error.code
   return 'UNKNOWN_MODEL_ERROR'
+}
+
+function safeValidationErrors(error: unknown): string[] {
+  return error instanceof ContractError ? error.fieldErrors.slice(0, 20) : []
+}
+
+function openRouterModel(error: unknown): string | null {
+  return error instanceof OpenRouterError ? error.upstreamModel : null
+}
+
+function openRouterRequestId(error: unknown): string | null {
+  return error instanceof OpenRouterError ? error.upstreamRequestId : null
+}
+
+function openRouterUsage(error: unknown) {
+  return error instanceof OpenRouterError ? error.upstreamUsage : null
 }

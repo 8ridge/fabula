@@ -28,14 +28,35 @@ PostgreSQL-транзакций и durable budget ledger. По умолчани�
 
 ```text
 NUXT_FABULA_AI_NEMOTRON_ENABLED=true
+NUXT_FABULA_AI_NEMOTRON_PAID_ENABLED=false
 NUXT_FABULA_AI_AION_ENABLED=true
 NUXT_FABULA_AI_MEDIA_ENABLED=true
 NUXT_FABULA_AI_PREMIUM_MEDIA_ENABLED=true
 ```
 
-Для video route также нужен `NUXT_OPENROUTER_SITE_URL` с HTTPS origin, на
-котором хранится утвержденный стартовый кадр. Произвольные внешние URL
-отклоняются.
+Платный Nemotron включается отдельно и служит реальным fallback для
+`scene-plan` и `difficulty`. Бесплатный endpoint не получает `response_format`,
+которого сейчас нет в его опубликованных возможностях, и принимает только
+обезличенный allowlist.
+
+Таймауты можно задать через
+`NUXT_FABULA_AI_TEXT_TIMEOUT_MS`, `NUXT_FABULA_AI_IMAGE_TIMEOUT_MS`,
+`NUXT_FABULA_AI_VIDEO_SUBMIT_TIMEOUT_MS` и
+`NUXT_FABULA_AI_VIDEO_POLL_TIMEOUT_MS`. Таймер остается активным до полного
+чтения JSON-тела, а не только до получения HTTP-заголовков.
+
+Image route требует ненулевой `NUXT_FABULA_AI_IMAGE_MAX_COST_USD`. Перед
+платным POST сервер читает текущий endpoint-каталог OpenRouter, проверяет цену
+и закрепляет провайдера. Если OpenRouter не публикует проверяемую цену, вызов
+не выполняется. Сейчас это честно блокирует Krea; Riverflow и Recraft имеют
+проверяемые цены в endpoint-каталоге.
+
+Video route дополнительно требует `NUXT_OPENROUTER_SITE_URL` с HTTPS origin,
+утвержденный стартовый кадр и ненулевой
+`NUXT_FABULA_AI_VIDEO_MAX_COST_USD`. Произвольные внешние URL отклоняются.
+Несмотря на наличие транспорта, оба Grok video-модуля остаются программно
+заблокированы, пока mini-backend не получит durable idempotency: память
+процесса недостаточна для безопасного платного video submit.
 
 ### API
 
@@ -43,14 +64,23 @@ NUXT_FABULA_AI_PREMIUM_MEDIA_ENABLED=true
 - `POST /api/ai/turn` - узкая preview-команда игрока. Сервер сам выбирает
   модель, промт, pack rules, authority и privacy policy.
 - `POST /api/ai/modules/:module` - неавторитетные authoring, QA, narration и
-  media-модули. Основной ход через этот route запрещен.
+  media-модули. Основной ход через этот route запрещен. Ответы текстовых
+  модулей проходят строгий локальный контракт; синтаксически валидного JSON
+  недостаточно.
 - `GET /api/ai/video/:jobId` - polling только для job, созданного текущим
   процессом, с исходным `x-fabula-request-id`.
 
 Основной ход использует `turn-input@0.2` и строгий `turn-output@0.2`.
 DeepSeek является primary, Mistral получает тот же пакет и schema как fallback.
-Nemotron получает только server-side allowlist обезличенных полей. Aion,
-journal и media не меняют канон.
+Nemotron получает только server-side allowlist обезличенных полей. Aion
+честно отключен: его текущий endpoint отсутствует в официальном ZDR-каталоге,
+а ослаблять приватную маршрутизацию сервер не будет. Journal и media не меняют
+канон.
+
+`authoritative-turn`, `inventory` и `action-tracker` нельзя вызвать через
+универсальный module route. `world-compiler` также честно отключен до появления
+фиксированной StoryPack JSON Schema. Это не рабочие кнопки, замаскированные под
+готовую функцию.
 
 Runtime берет правила из
 `../deliverables/PWA_AI_PRESENTATION_KIT/prompts/`, но несовместимые старые
@@ -64,6 +94,12 @@ operations. Он дает рабочий server-only OpenRouter transport, ст�
 optimistic version, concurrent idempotency, rate/concurrency limits и UI-путь,
 но не заменяет production session/canon/budget services из GDD.
 
+Успешные и неуспешные `request_id` standalone-модулей кэшируются в памяти
+процесса на 24 часа. Повтор возвращает тот же результат или ту же ошибку без
+нового платного вызова. Хранилище ограничено 1000 записями и при заполнении
+отказывает закрыто. Session store ограничен 1000 сессиями, 64 idempotency
+записями на сессию, 12 ходами истории и TTL 2 часа.
+
 ## Команды
 
 ```bash
@@ -72,3 +108,13 @@ bun run test
 bun run typecheck
 bun run build
 ```
+
+Контролируемая live-матрица текстовых моделей запускается только при уже
+работающем локальном сервере:
+
+```bash
+bun run live:ai:text http://127.0.0.1:3112
+```
+
+Скрипт печатает только модель, модуль, статус, задержку, токены, стоимость,
+fallback и результат проверки схемы. Полные промты и ответы не сохраняются.

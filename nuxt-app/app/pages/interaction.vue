@@ -98,7 +98,7 @@ onBeforeUnmount(() => dispose())
 
         <div class="scene-context" role="status">
           <span class="scene-context-icon">✦</span>
-          <span><strong>Сцена 02</strong><small>Действия сохраняются в канон после подтверждения</small></span>
+          <span><strong>Сцена 02 · preview</strong><small>Ходы живут только в памяти процесса и не записываются в production-канон</small></span>
           <button class="context-link" type="button" data-tool="models">Контур хода <b>›</b></button>
         </div>
 
@@ -112,34 +112,34 @@ onBeforeUnmount(() => dispose())
           <div class="day-divider"><span>СЕГОДНЯ · 21:14</span></div>
 
           <article class="message message-narrator" data-message-id="scene-intro">
-            <div class="message-head"><span class="message-avatar avatar-narrator">✦</span><span><strong>Рассказчик</strong><small>Подтвержденный исход · сцена 02</small></span></div>
+            <div class="message-head"><span class="message-avatar avatar-narrator">✦</span><span><strong>Рассказчик</strong><small>Локальный пример исхода · сцена 02</small></span></div>
             <div class="message-copy"><p>Пепел идет с востока, хотя ветра там нет. За спиной старика осыпается каменная арка, и на миг в проломе видно темное пламя Цитадели. Он ждет, не отводя взгляда от клинка в твоей руке.</p></div>
-            <div class="message-foot"><span>Руины Эхокарты</span><span class="message-actions"><button class="message-action-button" type="button" data-message-action="copy" aria-label="Скопировать сообщение">⧉<small>Копировать</small></button><button class="message-action-button" type="button" data-message-action="rephrase" aria-label="Переформулировать сообщение">≋<small>Переформулировать</small></button><button class="message-action-button" type="button" data-message-action="regenerate" aria-label="Перегенерировать сообщение">↻<small>Перегенерировать</small></button></span></div>
+            <div class="message-foot"><span>Руины Эхокарты</span><span class="message-actions"><button class="message-action-button" type="button" data-message-action="copy" aria-label="Скопировать сообщение">⧉<small>Копировать</small></button><button class="message-action-button" type="button" data-message-action="rephrase" aria-label="Показать локальный вариант сообщения">≋<small>Локальный вариант</small></button><button class="message-action-button" type="button" data-message-action="regenerate" aria-label="Показать еще один локальный вариант сообщения">↻<small>Еще вариант</small></button></span></div>
           </article>
 
           <article class="message message-character" data-message-id="keeper-question">
             <div class="message-head"><span class="message-avatar avatar-character"><img src="/assets/avatar.jpg" alt=""></span><span><strong>Старик-хранитель</strong><small>Персонаж · отношение: насторожен</small></span></div>
             <div class="message-copy"><p>"Ты снова смотришь на клинок, будто надеешься, что он назовет тебя по имени. Не назовет. Но я могу показать дорогу, если ты скажешь, зачем идешь к Цитадели."</p></div>
             <div class="character-mood"><span class="mood-dot"></span> Он ждет честного ответа</div>
-            <div class="message-foot"><span>Реплика персонажа</span><span class="message-actions"><button class="message-action-button" type="button" data-message-action="copy" aria-label="Скопировать сообщение">⧉<small>Копировать</small></button><button class="message-action-button" type="button" data-message-action="rephrase" aria-label="Переформулировать реплику">≋<small>Переформулировать</small></button><button class="message-action-button" type="button" data-message-action="regenerate" aria-label="Перегенерировать реплику">↻<small>Перегенерировать</small></button></span></div>
+            <div class="message-foot"><span>Реплика персонажа</span><span class="message-actions"><button class="message-action-button" type="button" data-message-action="copy" aria-label="Скопировать сообщение">⧉<small>Копировать</small></button><button class="message-action-button" type="button" data-message-action="rephrase" aria-label="Показать локальный вариант реплики">≋<small>Локальный вариант</small></button><button class="message-action-button" type="button" data-message-action="regenerate" aria-label="Показать еще один локальный вариант реплики">↻<small>Еще вариант</small></button></span></div>
           </article>
 
           <article class="message message-player" data-message-id="player-reply">
-            <div class="message-head"><span class="message-avatar avatar-player">Б</span><span><strong>Ты</strong><small>Речь · только что</small></span></div>
+            <div class="message-head"><span class="message-avatar avatar-player">Б</span><span><strong>Ты</strong><small>Речь · локальный пример</small></span></div>
             <div class="message-copy"><p>Я поднимаю клинок так, чтобы старик увидел три звезды, и спрашиваю, кто оставил его среди руин.</p></div>
-            <div class="message-foot"><span>Ход записан в журнал</span><span class="message-actions"><button class="message-action-button" type="button" data-message-action="edit" aria-label="Изменить действие">✎<small>Изменить</small></button></span></div>
+            <div class="message-foot"><span>Локальный пример · в журнал не записан</span><span class="message-actions"><button class="message-action-button" type="button" data-message-action="edit" aria-label="Изменить действие">✎<small>Изменить</small></button></span></div>
           </article>
 
           <article class="message message-narrator message-pending" data-message-id="pending-turn">
-            <div class="message-head"><span class="message-avatar avatar-narrator">✦</span><span><strong>Рассказчик</strong><small>Готовит последствие</small></span></div>
+            <div class="message-head"><span class="message-avatar avatar-narrator">✦</span><span><strong>Рассказчик</strong><small>Локальный preview-фрагмент</small></span></div>
             <div class="message-copy"><p>Старик медленно протягивает руку к рукояти, но не касается ее. В его лице впервые появляется не страх, а узнавание.</p></div>
             <div class="message-media-hint"><span>◌</span><span>Кадр сцены может быть предложен после подтверждения события</span></div>
-            <div class="message-foot"><span>Последствие еще не подтверждено</span><span class="message-actions"><button class="message-action-button" type="button" data-message-action="rephrase" aria-label="Переформулировать ответ">≋<small>Переформулировать</small></button><button class="message-action-button" type="button" data-message-action="regenerate" aria-label="Перегенерировать ответ">↻<small>Перегенерировать</small></button></span></div>
+            <div class="message-foot"><span>Последствие еще не подтверждено</span><span class="message-actions"><button class="message-action-button" type="button" data-message-action="rephrase" aria-label="Показать локальный вариант ответа">≋<small>Локальный вариант</small></button><button class="message-action-button" type="button" data-message-action="regenerate" aria-label="Показать еще один локальный вариант ответа">↻<small>Еще вариант</small></button></span></div>
           </article>
         </div>
 
         <section class="composer-shell" aria-label="Ввод действия игрока">
-          <div class="composer-topline"><span class="composer-label">ТВОЙ ХОД</span><span class="composer-hint" id="composerHint">Опиши действие, речь или исследование</span><button class="auto-toggle is-on" type="button" data-auto-toggle><i></i> Автопродолжение</button></div>
+          <div class="composer-topline"><span class="composer-label">ТВОЙ ХОД</span><span class="composer-hint" id="composerHint">Опиши действие, речь или исследование</span><button class="auto-toggle" type="button" data-auto-toggle disabled title="Preview: функция не подключена"><i></i> Автопродолжение · preview</button></div>
           <div class="mode-switch" role="tablist" aria-label="Режим действия">
             <button class="mode-button is-active" type="button" role="tab" aria-selected="true" data-mode="action"><span>↗</span> Действие</button>
             <button class="mode-button" type="button" role="tab" aria-selected="false" data-mode="speech"><span>❝</span> Речь</button>
@@ -153,7 +153,7 @@ onBeforeUnmount(() => dispose())
                 <button class="composer-tool" type="button" data-tool="inventory" aria-label="Добавить предмет из инвентаря">☙</button>
                 <button class="composer-tool" type="button" data-tool="journal" aria-label="Добавить запись из журнала">✒</button>
                 <button class="composer-tool" type="button" data-tool="check" aria-label="Открыть проверку навыка">⚄</button>
-                <button class="composer-tool composer-tool-rewrite" type="button" data-rewrite-composer aria-label="Переформулировать текст в поле" title="Переформулировать текст в поле">✧</button>
+                <button class="composer-tool composer-tool-rewrite" type="button" data-rewrite-composer aria-label="Показать локальный вариант текста" title="Локальный вариант без вызова модели">✧</button>
                 <span class="composer-divider"></span>
                 <button class="composer-tool" type="button" data-compose="Я осматриваю ближайшие следы и ищу безопасный путь." aria-label="Подставить пример исследования">⌁</button>
               </div>
@@ -213,15 +213,15 @@ onBeforeUnmount(() => dispose())
           <div class="runtime-stage"><i></i><span><strong>План сцены</strong><small>Nemotron · advisory</small></span><b>02</b></div>
           <div class="runtime-stage"><i></i><span><strong>Рассказчик</strong><small>Aion · feature flag</small></span><b>03</b></div>
           <div class="runtime-stage"><i></i><span><strong>Fallback</strong><small>Mistral · armed</small></span><b>04</b></div>
-          <button class="runtime-more" type="button" data-tool="models">Показать все 12 промтов <b>→</b></button>
+          <button class="runtime-more" type="button" data-tool="models">Показать все 15 промтов <b>→</b></button>
         </section>
         <div class="detail-foot"><span class="secure-dot"></span><span>Состояние принадлежит сессии</span></div>
       </aside>
     </div>
     <div class="selection-toolbar" id="selectionToolbar" role="toolbar" aria-label="Действия с выделенным текстом" hidden>
       <span class="selection-toolbar-text" id="selectionToolbarText">Выделено</span>
-      <button type="button" data-selection-action="rephrase" aria-label="Переформулировать выделенный текст"><span>≋</span><small>Переформулировать</small></button>
-      <button type="button" data-selection-action="regenerate" aria-label="Перегенерировать выделенный текст"><span>↻</span><small>Перегенерировать</small></button>
+      <button type="button" data-selection-action="rephrase" aria-label="Показать локальный вариант выделенного текста"><span>≋</span><small>Локальный вариант</small></button>
+      <button type="button" data-selection-action="regenerate" aria-label="Показать еще один локальный вариант выделенного текста"><span>↻</span><small>Еще вариант</small></button>
       <button type="button" data-selection-action="copy" aria-label="Скопировать выделенный текст"><span>⧉</span><small>Копировать</small></button>
     </div>
   </div>

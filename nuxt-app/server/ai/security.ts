@@ -60,6 +60,7 @@ export function assertAiEnabled(config: FabulaAiConfig): void {
 export function assertModuleGate(module: AiModuleDefinition, config: FabulaAiConfig): void {
   const enabled = module.gate === 'core'
     || (module.gate === 'nemotron' && config.nemotronEnabled)
+    || (module.gate === 'nemotron-paid' && config.nemotronPaidEnabled)
     || (module.gate === 'aion' && config.aionEnabled)
     || (module.gate === 'media' && config.mediaEnabled)
     || (module.gate === 'premium-media' && config.mediaEnabled && config.premiumMediaEnabled)
@@ -108,6 +109,24 @@ export function assertApprovedStillUrl(urlValue: unknown, config: FabulaAiConfig
   if (url.protocol !== 'https:' || url.origin !== site.origin)
     throw new FabulaApiError('APPROVED_STILL_REJECTED', 'Кадр должен находиться на настроенном asset-origin.', 422)
   return url.toString()
+}
+
+export function assertApprovedAssetUrls(
+  value: unknown,
+  config: FabulaAiConfig,
+  maxItems: number,
+  required: boolean,
+): string[] {
+  if (value === undefined && !required)
+    return []
+  if (!Array.isArray(value) || value.length > maxItems || (required && value.length === 0)) {
+    throw new FabulaApiError(
+      required ? 'APPROVED_REFERENCE_REQUIRED' : 'APPROVED_REFERENCES_INVALID',
+      required ? 'Для этого модуля нужен утвержденный reference asset.' : 'Некорректный список reference assets.',
+      422,
+    )
+  }
+  return value.map(url => assertApprovedStillUrl(url, config))
 }
 
 export function sanitizeNemotronPayload(payload: Record<string, unknown>): Record<string, JsonValue> {

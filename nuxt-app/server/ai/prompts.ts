@@ -1,22 +1,9 @@
 import { useStorage } from 'nitropack/runtime'
 import type { AiModuleId } from './catalog'
 import { firstFencedBlock, rulesOnly } from './prompt-utils'
+import { PROMPT_SOURCE_FILES } from './prompt-files'
 
-const SOURCE_FILES: Record<AiModuleId, string> = {
-  'authoritative-turn': '01_deepseek_authoritative_turn.md',
-  'scene-plan': '02_nemotron_scene_and_arc_planner.md',
-  narration: '03_aion_narrative_scene.md',
-  'turn-qa': '04_mistral_story_fallback_and_audit.md',
-  'scene-image': '05_krea_cheap_scene_image.md',
-  'hero-image': '06_krea_premium_hero_image.md',
-  'exclusive-video': '07_grok_exclusive_video.md',
-  'exclusive-video-premium': '07_grok_exclusive_video.md',
-  inventory: '08_deepseek_items_and_inventory.md',
-  journal: '09_deepseek_journal_and_memory.md',
-  'world-compiler': '10_deepseek_world_story_compiler.md',
-  'action-tracker': '11_deepseek_action_and_microstate_tracker.md',
-  difficulty: '12_nemotron_dynamic_difficulty.md',
-}
+export { PROMPT_SOURCE_FILES } from './prompt-files'
 
 const sourceCache = new Map<string, Promise<string>>()
 
@@ -35,33 +22,36 @@ system contract > authority catalog > objective canon > confirmed events/facts
 - если действие физически невозможно, верни rejected с честной причиной;
 - difficulty.final_band = clamp(base + environment + time_pressure + injury + opposition - skill - tools - preparation - help, 0, 5);
 - media_candidate только рекомендует визуал и не запускает его;
+- скопируй turn_id и expected_session_version из входа без изменения;
 - верни JSON, строго соответствующий переданной JSON Schema turn-output@0.2, без Markdown и дополнительных полей.`
 
-const SCENE_PLAN_OVERRIDE = `Верни строго scene-plan@1.0:
-schema_version, status, scene_goal, independent_npc_intentions,
-world_pressure_if_player_waits, plausible_developments, relevant_refs,
-callbacks_potentially_relevant, continuity_checks, dead_end_risks,
-forbidden_shortcuts. Не меняй канон. Любая ошибка структуры означает null plan.`
+const SCENE_PLAN_OVERRIDE = `Верни строго scene-plan@0.2 с полями:
+plan_version, scene_goal, dramatic_question, active_world_pressures,
+npc_intentions, unresolved_consequences, allowed_directions, avoid_repetition,
+forbidden_next_moves, climax_conditions, potential_media_trigger,
+expires_after_turns. Не добавляй поля и не меняй канон.`
 
-const NARRATION_OVERRIDE = `Верни строго narration@1.0:
-{"schema_version":"narration@1.0","status":"ready|reject","narrative_text":"",
-"used_operation_refs":[],"introduced_facts":[],"warnings":[]}.
-introduced_facts всегда пуст. При конфликте верни reject и пустой narrative_text.`
+const NARRATION_OVERRIDE = `Верни строго aion-narrative@0.2:
+renderer_version, scene_text, used_fact_refs, omitted_optional_details,
+detected_conflicts. При конфликте верни пустой scene_text и перечисли
+противоречия в detected_conflicts.`
 
-const TURN_QA_OVERRIDE = `В режиме QA верни строго turn-qa@1.0:
-schema_version, candidate_turn_id, verdict, schema_errors, invariant_errors,
-unsupported_claims, repair_instructions. PASS допустим только при пустых массивах ошибок.`
+const TURN_QA_OVERRIDE = `Работай только в режиме CANON_AUDIT. Верни строго
+canon-audit@0.2: audit_version, pass, hard_errors, soft_warnings,
+missing_callbacks, unsupported_narrative_claims,
+recommended_prompt_correction. pass=true допустим только при пустом hard_errors.`
 
-const JOURNAL_OVERRIDE = `Верни строго journal-projection@1.0:
-schema_version, projection_version, source_cursor, target_cursor,
-idempotency_key, entries, warnings. Используй только подтвержденные post-commit данные.`
+const JOURNAL_OVERRIDE = `Верни строго journal-compiler@0.2:
+module_version, entries, character_index_updates, location_index_updates,
+quest_index_updates, server_only_callback_hooks. Три массива index_updates
+содержат только строковые ссылки. Используй только подтвержденные post-commit данные.`
 
 const WORLD_COMPILER_OVERRIDE = `Верни строго storypack-compiled@1.0:
 schema_version, status, pack_version, entities, operation_catalog,
 server_transition_policies, challenge_fixtures, errors. Это staging, не опубликованный канон.`
 
 export function getSourcePrompt(moduleId: AiModuleId): Promise<string> {
-  const file = SOURCE_FILES[moduleId]
+  const file = PROMPT_SOURCE_FILES[moduleId]
   let cached = sourceCache.get(file)
   if (!cached) {
     cached = useStorage<string>('assets:fabula-prompts').getItem(file).then((source) => {
@@ -85,6 +75,7 @@ export async function getSystemPrompt(moduleId: AiModuleId): Promise<string> {
         TURN_ENGINE_PROMPT,
       ].join('\n\n')
     case 'scene-plan':
+    case 'scene-plan-paid':
       return `${rulesOnly(source)}\n\n${SCENE_PLAN_OVERRIDE}`
     case 'narration':
       return `${rulesOnly(source)}\n\n${NARRATION_OVERRIDE}`
@@ -99,7 +90,16 @@ export async function getSystemPrompt(moduleId: AiModuleId): Promise<string> {
   }
 }
 
-export async function renderMediaPrompt(moduleId: 'scene-image' | 'hero-image' | 'exclusive-video' | 'exclusive-video-premium', variables: Record<string, unknown>): Promise<string> {
+export type MediaModuleId =
+  | 'scene-image'
+  | 'pack-image'
+  | 'hero-image'
+  | 'image-repair'
+  | 'item-image'
+  | 'exclusive-video'
+  | 'exclusive-video-premium'
+
+export async function renderMediaPrompt(moduleId: MediaModuleId, variables: Record<string, unknown>): Promise<string> {
   const template = await getSourcePrompt(moduleId)
   const rendered = template.replace(/\{\{([a-zA-Z0-9_]+)\}\}/g, (_, key: string) => {
     const value = variables[key]

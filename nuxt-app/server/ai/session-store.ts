@@ -1,24 +1,13 @@
 import type { TurnCommand, TurnOutput } from './contracts'
 import { FabulaApiError } from './http'
+import type { SafeModelRun } from './http'
 
 export interface SessionTurnResult {
   output: TurnOutput
   model: string
   fallbackUsed: boolean
   advisoryUsed: boolean
-  modelRuns?: Array<{
-    role: 'advisory' | 'primary' | 'fallback'
-    model: string
-    requestId: string | null
-    usage: {
-      prompt_tokens?: number
-      completion_tokens?: number
-      total_tokens?: number
-      cost?: number
-    } | null
-    status: 'accepted' | 'discarded'
-    errorCode: string | null
-  }>
+  modelRuns?: SafeModelRun[]
 }
 
 export interface StoredTurnResult extends SessionTurnResult {
@@ -47,6 +36,14 @@ interface IdempotencyRecord {
 interface SessionState extends SessionSnapshot {
   idempotency: Map<string, IdempotencyRecord>
   inFlightKey: string | null
+  updatedAt: number
+}
+
+interface PreviewSessionStoreOptions {
+  maxSessions?: number
+  maxIdempotencyRecords?: number
+  sessionTtlMs?: number
+  now?: () => number
 }
 
 function fingerprint(command: TurnCommand): string {
@@ -61,9 +58,21 @@ function fingerprint(command: TurnCommand): string {
 
 export class PreviewSessionStore {
   private readonly sessions = new Map<string, SessionState>()
+  private readonly maxSessions: number
+  private readonly maxIdempotencyRecords: number
+  private readonly sessionTtlMs: number
+  private readonly now: () => number
+
+  constructor(options: PreviewSessionStoreOptions = {}) {
+    this.maxSessions = options.maxSessions || 1_000
+    this.maxIdempotencyRecords = options.maxIdempotencyRecords || 64
+    this.sessionTtlMs = options.sessionTtlMs || 2 * 60 * 60 * 1_000
+    this.now = options.now || Date.now
+  }
 
   snapshot(command: TurnCommand): SessionSnapshot {
     const session = this.getOrCreate(command)
+    session.updatedAt = this.now()
     return {
       sessionId: session.sessionId,
       storyId: session.storyId,
@@ -91,12 +100,16 @@ export class PreviewSessionStore {
     session.inFlightKey = key
     const promise = this.runAndCommit(session, command, worker)
     session.idempotency.set(key, { fingerprint: commandFingerprint, promise })
+    if (session.idempotency.size > this.maxIdempotencyRecords) {
+      for (const oldKey of session.idempotency.keys()) {
+        if (oldKey !== key) {
+          session.idempotency.delete(oldKey)
+          break
+        }
+      }
+    }
     try {
       return await promise
-    }
-    catch (error) {
-      session.idempotency.delete(key)
-      throw error
     }
     finally {
       if (session.inFlightKey === key)
@@ -105,12 +118,16 @@ export class PreviewSessionStore {
   }
 
   private getOrCreate(command: TurnCommand): SessionState {
+    this.pruneExpired()
     const existing = this.sessions.get(command.session_id)
     if (existing) {
       if (existing.storyId !== command.story_id)
         throw new FabulaApiError('SESSION_STORY_CONFLICT', 'Сессия уже привязана к другому StoryPack.', 409)
+      existing.updatedAt = this.now()
       return existing
     }
+    if (this.sessions.size >= this.maxSessions)
+      throw new FabulaApiError('SESSION_CAPACITY_REACHED', 'Лимит preview-сессий исчерпан. Повтори позже.', 503, true)
     const created: SessionState = {
       sessionId: command.session_id,
       storyId: command.story_id,
@@ -118,9 +135,18 @@ export class PreviewSessionStore {
       history: [],
       idempotency: new Map(),
       inFlightKey: null,
+      updatedAt: this.now(),
     }
     this.sessions.set(command.session_id, created)
     return created
+  }
+
+  private pruneExpired(): void {
+    const cutoff = this.now() - this.sessionTtlMs
+    for (const [sessionId, session] of this.sessions) {
+      if (session.updatedAt < cutoff && session.inFlightKey === null)
+        this.sessions.delete(sessionId)
+    }
   }
 
   private async runAndCommit(
@@ -133,6 +159,7 @@ export class PreviewSessionStore {
     if (session.version !== command.expected_session_version)
       throw new FabulaApiError('SESSION_VERSION_CONFLICT', 'Сессия изменилась во время хода.', 409)
     session.version += 1
+    session.updatedAt = this.now()
     session.history.push({
       turnId: command.idempotency_key,
       mode: command.mode,

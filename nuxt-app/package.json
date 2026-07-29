@@ -8,6 +8,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "test": "bun test server/ai",
+    "live:ai:text": "bun scripts/ai-live-smoke.ts",
     "typecheck": "nuxt typecheck",
     "postinstall": "nuxt prepare"
   },

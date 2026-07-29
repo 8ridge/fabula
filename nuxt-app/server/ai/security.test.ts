@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
+import { resolveAiConfig } from './config'
 import { FabulaApiError } from './http'
-import { sanitizeNemotronPayload } from './security'
+import { assertApprovedAssetUrls, sanitizeNemotronPayload } from './security'
 
 describe('Nemotron privacy projection', () => {
   test('keeps only server allowlisted aggregate fields', () => {
@@ -22,5 +23,23 @@ describe('Nemotron privacy projection', () => {
     expect(() => sanitizeNemotronPayload({
       active_threads: ['write me at hidden@example.com'],
     })).toThrow(FabulaApiError)
+  })
+
+  test('accepts only HTTPS references from the configured asset origin', () => {
+    const config = resolveAiConfig({
+      openrouterSiteUrl: 'https://fabula.example/app',
+    })
+    expect(assertApprovedAssetUrls(
+      ['https://fabula.example/assets/frame.jpg'],
+      config,
+      1,
+      true,
+    )).toEqual(['https://fabula.example/assets/frame.jpg'])
+    expect(() => assertApprovedAssetUrls(
+      ['https://external.example/frame.jpg'],
+      config,
+      1,
+      true,
+    )).toThrow(FabulaApiError)
   })
 })

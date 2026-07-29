@@ -3,6 +3,7 @@ import { resolveAiConfig } from '../../../ai/config'
 import { parseModuleRequest } from '../../../ai/contracts'
 import { respondWithError } from '../../../ai/http'
 import { AiModuleService } from '../../../ai/module-service'
+import { moduleRequestStore } from '../../../ai/module-request-store'
 import { acquireRateLimit, assertAiEnabled, assertRequestSize, assertSameOrigin } from '../../../ai/security'
 
 export default defineEventHandler(async (event) => {
@@ -17,7 +18,11 @@ export default defineEventHandler(async (event) => {
     const moduleId = getRouterParam(event, 'module') || ''
     const request = parseModuleRequest(await readBody(event))
     const service = new AiModuleService(config)
-    const response = await service.invoke(moduleId, request)
+    const response = await moduleRequestStore.execute(
+      moduleId,
+      request,
+      () => service.invoke(moduleId, request),
+    )
     setHeader(event, 'Cache-Control', 'no-store')
     return response
   }

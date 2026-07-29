@@ -65,7 +65,7 @@ export function mountInteractionRuntime(root) {
       ],
       journal: [
         { title: 'Старик-хранитель', meta: 'Персонажи · сцена 02', text: 'Ждал носителя клинка двадцать лет.' },
-        { title: 'Клинок Тихого Пепла', meta: 'Предметы · подтверждено', text: 'На лезвии три звезды над разбитой короной.' },
+        { title: 'Клинок Тихого Пепла', meta: 'Предметы · локальный пример', text: 'На лезвии три звезды над разбитой короной.' },
         { title: 'Темная Цитадель', meta: 'Места · открытое последствие', text: 'Горит на горизонте вечным пламенем.' }
       ],
       checks: [
@@ -84,7 +84,7 @@ export function mountInteractionRuntime(root) {
       ],
       journal: [
         { title: 'Кассандра', meta: 'Системы · сцена 02', text: 'Утверждает, что твое имя отсутствует в журнале экипажа.' },
-        { title: 'Сектор D-17', meta: 'Места · подтверждено', text: 'Шлюз открыт, а на стекле иней с внутренней стороны.' },
+        { title: 'Сектор D-17', meta: 'Места · локальный пример', text: 'Шлюз открыт, а на стекле иней с внутренней стороны.' },
         { title: 'Второе питание', meta: 'События · открытое последствие', text: 'Неизвестный источник включился за панелью шлюза.' }
       ],
       checks: [
@@ -103,7 +103,7 @@ export function mountInteractionRuntime(root) {
       ],
       journal: [
         { title: 'Марк Лициний', meta: 'Союзники · сцена 02', text: 'Знает путь к кузнице, но проверяет твою осторожность.' },
-        { title: 'Восковая табличка', meta: 'Предметы · подтверждено', text: 'Содержит имена покровителей школы Батиата.' },
+        { title: 'Восковая табличка', meta: 'Предметы · локальный пример', text: 'Содержит имена покровителей школы Батиата.' },
         { title: 'Человек в плаще', meta: 'Персонажи · открытое последствие', text: 'Не снимает плащ даже у огня.' }
       ],
       checks: [
@@ -122,7 +122,7 @@ export function mountInteractionRuntime(root) {
       ],
       journal: [
         { title: 'Лера Орлова', meta: 'Персонажи · сцена 02', text: 'Ее брат отмечен в утечке как следующий источник.' },
-        { title: 'Будущий эфир', meta: 'Данные · подтверждено', text: 'Запись содержит твой голос и упоминание завтрашнего пожара.' },
+        { title: 'Будущий эфир', meta: 'Данные · локальный пример', text: 'Запись содержит твой голос и упоминание завтрашнего пожара.' },
         { title: 'Лифт редакции', meta: 'События · открытое последствие', text: 'Остановился на этаже, которого нет в расписании.' }
       ],
       checks: [
@@ -224,7 +224,7 @@ export function mountInteractionRuntime(root) {
   }
 
   function generatedMessageActions() {
-    return '<span class="message-actions"><button class="message-action-button" type="button" data-message-action="copy" aria-label="Скопировать сообщение" title="Скопировать">⧉<small>Копировать</small></button><button class="message-action-button" type="button" data-message-action="rephrase" aria-label="Переформулировать сообщение" title="Переформулировать">≋<small>Переформулировать</small></button><button class="message-action-button" type="button" data-message-action="regenerate" aria-label="Перегенерировать сообщение" title="Перегенерировать">↻<small>Перегенерировать</small></button></span>';
+    return '<span class="message-actions"><button class="message-action-button" type="button" data-message-action="copy" aria-label="Скопировать сообщение" title="Скопировать">⧉<small>Копировать</small></button><button class="message-action-button" type="button" data-message-action="rephrase" aria-label="Показать локальный пример переформулировки без вызова модели" title="Локальный пример, модель не вызывается">≋<small>Локально</small></button><button class="message-action-button" type="button" data-message-action="regenerate" aria-label="Показать локальный пример другого варианта без вызова модели" title="Локальный пример, модель не вызывается">↻<small>Локально</small></button></span>';
   }
 
   function playerMessageActions() {
@@ -289,7 +289,7 @@ export function mountInteractionRuntime(root) {
     card.innerHTML = '<div class="variant-head"><span><i>✧</i>' + escapeHTML(variant.label) + '</span><button type="button" data-variant-action="dismiss" aria-label="Скрыть вариант">×</button></div>' +
       (variant.selectionText ? '<blockquote>"' + escapeHTML(variant.selectionText) + '"</blockquote>' : '') +
       '<p>' + escapeHTML(variant.text) + '</p>' +
-      '<div class="variant-foot"><span>Локальный вариант · канон не изменен</span><span class="variant-actions"><button class="variant-button primary" type="button" data-variant-action="apply">Применить</button><button class="variant-button" type="button" data-variant-action="dismiss">Скрыть</button></span></div>';
+      '<div class="variant-foot"><span>Локальный пример · модель не вызывалась · канон не изменен</span><span class="variant-actions"><button class="variant-button primary" type="button" data-variant-action="apply">Показать</button><button class="variant-button" type="button" data-variant-action="dismiss">Скрыть</button></span></div>';
     card.__fabulaVariant = variant;
     article.appendChild(card);
     card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -330,11 +330,11 @@ export function mountInteractionRuntime(root) {
     if (!original) return;
     renderVariantCard(article, {
       kind,
-      label: kind === 'rephrase' ? 'Переформулировка' : 'Новый вариант ответа',
+      label: kind === 'rephrase' ? 'Локальный пример переформулировки' : 'Локальный пример другого варианта',
       text: makeTextVariant(original, kind),
       originalText: original
     });
-    showToast(kind === 'rephrase' ? 'Готова другая формулировка' : 'Готов новый вариант сцены');
+    showToast('Локальный пример: модель не вызывалась');
   }
 
   function hideSelectionToolbar() {
@@ -432,7 +432,7 @@ export function mountInteractionRuntime(root) {
       originalText: messageText(state.article)
     });
     hideSelectionToolbar();
-    showToast(action === 'rephrase' ? 'Готов вариант выделенного фрагмента' : 'Готов новый вариант фрагмента');
+    showToast('Локальный пример: модель не вызывалась');
   }
 
   function applyStory(nextId) {
@@ -534,7 +534,7 @@ export function mountInteractionRuntime(root) {
     const request = config.makeTurnRequest({ text, mode, storyId: requestStoryId, sessionId, sessionVersion });
     async function fetchTurn() {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 100000);
+      const timeout = setTimeout(() => controller.abort(), 390000);
       try {
         return await fetch('/api/ai/turn', {
           method: 'POST',
@@ -640,13 +640,13 @@ export function mountInteractionRuntime(root) {
   }
 
   function renderModels() {
-    const modelCards = config.models.map((model) => '<div class="model-catalog-card"><strong>' + escapeHTML(model.label) + '</strong><small>' + escapeHTML(model.slug) + '</small><b>' + escapeHTML(model.phase) + ' · ' + escapeHTML(model.status) + '</b></div>').join('');
+    const modelCards = config.models.map((model) => '<div class="model-catalog-card" data-model-id="' + escapeHTML(model.id) + '"><strong>' + escapeHTML(model.label) + '</strong><small>' + escapeHTML(model.slug) + '</small><b>' + escapeHTML(model.phase) + ' · ' + escapeHTML(model.status) + '</b></div>').join('');
     const rows = config.prompts.map((prompt) => {
       const model = modelForPrompt(prompt);
       const statusClass = prompt.route === 'primary' ? 'primary' : prompt.route.indexOf('async') === 0 || prompt.route === 'premium' ? 'async' : prompt.route === 'advisory' ? 'advisory' : '';
-      return '<div class="prompt-row"><span class="prompt-number">' + prompt.number + '</span><span><strong>' + escapeHTML(prompt.title) + '</strong><small>' + escapeHTML(model.label) + ' · ' + escapeHTML(prompt.contract) + '</small></span><span class="prompt-status ' + statusClass + '">' + escapeHTML(prompt.route) + '</span></div>';
+      return '<div class="prompt-row" data-module-id="' + escapeHTML(prompt.id) + '"><span class="prompt-number">' + prompt.number + '</span><span><strong>' + escapeHTML(prompt.title) + '</strong><small>' + escapeHTML(model.label) + ' · ' + escapeHTML(prompt.contract) + '</small></span><span class="prompt-status ' + statusClass + '">' + escapeHTML(prompt.route) + '</span></div>';
     }).join('');
-    return '<div class="model-summary" id="aiCatalogState" role="status"><span>⌘</span><span><strong>Проверяю серверный контур</strong><small>Ключи остаются в Nitro runtimeConfig</small></span></div><p class="modal-note">Модели вызываются только через server API. Авторитетный preview-ход проходит строгий контракт; advisory и media включаются отдельными серверными флагами.</p><div class="model-catalog-grid">' + modelCards + '</div><div class="prompt-list-heading">12 prompt-модулей</div><div class="prompt-list">' + rows + '</div><div class="modal-actions"><a class="modal-button primary" href="https://openrouter.ai" target="_blank" rel="noopener">Открыть OpenRouter</a></div>';
+    return '<div class="model-summary" id="aiCatalogState" role="status"><span>⌘</span><span><strong>Проверяю серверный контур</strong><small>Ключи остаются в Nitro runtimeConfig</small></span></div><p class="modal-note">Только игровой ход подключен к этому экрану как живая функция. Standalone-ответы проверяются сервером по строгим контрактам. Медиа выключено без отдельного бюджета; видео дополнительно заблокировано до durable idempotency и HTTPS-кадра.</p><div class="model-catalog-grid">' + modelCards + '</div><div class="prompt-list-heading">' + config.prompts.length + ' файлов-промтов</div><div class="prompt-list">' + rows + '</div><div class="modal-actions"><a class="modal-button primary" href="https://openrouter.ai" target="_blank" rel="noopener">Открыть OpenRouter</a></div>';
   }
 
   async function refreshAiCatalogStatus() {
@@ -664,6 +664,31 @@ export function mountInteractionRuntime(root) {
             ? 'OpenRouter настроен, но выключен'
             : 'OpenRouter ожидает серверный ключ';
       status.innerHTML = '<span>⌘</span><span><strong>' + escapeHTML(title) + '</strong><small>' + enabledModules + ' модулей включено · ключ не передается в браузер</small></span>';
+      const modules = Array.isArray(catalog.modules) ? catalog.modules : [];
+      modalBody.querySelectorAll('[data-module-id]').forEach((row) => {
+        const module = modules.find((entry) => entry.id === row.dataset.moduleId);
+        const badge = row.querySelector('.prompt-status');
+        if (!module || !badge) return;
+        badge.textContent = module.id === 'authoritative-turn'
+          ? (catalog.enabled && catalog.configured && catalog.public_access ? 'живой turn route' : 'turn route закрыт')
+          : module.enabled
+            ? 'включен'
+            : module.blocked_reason
+              ? 'честно заблокирован'
+              : module.internal_only
+                ? 'внутренний'
+                : 'выключен';
+      });
+      modalBody.querySelectorAll('[data-model-id]').forEach((card) => {
+        const related = modules.filter((entry) => entry.model_id === card.dataset.modelId);
+        const state = card.querySelector('b');
+        if (!state || related.length === 0) return;
+        state.textContent = related.some((entry) => entry.enabled)
+          ? 'серверный маршрут включен'
+          : related.some((entry) => entry.blocked_reason)
+            ? 'серверный маршрут заблокирован'
+            : 'серверный маршрут выключен';
+      });
     } catch (_) {
       status.innerHTML = '<span>⌘</span><span><strong>Статус сервера недоступен</strong><small>Модельный каталог не загрузился</small></span>';
     }
@@ -707,7 +732,7 @@ export function mountInteractionRuntime(root) {
 
   function renderJournal() {
     const journal = currentTools().journal;
-    return '<p class="modal-note">Журнал - проекция подтвержденных событий. Его записи не создают параллельный канон.</p><div class="journal-list">' + journal.map((item) => '<div class="journal-item"><span>✒</span><span><strong>' + escapeHTML(item.title) + '</strong><small>' + escapeHTML(item.meta) + ' · ' + escapeHTML(item.text) + '</small></span><button class="insert-button" type="button" data-insert="' + escapeHTML(item.text) + '">В ход</button></div>').join('') + '</div>';
+    return '<p class="modal-note">Это локальный демо-журнал. Его записи не являются production-каноном и только подставляют текст в поле хода.</p><div class="journal-list">' + journal.map((item) => '<div class="journal-item"><span>✒</span><span><strong>' + escapeHTML(item.title) + '</strong><small>' + escapeHTML(item.meta) + ' · ' + escapeHTML(item.text) + '</small></span><button class="insert-button" type="button" data-insert="' + escapeHTML(item.text) + '">В ход</button></div>').join('') + '</div>';
   }
 
   function renderCharacter() {
@@ -723,14 +748,14 @@ export function mountInteractionRuntime(root) {
 
   function renderSettings() {
     const fontOptions = [['normal', 'Обычный'], ['large', 'Крупный'], ['xlarge', 'Очень крупный']].map(([value, label]) => '<button type="button" data-font-size-option="' + value + '" class="' + (fontScale === value ? 'is-active' : '') + '" aria-pressed="' + (fontScale === value) + '">' + label + '</button>').join('');
-    return '<div class="settings-group"><label>Размер текста</label><div class="settings-segment settings-font-segment">' + fontOptions + '</div><small class="settings-help">Масштаб сохраняется для этой страницы и не меняет канон.</small></div><div class="settings-group"><label>Тон сцены</label><div class="settings-segment"><button type="button" class="is-active">Мрачный</button><button type="button">Героический</button><button type="button">Ироничный</button></div></div><div class="settings-group"><label>Темп</label><div class="settings-segment"><button type="button" class="is-active">Спокойно</button><button type="button">Быстро</button></div></div><label class="settings-check"><input type="checkbox" checked> Показывать подсказки действий</label><div class="modal-actions"><button class="modal-button primary" type="button" data-close-modal>Сохранить для сессии</button></div>';
+    return '<div class="settings-group"><label>Размер текста</label><div class="settings-segment settings-font-segment">' + fontOptions + '</div><small class="settings-help">Масштаб сохраняется для этой страницы и не меняет канон.</small></div><div class="settings-group"><label>Тон сцены · preview, не подключен к AI</label><div class="settings-segment"><button type="button" class="is-active" disabled>Мрачный</button><button type="button" disabled>Героический</button><button type="button" disabled>Ироничный</button></div></div><div class="settings-group"><label>Темп · preview, не подключен к AI</label><div class="settings-segment"><button type="button" class="is-active" disabled>Спокойно</button><button type="button" disabled>Быстро</button></div></div><label class="settings-check"><input type="checkbox" checked disabled> Подсказки показаны только как локальный пример</label><div class="modal-actions"><button class="modal-button primary" type="button" data-close-modal>Закрыть</button></div>';
   }
 
   function openTool(tool) {
     const views = {
       models: ['КОНТУР OPENROUTER', 'Модели и промты', renderModels],
       inventory: ['СОСТОЯНИЕ СЕССИИ', 'Рюкзак и предметы', renderInventory],
-      journal: ['ЖУРНАЛ ПАМЯТИ', 'Подтвержденные события', renderJournal],
+      journal: ['ДЕМО-ЖУРНАЛ', 'Локальные примеры', renderJournal],
       character: ['ЛИСТ ПЕРСОНАЖА', 'Безымянный', renderCharacter],
       check: ['ПРОВЕРКА', 'Инструмент действия', renderCheck],
       settings: ['НАСТРОЙКИ СЦЕНЫ', 'Опыт взаимодействия', renderSettings]
@@ -853,7 +878,7 @@ export function mountInteractionRuntime(root) {
         resizeInput();
         input.focus();
         input.setSelectionRange(0, input.value.length);
-        showToast('Весь текст переформулирован локально');
+        showToast('Локальный пример: модель не вызывалась');
       } else {
         input.focus();
         showToast('Сначала напиши или выдели текст для переформулирования');
@@ -894,8 +919,7 @@ export function mountInteractionRuntime(root) {
     }
     const autoToggle = event.target.closest('[data-auto-toggle]');
     if (autoToggle) {
-      autoToggle.classList.toggle('is-on');
-      showToast(autoToggle.classList.contains('is-on') ? 'Автопродолжение включено' : 'Автопродолжение выключено');
+      showToast('Автопродолжение пока не подключено');
     }
     const settingsButton = event.target.closest('.settings-segment button');
     if (settingsButton) {
@@ -907,7 +931,7 @@ export function mountInteractionRuntime(root) {
       input.value = '';
       resizeInput();
       input.focus();
-      showToast('Новая сцена готова к первому ходу');
+      showToast('Preview: создание новой сцены пока не подключено');
     }
     const searchThreads = event.target.closest('[data-search-threads]');
     if (searchThreads) {

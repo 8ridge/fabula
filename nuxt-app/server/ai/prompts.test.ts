@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test'
+import { AI_MODULES } from './catalog'
+import { PROMPT_SOURCE_FILES } from './prompt-files'
 import { firstFencedBlock, rulesOnly } from './prompt-utils'
 
 describe('prompt contract stripping', () => {
@@ -31,5 +33,16 @@ describe('prompt contract stripping', () => {
 
     expect(stripped).not.toContain('scene-plan@0.2')
     expect(stripped).not.toContain('potential_media_trigger')
+  })
+
+  test('maps every server module to an existing prompt file', async () => {
+    expect(Object.keys(PROMPT_SOURCE_FILES).sort()).toEqual(Object.keys(AI_MODULES).sort())
+    for (const file of new Set(Object.values(PROMPT_SOURCE_FILES))) {
+      const source = await Bun.file(new URL(
+        `../../../deliverables/PWA_AI_PRESENTATION_KIT/prompts/${file}`,
+        import.meta.url,
+      )).text()
+      expect(source.length).toBeGreaterThan(100)
+    }
   })
 })
