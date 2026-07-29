@@ -1,5 +1,26 @@
 # локальные бэкапы редактора/правок
 *.backup.*.html
+
+# Nuxt dev/build outputs
+.output
+.data
+.nuxt
+.nitro
+.cache
+dist
+
+# зависимости и журналы
+node_modules
+logs
+*.log
+
+# локальные настройки
+.fleet
+.idea
+.env
+.env.*
+!.env.example
+
 # служебное
 .DS_Store
 Thumbs.db

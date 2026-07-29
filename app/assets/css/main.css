@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+@theme {
+  --color-fabula-950: #0a0a0c;
+  --color-fabula-900: #101014;
+  --color-fabula-800: #1a1a1e;
+  --color-fabula-100: #eaeaee;
+  --color-fabula-300: #a2a2ab;
+  --color-fabula-gold: #d9a94a;
+  --color-fabula-gold-light: #f2cd7c;
+  --font-display: "Forum", Georgia, serif;
+  --font-story: "Cormorant Garamond", Georgia, serif;
+  --font-interface: "Tektur", ui-monospace, monospace;
+  --ease-fabula: cubic-bezier(.22, .61, .36, 1);
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    background: var(--color-fabula-950);
+  }
+
+  html,
+  body,
+  #app {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    min-width: 320px;
+    background: var(--color-fabula-950);
+    color: var(--color-fabula-100);
+    font-family: var(--font-story);
+  }
+
+  button {
+    cursor: pointer;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

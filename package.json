@@ -1,0 +1,30 @@
+{
+  "name": "fabula",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "test": "bun test server/ai",
+    "live:ai:text": "bun scripts/ai-live-smoke.ts",
+    "typecheck": "nuxt typecheck",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "@vite-pwa/nuxt": "1.1.1",
+    "@vueuse/nuxt": "^14.4.0",
+    "gsap": "^3.15.0",
+    "motion-v": "^2.3.0",
+    "nuxt": "4.5.1",
+    "vue": "^3.5.40",
+    "vue-router": "^5.2.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "tailwindcss": "^4.3.3",
+    "typescript": "5.9.3",
+    "vue-tsc": "^3.3.8"
+  }
+}
