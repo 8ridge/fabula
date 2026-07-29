@@ -313,7 +313,7 @@
     </form>
     <div class="auth-or">или</div>
     <div class="auth-soc">
-      <div id="googleBtnHolder"></div>
+      <div id="googleBtnHolder" style="display:flex;justify-content:center;overflow:hidden"></div>
       <button data-soc="tg"><svg class="ic" viewBox="0 0 24 24" fill="#2AABEE"><path d="M21.9 4.3l-3.3 15.6c-.25 1.1-.9 1.37-1.83.85l-5.05-3.72-2.44 2.35c-.27.27-.5.5-1 .5l.36-5.13L18 6.36c.4-.36-.09-.56-.62-.2L6.98 13.02l-4.7-1.47c-1.02-.32-1.04-1.02.22-1.5l18.36-7.08c.85-.31 1.6.2 1.32 1.33z"/></svg>Продолжить с Telegram</button>
     </div>
     <div id="nickStep" style="display:none;margin-top:14px">
@@ -907,7 +907,11 @@ if('serviceWorker' in navigator){
     await loadGis();
     window.google.accounts.id.initialize({ client_id: clientId, callback: onGoogleCredential });
     const holder = document.getElementById('googleBtnHolder');
-    if (holder){ holder.innerHTML=''; window.google.accounts.id.renderButton(holder, { theme:'filled_black', size:'large', text:'continue_with', shape:'pill', width: 280 }); }
+    if (holder){
+      holder.innerHTML='';
+      const w = Math.max(240, Math.min(400, Math.round(holder.getBoundingClientRect().width) || 358));
+      window.google.accounts.id.renderButton(holder, { theme:'filled_black', size:'large', text:'continue_with', shape:'pill', logo_alignment:'center', width: w });
+    }
   }
   initGoogle();
 
