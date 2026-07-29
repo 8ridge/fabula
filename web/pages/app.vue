@@ -211,6 +211,14 @@
       </nav>
 
       <div class="toast" id="toast"></div>
+      <div class="pmodal" id="pmodal">
+        <div class="pmodal-card">
+          <div class="pmodal-h" id="pmTitle">Заголовок</div>
+          <div id="pmBody"></div>
+          <div class="pmodal-msg" id="pmMsg"></div>
+          <div class="pmodal-btns"><button class="pmodal-cancel" id="pmCancel">Отмена</button><button class="pmodal-ok" id="pmOk">Сохранить</button></div>
+        </div>
+      </div>
       <div class="grain"><svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"><filter id="ng"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2"/></filter><rect width="100%" height="100%" filter="url(#ng)"/></svg></div>
       <div class="homebar"></div>
     </div>
@@ -272,6 +280,20 @@ onMounted(() => {
 
   function toast(msg){ const t=document.getElementById('toast'); if(!t) return; t.textContent=msg; t.classList.add('on'); setTimeout(()=>t.classList.remove('on'),2200); }
 
+  const pm = document.getElementById('pmodal');
+  function openModal(title, bodyHtml, onOk){
+    document.getElementById('pmTitle').textContent = title;
+    document.getElementById('pmBody').innerHTML = bodyHtml;
+    document.getElementById('pmMsg').textContent = '';
+    document.getElementById('pmOk').style.display = bodyHtml.includes('pmGoogleBtn') ? 'none' : '';
+    pm.classList.add('on');
+    const ok = document.getElementById('pmOk'), cancel = document.getElementById('pmCancel');
+    const close = ()=>{ pm.classList.remove('on'); ok.onclick=null; cancel.onclick=null; };
+    cancel.onclick = close;
+    ok.onclick = async ()=>{ const keep = await onOk(document.getElementById('pmMsg')); if(!keep) close(); };
+    const first = document.querySelector('#pmBody input'); if(first) first.focus();
+  }
+
   function clearSession(){ try{ localStorage.removeItem('fabula-token'); localStorage.removeItem('fabula-user'); }catch(_){}; location.href='/'; }
 
   document.querySelectorAll('[data-scr="profile"] [data-act]').forEach(row => {
@@ -285,19 +307,30 @@ onMounted(() => {
       }
       if (act === 'username') {
         const cur = (window.__fabulaUser && window.__fabulaUser.username) || '';
-        const val = prompt('Новый ник (3–20, латиница/цифры/_):', cur);
-        if (!val || val === cur) return;
-        const { res, data } = await apiAuth('/auth/username', 'PATCH', { username: val });
-        if (res.ok) { toast('Ник обновлён'); loadProfile(); }
-        else toast(res.status === 409 ? 'Ник занят' : 'Проверь формат ника');
+        openModal('Смена ника',
+          `<label class="pm-l">Новый ник</label><input id="pmNick" value="${cur}" placeholder="3–20, латиница/цифры/_">`,
+          async (msg)=>{
+            const v = (document.getElementById('pmNick').value||'').trim();
+            if(!/^[A-Za-z0-9_]{3,20}$/.test(v)){ msg.textContent='Ник: 3–20, латиница, цифры, _'; return true; }
+            const { res } = await apiAuth('/auth/username','PATCH',{ username:v });
+            if(res.ok){ toast('Ник обновлён'); loadProfile(); return false; }
+            msg.textContent = res.status===409 ? 'Ник занят' : 'Проверь формат'; return true;
+          });
         return;
       }
       if (act === 'password') {
-        const cur = prompt('Текущий пароль:'); if (cur === null) return;
-        const nw = prompt('Новый пароль (от 6 символов):'); if (!nw) return;
-        const { res } = await apiAuth('/auth/change-password', 'POST', { current_password: cur, new_password: nw });
-        if (res.ok) { toast('Пароль изменён, войдите заново'); clearSession(); }
-        else toast('Неверный текущий пароль');
+        openModal('Смена пароля',
+          `<label class="pm-l">Текущий пароль</label><input id="pmCur" type="password" autocomplete="current-password">`+
+          `<label class="pm-l">Новый пароль (≥6)</label><input id="pmNew" type="password" autocomplete="new-password">`+
+          `<label class="pm-l">Повтор нового</label><input id="pmRep" type="password" autocomplete="new-password">`,
+          async (msg)=>{
+            const cur=document.getElementById('pmCur').value, nw=document.getElementById('pmNew').value, rp=document.getElementById('pmRep').value;
+            if(nw.length<6){ msg.textContent='Новый пароль от 6 символов'; return true; }
+            if(nw!==rp){ msg.textContent='Пароли не совпадают'; return true; }
+            const { res } = await apiAuth('/auth/change-password','POST',{ current_password:cur, new_password:nw });
+            if(res.ok){ toast('Пароль изменён, войдите заново'); clearSession(); return false; }
+            msg.textContent='Неверный текущий пароль'; return true;
+          });
         return;
       }
       if (act === 'google') {
