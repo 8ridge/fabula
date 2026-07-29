@@ -19,7 +19,7 @@
 <section class="hero" id="top">
   <div class="hero-bg" id="heroBg">
     <div class="hero-fallback"></div>
-    <video class="hero-video" id="heroVideo" poster="/assets/hero_landing.jpg?v5" muted="" loop="" playsinline="" preload="none"></video>
+    <video class="hero-video" id="heroVideo" poster="/assets/hero_landing.jpg?v6" muted="" loop="" playsinline="" preload="none"></video>
   </div>
   <div class="hero-vig"></div>
   <div class="dust" id="dust"></div>
