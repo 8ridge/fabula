@@ -336,6 +336,16 @@ onMounted(() => {
     img.addEventListener('error', () => { img.style.display = 'none' }, { once: true })
   })
 
+  // если уже есть сессия — «Войти» становится «Профиль», «Начать» → «Продолжить»
+  try {
+    if (localStorage.getItem('fabula-token')) {
+      const loginLink = document.querySelector('.nav-links a[data-auth="login"]')
+      if (loginLink) { loginLink.textContent = 'Профиль'; loginLink.setAttribute('href', '/app'); loginLink.removeAttribute('data-auth') }
+      const startBtn = document.querySelector('.nav-links a.btn-solid')
+      if (startBtn) startBtn.textContent = 'Продолжить'
+    }
+  } catch (e) {}
+
 
 document.documentElement.classList.add('js');
 

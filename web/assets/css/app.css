@@ -724,3 +724,53 @@
     box-shadow:0 1px 0 rgba(255,246,222,.45) inset,0 -3px 8px rgba(90,60,15,.55) inset,0 10px 26px -10px rgba(217,169,74,.5)}
   /* hairline gold frame on the hero plate */
   .hero-wrap{border:1px solid var(--gold-line)}
+
+  /* ===== НЕЙТРАЛЬНЫЙ ПРОФИЛЬ + ЛЕВОЕ МЕНЮ (палитра лендинга: тёмный/серый/белый) ===== */
+  /* профиль: переопределяем тёплые токены на нейтральные -> gold исчезает во всём контенте */
+  .scr[data-scr="profile"]{
+    --ink:#eaeaee; --ink-dim:#a2a2ab; --ink-mute:#6d6d78;
+    --gold:#eaeaee; --gold-2:#ffffff; --gold-deep:#7a7a85; --gold-line:rgba(255,255,255,.14);
+    --hair:rgba(255,255,255,.10);
+    background:#0a0a0c;
+  }
+  .scr[data-scr="profile"] .tex-parch,
+  .scr[data-scr="profile"] .vignette{display:none!important}
+  /* sticky-хедер: нейтральный фон -> больше нет золотой «полоски» из размытого бара под ним */
+  .scr[data-scr="profile"] .appbar{background:linear-gradient(#0a0a0cf2,#0a0a0c00)}
+  .scr[data-scr="profile"] .appbar .ttl{color:#fff}
+  /* аватар: убираем золотое кольцо и свечение */
+  .scr[data-scr="profile"] .avatar{background:linear-gradient(160deg,#26262b,#141416)!important;
+    border:1px solid rgba(255,255,255,.14)!important;box-shadow:0 0 0 5px #0a0a0c!important}
+  .scr[data-scr="profile"] .avatar .ring{border-color:rgba(255,255,255,.16)}
+  .scr[data-scr="profile"] .avatar .fb{color:var(--shell-dim)}
+  .scr[data-scr="profile"] .p-name{color:#fff}
+  .scr[data-scr="profile"] .p-tier{border:none;background:none;padding:0;margin-top:8px;
+    color:var(--shell-dim);letter-spacing:.02em;text-transform:none;font-size:14px;font-family:'Forum',serif}
+  .scr[data-scr="profile"] .list-h{color:var(--shell-mute);letter-spacing:.22em}
+  /* активные истории — нейтральные карточки, серый прогресс */
+  .scr[data-scr="profile"] .story-row{background:#141416!important;border:1px solid rgba(255,255,255,.07)!important}
+  .scr[data-scr="profile"] .story-row .sp{background:#000}
+  .scr[data-scr="profile"] .story-row .sp i{background:linear-gradient(90deg,#7a7a85,#eaeaee)}
+  .scr[data-scr="profile"] .story-row .pct{color:var(--shell-dim)}
+  /* сгруппированные строки в карточки как на лендинге */
+  .scr[data-scr="profile"] .p-card{background:#141416;border:1px solid rgba(255,255,255,.07);
+    border-radius:14px;overflow:hidden;margin-bottom:6px}
+  .scr[data-scr="profile"] .p-card .setrow{padding:16px 18px;border-bottom:1px solid rgba(255,255,255,.07);color:var(--shell-ink)}
+  .scr[data-scr="profile"] .p-card .setrow:last-child{border-bottom:none}
+  .scr[data-scr="profile"] .p-card .setrow:hover{background:#ffffff06}
+  .scr[data-scr="profile"] .setrow .l{color:var(--shell-ink)}
+  .scr[data-scr="profile"] .setrow .l .g{color:var(--shell-mute)}
+  .scr[data-scr="profile"] .setrow .chev{color:var(--shell-mute)}
+  .scr[data-scr="profile"] .iconbtn{color:var(--shell-ink)!important;border-color:var(--shell-line)!important}
+
+  /* левое меню (десктоп-сайдбар) — нейтраль вместо тёплого градиента; + узкая колонка профиля */
+  @media (min-width:900px){
+    .nav{background:#0c0c0e!important;border-right:1px solid var(--shell-line)!important}
+    .nav a.act{background:#ffffff10!important;color:var(--shell-ink)!important}
+    .side-brand{color:var(--shell-ink)!important;text-shadow:none!important}
+    .scr[data-scr="profile"] .appbar,
+    .scr[data-scr="profile"] .p-top,
+    .scr[data-scr="profile"] .list-h,
+    .scr[data-scr="profile"] .story-row,
+    .scr[data-scr="profile"] .p-card{max-width:720px!important;margin-left:auto!important;margin-right:auto!important}
+  }
