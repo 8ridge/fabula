@@ -1,13 +1,18 @@
 """Роуты аутентификации и профиля."""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
 from ..deps import get_current_user
-from ..models import User
+from ..google_auth import GoogleVerifier, get_google_verifier
+from ..models import OAuthAccount, User
 from ..schemas import (
     ChangePasswordIn,
+    GoogleAuthOut,
+    GoogleCompleteIn,
+    GoogleIn,
     LoginIn,
     RegisterIn,
     TokenOut,
@@ -16,6 +21,8 @@ from ..schemas import (
 )
 from ..security import (
     create_access_token,
+    create_registration_token,
+    decode_registration_token,
     hash_password,
     verify_password,
 )
@@ -36,14 +43,21 @@ async def _username_taken(db: AsyncSession, username: str, exclude_id: int | Non
     return res.first() is not None
 
 
-def _providers(user: User) -> list[str]:
+async def _providers(db: AsyncSession, user: User) -> list[str]:
     p = []
     if user.password_hash is not None:
         p.append("email")
-    return p  # google добавится в Фазе 3
+    res = await db.execute(
+        select(OAuthAccount.id).where(
+            OAuthAccount.user_id == user.id, OAuthAccount.provider == "google"
+        )
+    )
+    if res.first() is not None:
+        p.append("google")
+    return p
 
 
-def _user_out(user: User) -> UserOut:
+async def _user_out(db: AsyncSession, user: User) -> UserOut:
     return UserOut(
         id=user.id,
         username=user.username,
@@ -51,8 +65,15 @@ def _user_out(user: User) -> UserOut:
         email_verified=user.email_verified,
         avatar_url=user.avatar_url,
         created_at=user.created_at,
-        providers=_providers(user),
+        providers=await _providers(db, user),
     )
+
+
+def _session_out(user: User) -> dict:
+    return {
+        "access_token": create_access_token(user.id, user.token_version),
+        "token_type": "bearer",
+    }
 
 
 @router.post("/register", response_model=TokenOut, status_code=status.HTTP_201_CREATED)
@@ -70,7 +91,7 @@ async def register(data: RegisterIn, db: AsyncSession = Depends(get_db)):
     await db.commit()
     await db.refresh(user)
     token = create_access_token(user.id, user.token_version)
-    return TokenOut(access_token=token, user=_user_out(user))
+    return TokenOut(access_token=token, user=await _user_out(db, user))
 
 
 @router.post("/login", response_model=TokenOut)
@@ -79,12 +100,12 @@ async def login(data: LoginIn, db: AsyncSession = Depends(get_db)):
     if user is None or user.password_hash is None or not verify_password(data.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверная почта или пароль")
     token = create_access_token(user.id, user.token_version)
-    return TokenOut(access_token=token, user=_user_out(user))
+    return TokenOut(access_token=token, user=await _user_out(db, user))
 
 
 @router.get("/me", response_model=UserOut)
-async def me(user: User = Depends(get_current_user)):
-    return _user_out(user)
+async def me(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    return await _user_out(db, user)
 
 
 @router.patch("/username", response_model=UserOut)
@@ -94,7 +115,7 @@ async def change_username(data: UsernameIn, user: User = Depends(get_current_use
     user.username = data.username
     await db.commit()
     await db.refresh(user)
-    return _user_out(user)
+    return await _user_out(db, user)
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
@@ -117,3 +138,72 @@ async def logout_all(user: User = Depends(get_current_user), db: AsyncSession = 
 async def delete_account(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     await db.delete(user)
     await db.commit()
+
+
+@router.post("/google", response_model=GoogleAuthOut)
+async def google_auth(
+    data: GoogleIn,
+    verifier: GoogleVerifier = Depends(get_google_verifier),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        claims = verifier.verify(data.id_token)
+    except Exception:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Недействительный токен Google")
+    sub = claims["sub"]
+    email = claims["email"].lower()
+    ev = bool(claims.get("email_verified"))
+
+    acc = (
+        await db.execute(
+            select(OAuthAccount).where(
+                OAuthAccount.provider == "google", OAuthAccount.provider_user_id == sub
+            )
+        )
+    ).scalar_one_or_none()
+    if acc:
+        user = await db.get(User, acc.user_id)
+        return GoogleAuthOut(**_session_out(user), user=await _user_out(db, user))
+
+    user = await _get_by_email(db, email)
+    if user is not None:
+        if not ev:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Google не подтвердил эту почту. Войди паролем и привяжи Google в профиле.",
+            )
+        db.add(OAuthAccount(user_id=user.id, provider="google", provider_user_id=sub))
+        await db.commit()
+        return GoogleAuthOut(**_session_out(user), user=await _user_out(db, user))
+
+    if not ev:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Google не подтвердил почту")
+    return GoogleAuthOut(
+        needs_username=True, registration_token=create_registration_token(sub, email)
+    )
+
+
+@router.post("/google/complete", response_model=TokenOut)
+async def google_complete(data: GoogleCompleteIn, db: AsyncSession = Depends(get_db)):
+    payload = decode_registration_token(data.registration_token)
+    if payload is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Ссылка регистрации недействительна")
+    sub, email = payload["google_sub"], payload["email"].lower()
+    if await _username_taken(db, data.username):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ник занят")
+    if await _get_by_email(db, email):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Аккаунт с этой почтой уже есть")
+    user = User(email=email, username=data.username, password_hash=None, email_verified=True)
+    db.add(user)
+    try:
+        await db.flush()
+        db.add(OAuthAccount(user_id=user.id, provider="google", provider_user_id=sub))
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ник или аккаунт уже заняты")
+    await db.refresh(user)
+    return TokenOut(
+        access_token=create_access_token(user.id, user.token_version),
+        user=await _user_out(db, user),
+    )
