@@ -173,7 +173,20 @@ async def google_auth(
                 "Google не подтвердил эту почту. Войди паролем и привяжи Google в профиле.",
             )
         db.add(OAuthAccount(user_id=user.id, provider="google", provider_user_id=sub))
-        await db.commit()
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            acc = (
+                await db.execute(
+                    select(OAuthAccount).where(
+                        OAuthAccount.provider == "google",
+                        OAuthAccount.provider_user_id == sub,
+                    )
+                )
+            ).scalar_one_or_none()
+            if acc is not None:
+                user = await db.get(User, acc.user_id)
         return GoogleAuthOut(**_session_out(user), user=await _user_out(db, user))
 
     if not ev:

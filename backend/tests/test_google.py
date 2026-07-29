@@ -33,6 +33,17 @@ def test_google_autolink_to_existing_email(client, creds):
     assert set(me["providers"]) == {"email", "google"}
 
 
+def test_google_autolink_idempotent(client, creds):
+    register(client, creds)
+    tok = google_token("g_link_idem", creds["email"], email_verified=True)
+    r1 = client.post("/auth/google", json={"id_token": tok})
+    r2 = client.post("/auth/google", json={"id_token": tok})
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert r2.json().get("access_token")
+    me = client.get("/auth/me", headers=auth_headers(r2.json()["access_token"])).json()
+    assert set(me["providers"]) == {"email", "google"}
+
+
 def test_google_unverified_email_existing_rejected(client, creds):
     register(client, creds)
     tok = google_token("g_link2", creds["email"], email_verified=False)
