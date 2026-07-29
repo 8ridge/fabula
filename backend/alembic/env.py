@@ -6,11 +6,12 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.config import settings
-from app.database import Base
+from app.database import Base, _async_url
 from app import models  # noqa: F401  — регистрируем модели
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# нормализуем к asyncpg (Saturn инжектит postgresql://, а psycopg2 в образе нет)
+config.set_main_option("sqlalchemy.url", _async_url(settings.database_url))
 if config.config_file_name:
     fileConfig(config.config_file_name)
 target_metadata = Base.metadata
