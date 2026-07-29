@@ -2,7 +2,7 @@ import { readBody, setHeader } from 'h3'
 import { resolveAiConfig } from '../../ai/config'
 import { parseTurnCommand } from '../../ai/contracts'
 import { respondWithError } from '../../ai/http'
-import { acquireRateLimit, assertAiEnabled, assertRequestSize, assertSameOrigin } from '../../ai/security'
+import { acquireRateLimit, assertAiConfigured, assertRequestSize, assertSameOrigin } from '../../ai/security'
 import { previewSessionStore } from '../../ai/session-store'
 import { TurnEngine } from '../../ai/turn-engine'
 
@@ -14,8 +14,8 @@ export default defineEventHandler(async (event) => {
     assertSameOrigin(event)
     assertRequestSize(event, 16_000)
     const config = resolveAiConfig(useRuntimeConfig(event) as unknown as Record<string, unknown>)
-    assertAiEnabled(config)
-    release = acquireRateLimit(event, config)
+    assertAiConfigured(config)
+    release = acquireRateLimit(event)
     const command = parseTurnCommand(await readBody(event))
     turnId = command.idempotency_key
     const engine = new TurnEngine(config)

@@ -1,29 +1,23 @@
 import { describe, expect, test } from 'bun:test'
 import type { FabulaAiConfig } from './config'
-import { OpenRouterClient, OpenRouterError } from './openrouter'
+import { OPENROUTER_TIMEOUTS, OpenRouterClient, OpenRouterError } from './openrouter'
 
 const config: FabulaAiConfig = {
   apiKey: 'test-key-never-log',
   baseUrl: 'https://openrouter.ai/api/v1',
   siteUrl: 'https://fabula.example',
-  appName: 'Fabula',
-  enabled: true,
-  allowUnauthenticated: true,
-  nemotronEnabled: false,
-  nemotronPaidEnabled: false,
-  aionEnabled: false,
-  mediaEnabled: false,
-  premiumMediaEnabled: false,
-  imageMaxCostUsd: 0,
-  videoMaxCostUsd: 0,
-  textTimeoutMs: 180_000,
-  imageTimeoutMs: 120_000,
-  videoSubmitTimeoutMs: 30_000,
-  videoPollTimeoutMs: 20_000,
-  requestsPerMinute: 8,
 }
 
 describe('OpenRouter transport', () => {
+  test('keeps fixed server-side timeouts outside environment configuration', () => {
+    expect(OPENROUTER_TIMEOUTS).toEqual({
+      chatMs: 180_000,
+      imageMs: 120_000,
+      videoSubmitMs: 30_000,
+      videoPollMs: 20_000,
+    })
+  })
+
   test('keeps model, privacy and price policy server-owned', async () => {
     let capturedUrl = ''
     let capturedInit: RequestInit | undefined

@@ -1,5 +1,4 @@
 export type AiModuleKind = 'text' | 'image' | 'video'
-export type AiModuleGate = 'core' | 'nemotron' | 'nemotron-paid' | 'aion' | 'media' | 'premium-media'
 export type AiJsonMode = 'json-schema' | 'json-object' | 'prompt-only'
 
 export interface AiModelDefinition {
@@ -17,7 +16,6 @@ export interface AiModuleDefinition {
   title: string
   modelId: string
   kind: AiModuleKind
-  gate: AiModuleGate
   contract: string
   standalone?: boolean
   maxOutputTokens?: number
@@ -141,7 +139,6 @@ export const AI_MODULES = {
     title: 'Авторитетный игровой ход',
     modelId: 'deepseek',
     kind: 'text',
-    gate: 'core',
     contract: 'turn-output@0.2',
     maxOutputTokens: 4000,
     maxPrice: { prompt: 0.15, completion: 0.3 },
@@ -154,12 +151,11 @@ export const AI_MODULES = {
     title: 'План сцены и сюжетной дуги',
     modelId: 'nemotron-free',
     kind: 'text',
-    gate: 'nemotron',
     contract: 'scene-plan@0.2',
     maxOutputTokens: 1800,
     maxPrice: { prompt: 0, completion: 0 },
     fallbackModelId: 'nemotron-paid',
-    fallbackPolicy: 'paid-model-when-enabled-otherwise-null',
+    fallbackPolicy: 'paid-model-on-primary-rejection',
   },
   'scene-plan-paid': {
     id: 'scene-plan-paid',
@@ -167,7 +163,6 @@ export const AI_MODULES = {
     title: 'Платный fallback плана сцены',
     modelId: 'nemotron-paid',
     kind: 'text',
-    gate: 'nemotron-paid',
     contract: 'scene-plan@0.2',
     maxOutputTokens: 1800,
     maxPrice: { prompt: 0.55, completion: 2.3 },
@@ -179,7 +174,6 @@ export const AI_MODULES = {
     title: 'Художественный рассказчик',
     modelId: 'aion',
     kind: 'text',
-    gate: 'aion',
     contract: 'aion-narrative@0.2',
     maxOutputTokens: 1600,
     maxPrice: { prompt: 0.8, completion: 1.6 },
@@ -192,7 +186,6 @@ export const AI_MODULES = {
     title: 'Fallback и канонический аудит',
     modelId: 'mistral',
     kind: 'text',
-    gate: 'core',
     contract: 'canon-audit@0.2',
     maxOutputTokens: 2200,
     maxPrice: { prompt: 0.25, completion: 0.8 },
@@ -205,7 +198,6 @@ export const AI_MODULES = {
     title: 'Дешевый ключевой кадр',
     modelId: 'krea-scene',
     kind: 'image',
-    gate: 'media',
     contract: 'media-job-result@1.0',
     maxPrice: { image: 0.025 },
     estimatedMaxCostUsd: 0.025,
@@ -218,7 +210,6 @@ export const AI_MODULES = {
     title: 'Паковый арт и визуальная библия',
     modelId: 'krea-pack',
     kind: 'image',
-    gate: 'premium-media',
     contract: 'media-job-result@1.0',
     maxPrice: { image: 0.05 },
     estimatedMaxCostUsd: 0.05,
@@ -231,7 +222,6 @@ export const AI_MODULES = {
     title: 'Premium key art',
     modelId: 'krea-hero',
     kind: 'image',
-    gate: 'premium-media',
     contract: 'media-job-result@1.0',
     maxPrice: { image: 0.1 },
     estimatedMaxCostUsd: 0.1,
@@ -244,7 +234,6 @@ export const AI_MODULES = {
     title: 'Ремонт и согласование изображения',
     modelId: 'riverflow',
     kind: 'image',
-    gate: 'premium-media',
     contract: 'media-job-result@1.0',
     maxPrice: { image: 0.025 },
     estimatedMaxCostUsd: 0.025,
@@ -258,7 +247,6 @@ export const AI_MODULES = {
     title: 'Предметная иконка',
     modelId: 'recraft',
     kind: 'image',
-    gate: 'premium-media',
     contract: 'media-job-result@1.0',
     maxPrice: { image: 0.04 },
     estimatedMaxCostUsd: 0.035,
@@ -271,8 +259,8 @@ export const AI_MODULES = {
     title: 'Эксклюзивное видео',
     modelId: 'grok-video',
     kind: 'video',
-    gate: 'media',
     contract: 'media-job-result@1.0',
+    maxPrice: { request: 0.152 },
     estimatedMaxCostUsd: 0.152,
     fallbackPolicy: 'keep-approved-still',
     disabledReason: 'VIDEO_REQUIRES_DURABLE_IDEMPOTENCY_AND_HTTPS_ASSET_ORIGIN',
@@ -283,8 +271,8 @@ export const AI_MODULES = {
     title: 'Premium-видео кульминации',
     modelId: 'grok-video-premium',
     kind: 'video',
-    gate: 'premium-media',
     contract: 'media-job-result@1.0',
+    maxPrice: { request: 0.25 },
     estimatedMaxCostUsd: 0.25,
     fallbackPolicy: 'keep-approved-still',
     disabledReason: 'VIDEO_REQUIRES_DURABLE_IDEMPOTENCY_AND_HTTPS_ASSET_ORIGIN',
@@ -295,7 +283,6 @@ export const AI_MODULES = {
     title: 'Предметы и инвентарь',
     modelId: 'deepseek',
     kind: 'text',
-    gate: 'core',
     contract: 'turn-output-fragment@0.2',
     standalone: false,
     maxOutputTokens: 1800,
@@ -308,7 +295,6 @@ export const AI_MODULES = {
     title: 'Журнал и память',
     modelId: 'deepseek',
     kind: 'text',
-    gate: 'core',
     contract: 'journal-compiler@0.2',
     maxOutputTokens: 1800,
     maxPrice: { prompt: 0.15, completion: 0.3 },
@@ -321,7 +307,6 @@ export const AI_MODULES = {
     title: 'Компилятор StoryPack',
     modelId: 'deepseek',
     kind: 'text',
-    gate: 'core',
     contract: 'storypack-compiled@1.0',
     standalone: false,
     disabledReason: 'FIXED_STORYPACK_SCHEMA_REQUIRED',
@@ -335,7 +320,6 @@ export const AI_MODULES = {
     title: 'Трекер действий и микросостояний',
     modelId: 'deepseek',
     kind: 'text',
-    gate: 'core',
     contract: 'turn-output-fragment@0.2',
     standalone: false,
     maxOutputTokens: 1800,
@@ -348,12 +332,11 @@ export const AI_MODULES = {
     title: 'Директор сложности',
     modelId: 'nemotron-free',
     kind: 'text',
-    gate: 'nemotron',
     contract: 'difficulty-advisory@0.2',
     maxOutputTokens: 1400,
     maxPrice: { prompt: 0, completion: 0 },
     fallbackModelId: 'nemotron-paid',
-    fallbackPolicy: 'paid-model-when-enabled-otherwise-no-adjustment',
+    fallbackPolicy: 'paid-model-on-primary-rejection-otherwise-no-adjustment',
   },
 } as const satisfies Record<string, AiModuleDefinition>
 

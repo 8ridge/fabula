@@ -211,7 +211,7 @@ onBeforeUnmount(() => dispose())
           <div class="card-heading"><span>КОНТУР ИИ</span><span class="runtime-lock">SERVER</span></div>
           <div class="runtime-stage is-live"><i></i><span><strong>Авторитетный ход</strong><small>DeepSeek · ожидает действие</small></span><b>01</b></div>
           <div class="runtime-stage"><i></i><span><strong>План сцены</strong><small>Nemotron · advisory</small></span><b>02</b></div>
-          <div class="runtime-stage"><i></i><span><strong>Рассказчик</strong><small>Aion · feature flag</small></span><b>03</b></div>
+          <div class="runtime-stage"><i></i><span><strong>Рассказчик</strong><small>Aion · блокировка ZDR</small></span><b>03</b></div>
           <div class="runtime-stage"><i></i><span><strong>Fallback</strong><small>Mistral · armed</small></span><b>04</b></div>
           <button class="runtime-more" type="button" data-tool="models">Показать все 15 промтов <b>→</b></button>
         </section>

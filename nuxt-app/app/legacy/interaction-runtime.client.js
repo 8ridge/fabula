@@ -646,7 +646,7 @@ export function mountInteractionRuntime(root) {
       const statusClass = prompt.route === 'primary' ? 'primary' : prompt.route.indexOf('async') === 0 || prompt.route === 'premium' ? 'async' : prompt.route === 'advisory' ? 'advisory' : '';
       return '<div class="prompt-row" data-module-id="' + escapeHTML(prompt.id) + '"><span class="prompt-number">' + prompt.number + '</span><span><strong>' + escapeHTML(prompt.title) + '</strong><small>' + escapeHTML(model.label) + ' · ' + escapeHTML(prompt.contract) + '</small></span><span class="prompt-status ' + statusClass + '">' + escapeHTML(prompt.route) + '</span></div>';
     }).join('');
-    return '<div class="model-summary" id="aiCatalogState" role="status"><span>⌘</span><span><strong>Проверяю серверный контур</strong><small>Ключи остаются в Nitro runtimeConfig</small></span></div><p class="modal-note">Только игровой ход подключен к этому экрану как живая функция. Standalone-ответы проверяются сервером по строгим контрактам. Медиа выключено без отдельного бюджета; видео дополнительно заблокировано до durable idempotency и HTTPS-кадра.</p><div class="model-catalog-grid">' + modelCards + '</div><div class="prompt-list-heading">' + config.prompts.length + ' файлов-промтов</div><div class="prompt-list">' + rows + '</div><div class="modal-actions"><a class="modal-button primary" href="https://openrouter.ai" target="_blank" rel="noopener">Открыть OpenRouter</a></div>';
+    return '<div class="model-summary" id="aiCatalogState" role="status"><span>⌘</span><span><strong>Проверяю серверный контур</strong><small>Ключи остаются в Nitro runtimeConfig</small></span></div><p class="modal-note">Только игровой ход подключен к этому экрану как живая функция. Standalone-ответы проверяются сервером по строгим контрактам. Для медиа предел стоимости задан в серверном каталоге и проверяется до платного запроса; видео заблокировано до durable idempotency и HTTPS-кадра.</p><div class="model-catalog-grid">' + modelCards + '</div><div class="prompt-list-heading">' + config.prompts.length + ' файлов-промтов</div><div class="prompt-list">' + rows + '</div><div class="modal-actions"><a class="modal-button primary" href="https://openrouter.ai" target="_blank" rel="noopener">Открыть OpenRouter</a></div>';
   }
 
   async function refreshAiCatalogStatus() {
@@ -656,38 +656,34 @@ export function mountInteractionRuntime(root) {
       const response = await fetch('/api/ai/catalog', { cache: 'no-store' });
       const catalog = await response.json();
       const enabledModules = Array.isArray(catalog.modules) ? catalog.modules.filter((module) => module.enabled).length : 0;
-      const title = catalog.enabled && catalog.configured && catalog.public_access
-        ? 'OpenRouter готов к preview-вызовам'
-        : catalog.enabled && catalog.configured
-          ? 'OpenRouter настроен, но публичный preview закрыт'
-          : catalog.configured
-            ? 'OpenRouter настроен, но выключен'
-            : 'OpenRouter ожидает серверный ключ';
-      status.innerHTML = '<span>⌘</span><span><strong>' + escapeHTML(title) + '</strong><small>' + enabledModules + ' модулей включено · ключ не передается в браузер</small></span>';
+      const title = catalog.available
+        ? 'OpenRouter готов к AI-вызовам'
+        : 'OpenRouter ожидает серверный ключ';
+      status.innerHTML = '<span>⌘</span><span><strong>' + escapeHTML(title) + '</strong><small>' + enabledModules + ' модулей доступно · ключ не передается в браузер</small></span>';
       const modules = Array.isArray(catalog.modules) ? catalog.modules : [];
       modalBody.querySelectorAll('[data-module-id]').forEach((row) => {
         const module = modules.find((entry) => entry.id === row.dataset.moduleId);
         const badge = row.querySelector('.prompt-status');
         if (!module || !badge) return;
         badge.textContent = module.id === 'authoritative-turn'
-          ? (catalog.enabled && catalog.configured && catalog.public_access ? 'живой turn route' : 'turn route закрыт')
+          ? (catalog.available ? 'живой turn route' : 'нужен серверный ключ')
           : module.enabled
-            ? 'включен'
+            ? 'доступен'
             : module.blocked_reason
               ? 'честно заблокирован'
               : module.internal_only
                 ? 'внутренний'
-                : 'выключен';
+                : 'недоступен';
       });
       modalBody.querySelectorAll('[data-model-id]').forEach((card) => {
         const related = modules.filter((entry) => entry.model_id === card.dataset.modelId);
         const state = card.querySelector('b');
         if (!state || related.length === 0) return;
-        state.textContent = related.some((entry) => entry.enabled)
-          ? 'серверный маршрут включен'
+        state.textContent = related.some((entry) => entry.route_available)
+          ? 'серверный маршрут доступен'
           : related.some((entry) => entry.blocked_reason)
             ? 'серверный маршрут заблокирован'
-            : 'серверный маршрут выключен';
+            : 'серверный маршрут недоступен';
       });
     } catch (_) {
       status.innerHTML = '<span>⌘</span><span><strong>Статус сервера недоступен</strong><small>Модельный каталог не загрузился</small></span>';

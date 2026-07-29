@@ -71,7 +71,7 @@ export function installInteractionConfig() {
       slug: 'krea/krea-2-medium-turbo',
       role: 'Дешевый ключевой кадр',
       phase: 'async-media',
-      status: 'queued',
+      status: 'готов к проверке цены перед вызовом',
       cost: 'от $0.015 за image',
       contract: 'media-job-result@1.0',
       link: 'https://openrouter.ai/krea/krea-2-medium-turbo'
@@ -82,7 +82,7 @@ export function installInteractionConfig() {
       slug: 'krea/krea-2-medium',
       role: 'Визуальная библия и паковый арт',
       phase: 'async-media',
-      status: 'блокировка до проверяемой цены',
+      status: 'готов к проверке цены перед вызовом',
       cost: 'проектный предел $0.05 за изображение',
       contract: 'media-job-result@1.0',
       link: 'https://openrouter.ai/krea/krea-2-medium'
@@ -93,7 +93,7 @@ export function installInteractionConfig() {
       slug: 'krea/krea-2-large',
       role: 'Premium hero-art',
       phase: 'async-media',
-      status: 'premium',
+      status: 'готов к проверке цены перед вызовом',
       cost: 'от $0.06 за image',
       contract: 'media-job-result@1.0',
       link: 'https://openrouter.ai/krea/krea-2-large'
@@ -104,7 +104,7 @@ export function installInteractionConfig() {
       slug: 'sourceful/riverflow-v2.5-fast',
       role: 'Ремонт утвержденного изображения',
       phase: 'async-media',
-      status: 'выключено без бюджета и HTTPS reference',
+      status: 'готов после проверки HTTPS reference и цены',
       cost: '$0.019–0.021 за изображение',
       contract: 'media-job-result@1.0',
       link: 'https://openrouter.ai/sourceful/riverflow-v2.5-fast'
@@ -115,7 +115,7 @@ export function installInteractionConfig() {
       slug: 'recraft/recraft-v4.1-utility',
       role: 'Предметная иконка',
       phase: 'async-media',
-      status: 'выключено без бюджета',
+      status: 'серверный предел $0.04 и проверка цены',
       cost: '$0.035 за изображение',
       contract: 'media-job-result@1.0',
       link: 'https://openrouter.ai/recraft/recraft-v4.1-utility'

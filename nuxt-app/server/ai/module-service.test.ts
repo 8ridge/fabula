@@ -29,21 +29,6 @@ const config: FabulaAiConfig = {
   apiKey: 'test-key-never-log',
   baseUrl: 'https://openrouter.ai/api/v1',
   siteUrl: 'https://fabula.example',
-  appName: 'Fabula',
-  enabled: true,
-  allowUnauthenticated: true,
-  nemotronEnabled: true,
-  nemotronPaidEnabled: true,
-  aionEnabled: true,
-  mediaEnabled: false,
-  premiumMediaEnabled: false,
-  imageMaxCostUsd: 0,
-  videoMaxCostUsd: 0,
-  textTimeoutMs: 180_000,
-  imageTimeoutMs: 120_000,
-  videoSubmitTimeoutMs: 30_000,
-  videoPollTimeoutMs: 20_000,
-  requestsPerMinute: 8,
 }
 
 const request: ModuleRequest = {
@@ -113,7 +98,7 @@ describe('non-authoritative module service', () => {
     })
   })
 
-  test('uses the paid Nemotron route as a real fallback when enabled', async () => {
+  test('uses the paid Nemotron route as a real fallback without a feature flag', async () => {
     const models: string[] = []
     const client = {
       chatJson: async ({ model }: { model: string }) => {
@@ -163,23 +148,8 @@ describe('non-authoritative module service', () => {
     })
   })
 
-  test('blocks image calls before prompt rendering when no explicit budget exists', async () => {
-    const service = new AiModuleService({
-      ...config,
-      mediaEnabled: true,
-    })
-    await expect(service.invoke('scene-image', request)).rejects.toMatchObject({
-      code: 'MEDIA_BUDGET_DISABLED',
-    })
-  })
-
   test('keeps video disabled until durable idempotency is available', async () => {
-    const service = new AiModuleService({
-      ...config,
-      mediaEnabled: true,
-      premiumMediaEnabled: true,
-      videoMaxCostUsd: 1,
-    })
+    const service = new AiModuleService(config)
     await expect(service.invoke('exclusive-video', request)).rejects.toMatchObject({
       code: 'MODULE_RUNTIME_BLOCKED',
     })

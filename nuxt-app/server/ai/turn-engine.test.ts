@@ -10,21 +10,6 @@ const config: FabulaAiConfig = {
   apiKey: 'test-key-never-log',
   baseUrl: 'https://openrouter.ai/api/v1',
   siteUrl: '',
-  appName: 'Fabula',
-  enabled: true,
-  allowUnauthenticated: true,
-  nemotronEnabled: false,
-  nemotronPaidEnabled: false,
-  aionEnabled: false,
-  mediaEnabled: false,
-  premiumMediaEnabled: false,
-  imageMaxCostUsd: 0,
-  videoMaxCostUsd: 0,
-  textTimeoutMs: 180_000,
-  imageTimeoutMs: 120_000,
-  videoSubmitTimeoutMs: 30_000,
-  videoPollTimeoutMs: 20_000,
-  requestsPerMinute: 8,
 }
 
 const command: TurnCommand = {
@@ -69,6 +54,20 @@ describe('turn engine model telemetry', () => {
     expect(thrown).toBeInstanceOf(AiExecutionError)
     expect((thrown as AiExecutionError).code).toBe('MODEL_FALLBACK_EXHAUSTED')
     expect((thrown as AiExecutionError).modelRuns).toMatchObject([
+        {
+          role: 'advisory',
+          model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+          status: 'discarded',
+          error_code: 'MODEL_CONTRACT_ERROR',
+          usage: { total_tokens: 10, cost: 0.001 },
+        },
+        {
+          role: 'advisory',
+          model: 'nvidia/nemotron-3-ultra-550b-a55b',
+          status: 'discarded',
+          error_code: 'MODEL_CONTRACT_ERROR',
+          usage: { total_tokens: 10, cost: 0.001 },
+        },
         {
           role: 'primary',
           status: 'discarded',

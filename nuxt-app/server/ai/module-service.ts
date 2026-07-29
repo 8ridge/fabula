@@ -7,7 +7,7 @@ import { AiExecutionError, FabulaApiError } from './http'
 import type { SafeModelRun } from './http'
 import { OpenRouterClient, OpenRouterError } from './openrouter'
 import type { MediaModuleId } from './prompts'
-import { assertApprovedAssetUrls, assertApprovedStillUrl, assertModuleGate, sanitizeNemotronPayload } from './security'
+import { assertApprovedAssetUrls, assertApprovedStillUrl, sanitizeNemotronPayload } from './security'
 import { getStandaloneContract, parseStandaloneOutput } from './standalone-contracts'
 import { rememberVideoJob } from './video-jobs'
 
@@ -97,7 +97,6 @@ export class AiModuleService {
         409,
       )
     }
-    assertModuleGate(module, this.config)
     const model = getAiModel(module.modelId)
 
     if (module.kind === 'text') {
@@ -108,7 +107,7 @@ export class AiModuleService {
           422,
         )
       }
-      const payload = module.gate === 'nemotron' || module.gate === 'nemotron-paid'
+      const payload = module.modelId === 'nemotron-free' || module.modelId === 'nemotron-paid'
         ? sanitizeNemotronPayload(request.payload)
         : request.payload
       const result = await this.invokeTextWithFallback(module.id as AiModuleId, payload)
@@ -132,7 +131,7 @@ export class AiModuleService {
     }
 
     if (module.kind === 'image') {
-      assertMediaBudget(this.config.imageMaxCostUsd, module.estimatedMaxCostUsd || 0, 'image')
+      const maxCostUsd = moduleCostCeiling(module, 'image')
       const capabilities = IMAGE_CAPABILITIES[model.slug]
       if (!capabilities)
         throw new FabulaApiError('IMAGE_CAPABILITIES_UNKNOWN', 'Для image route не настроены проверяемые параметры.', 503)
@@ -166,7 +165,7 @@ export class AiModuleService {
         outputFormat: capabilities.outputFormat,
         background: capabilities.background,
         providerSlug: capabilities.providerSlug,
-        maxCostUsd: Math.min(this.config.imageMaxCostUsd, module.maxPrice?.image || module.estimatedMaxCostUsd || 0),
+        maxCostUsd,
       })
       return {
         schema_version: 'ai-module-response@1.0',
@@ -182,7 +181,7 @@ export class AiModuleService {
         output: {
           images: result.images,
           estimated_cost_usd: result.estimatedCostUsd,
-          configured_cost_ceiling_usd: this.config.imageMaxCostUsd,
+          server_cost_ceiling_usd: maxCostUsd,
         },
         usage: result.usage,
         provider_request_id: result.requestId,
@@ -193,7 +192,7 @@ export class AiModuleService {
     const aspectRatio = enumValue(request.payload.aspect_ratio, VIDEO_ASPECT_RATIOS, 'aspect_ratio', '16:9')
     const resolution = enumValue(request.payload.resolution, VIDEO_RESOLUTIONS, 'resolution', '480p')
     const approvedStillUrl = assertApprovedStillUrl(request.payload.approved_still_url, this.config)
-    assertMediaBudget(this.config.videoMaxCostUsd, module.estimatedMaxCostUsd || 0, 'video')
+    const maxCostUsd = moduleCostCeiling(module, 'video')
     const prompt = await (await import('./prompts')).renderMediaPrompt(
       module.id as MediaModuleId,
       {
@@ -209,7 +208,7 @@ export class AiModuleService {
       aspectRatio: model.slug === 'x-ai/grok-imagine-video-1.5' ? undefined : aspectRatio,
       resolution,
       approvedStillUrl,
-      maxCostUsd: this.config.videoMaxCostUsd,
+      maxCostUsd,
     })
     rememberVideoJob(result.id, request.request_id, model.slug)
     return {
@@ -239,7 +238,7 @@ export class AiModuleService {
     if (!module)
       throw new FabulaApiError('MODULE_NOT_FOUND', 'Неизвестный AI-модуль.', 404)
     const candidates = [getAiModel(module.modelId)]
-    if (module.fallbackModelId && this.fallbackEnabled(module.fallbackModelId))
+    if (module.fallbackModelId)
       candidates.push(getAiModel(module.fallbackModelId))
     const contract = getStandaloneContract(moduleId)
     const modelRuns: SafeModelRun[] = []
@@ -298,11 +297,6 @@ export class AiModuleService {
     )
   }
 
-  private fallbackEnabled(modelId: string): boolean {
-    if (modelId === 'nemotron-paid')
-      return this.config.nemotronPaidEnabled
-    return true
-  }
 }
 
 function safeModelErrorCode(error: unknown): string {
@@ -327,21 +321,27 @@ function openRouterUsage(error: unknown) {
   return error instanceof OpenRouterError ? error.upstreamUsage : null
 }
 
-function assertMediaBudget(configuredCeiling: number, estimatedCost: number, kind: 'image' | 'video'): void {
-  if (configuredCeiling <= 0) {
+function moduleCostCeiling(
+  module: NonNullable<ReturnType<typeof getAiModule>>,
+  kind: 'image' | 'video',
+): number {
+  const ceiling = kind === 'image' ? module.maxPrice?.image : module.maxPrice?.request
+  const estimatedCost = module.estimatedMaxCostUsd || 0
+  if (!ceiling || ceiling <= 0) {
     throw new FabulaApiError(
-      'MEDIA_BUDGET_DISABLED',
-      `${kind === 'image' ? 'Image' : 'Video'}-вызовы заблокированы до настройки отдельного лимита расходов.`,
-      403,
+      'MEDIA_PRICE_CEILING_MISSING',
+      `Для ${kind === 'image' ? 'image' : 'video'}-модуля не задан серверный предел стоимости.`,
+      503,
     )
   }
-  if (estimatedCost > configuredCeiling) {
+  if (estimatedCost > ceiling) {
     throw new FabulaApiError(
-      'MEDIA_BUDGET_EXCEEDED',
-      'Оценка стоимости превышает серверный лимит задачи.',
-      403,
+      'MEDIA_PRICE_CEILING_INVALID',
+      'Оценка стоимости превышает серверный предел модуля.',
+      503,
     )
   }
+  return ceiling
 }
 
 function enumValue(value: unknown, allowed: Set<string>, field: string, fallback: string): string {

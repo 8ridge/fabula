@@ -4,7 +4,7 @@ import { parseModuleRequest } from '../../../ai/contracts'
 import { respondWithError } from '../../../ai/http'
 import { AiModuleService } from '../../../ai/module-service'
 import { moduleRequestStore } from '../../../ai/module-request-store'
-import { acquireRateLimit, assertAiEnabled, assertRequestSize, assertSameOrigin } from '../../../ai/security'
+import { acquireRateLimit, assertAiConfigured, assertRequestSize, assertSameOrigin } from '../../../ai/security'
 
 export default defineEventHandler(async (event) => {
   const requestId = globalThis.crypto.randomUUID()
@@ -13,8 +13,8 @@ export default defineEventHandler(async (event) => {
     assertSameOrigin(event)
     assertRequestSize(event, 96_000)
     const config = resolveAiConfig(useRuntimeConfig(event) as unknown as Record<string, unknown>)
-    assertAiEnabled(config)
-    release = acquireRateLimit(event, config)
+    assertAiConfigured(config)
+    release = acquireRateLimit(event)
     const moduleId = getRouterParam(event, 'module') || ''
     const request = parseModuleRequest(await readBody(event))
     const service = new AiModuleService(config)

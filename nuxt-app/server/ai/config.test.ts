@@ -2,17 +2,19 @@ import { describe, expect, test } from 'bun:test'
 import { resolveAiConfig } from './config'
 
 describe('AI runtime configuration', () => {
-  test('clamps cost limits and timeouts to fail-safe bounds', () => {
+  test('uses only OpenRouter connection settings and ignores old feature flags', () => {
     const config = resolveAiConfig({
-      fabulaAiImageMaxCostUsd: 99,
-      fabulaAiVideoMaxCostUsd: -1,
-      fabulaAiTextTimeoutMs: 1,
-      fabulaAiImageTimeoutMs: 999_999,
+      openrouterApiKey: 'test-key-never-log',
+      fabulaAiEnabled: false,
+      fabulaAiNemotronEnabled: false,
+      fabulaAiMediaEnabled: false,
     })
-    expect(config.imageMaxCostUsd).toBe(1)
-    expect(config.videoMaxCostUsd).toBe(0)
-    expect(config.textTimeoutMs).toBe(5_000)
-    expect(config.imageTimeoutMs).toBe(300_000)
+    expect(config).toEqual({
+      apiKey: 'test-key-never-log',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      siteUrl: '',
+    })
+    expect('enabled' in config).toBe(false)
   })
 
   test('rejects an alternate OpenRouter base URL', () => {

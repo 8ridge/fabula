@@ -63,7 +63,6 @@ const STORY_CONTEXT: Record<TurnCommand['story_id'], {
 }
 
 export class TurnEngine {
-  private readonly config: FabulaAiConfig
   private readonly client: OpenRouterClient
   private readonly promptLoader: PromptLoader
 
@@ -72,7 +71,6 @@ export class TurnEngine {
     client = new OpenRouterClient(config),
     promptLoader: PromptLoader = async moduleId => (await import('./prompts')).getSystemPrompt(moduleId),
   ) {
-    this.config = config
     this.client = client
     this.promptLoader = promptLoader
   }
@@ -127,8 +125,6 @@ export class TurnEngine {
     snapshot: SessionSnapshot,
     modelRuns: SafeModelRun[],
   ): Promise<Record<string, JsonValue> | null> {
-    if (!this.config.nemotronEnabled)
-      return null
     const sanitized = sanitizeNemotronPayload({
       story_pack_id: STORY_CONTEXT[command.story_id].packId,
       scene_id: command.story_id,
@@ -151,8 +147,6 @@ export class TurnEngine {
     )
     if (freePlan)
       return freePlan
-    if (!this.config.nemotronPaidEnabled)
-      return null
     return this.tryScenePlan(
       AI_MODELS.nemotronPaid,
       sanitized,

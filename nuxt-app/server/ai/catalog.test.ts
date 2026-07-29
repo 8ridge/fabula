@@ -13,11 +13,25 @@ describe('AI registry', () => {
     expect(AI_MODULES['scene-plan-paid'].modelId).toBe('nemotron-paid')
   })
 
-  test('keeps premium and advisory routes independently gated', () => {
-    expect(AI_MODULES['scene-plan'].gate).toBe('nemotron')
-    expect(AI_MODULES['scene-plan-paid'].gate).toBe('nemotron-paid')
-    expect(AI_MODULES.narration.gate).toBe('aion')
-    expect(AI_MODULES['hero-image'].gate).toBe('premium-media')
+  test('does not hide available modules behind runtime feature flags', () => {
+    for (const module of Object.values(AI_MODULES)) {
+      expect('gate' in module).toBe(false)
+      expect(module.fallbackPolicy).not.toContain('when-enabled')
+    }
+    expect(AI_MODULES['scene-plan'].fallbackModelId).toBe('nemotron-paid')
+  })
+
+  test('defines fail-closed media price ceilings in the server catalog', () => {
+    for (const module of Object.values(AI_MODULES)) {
+      if (module.kind === 'image') {
+        expect(module.maxPrice?.image).toBeGreaterThan(0)
+        expect(module.estimatedMaxCostUsd).toBeLessThanOrEqual(module.maxPrice?.image || 0)
+      }
+      if (module.kind === 'video') {
+        expect(module.maxPrice?.request).toBeGreaterThan(0)
+        expect(module.estimatedMaxCostUsd).toBeLessThanOrEqual(module.maxPrice?.request || 0)
+      }
+    }
   })
 
   test('marks authoritative prompt fragments as internal-only', () => {
@@ -26,6 +40,8 @@ describe('AI registry', () => {
     expect('standalone' in AI_MODULES['turn-qa']).toBe(false)
     expect(AI_MODULES['world-compiler'].disabledReason).toBe('FIXED_STORYPACK_SCHEMA_REQUIRED')
     expect(AI_MODULES.narration.disabledReason).toBe('AION_ZDR_ENDPOINT_UNAVAILABLE')
+    expect(AI_MODULES['exclusive-video'].disabledReason)
+      .toBe('VIDEO_REQUIRES_DURABLE_IDEMPOTENCY_AND_HTTPS_ASSET_ORIGIN')
   })
 
   test('defines an explicit fallback policy for every route', () => {

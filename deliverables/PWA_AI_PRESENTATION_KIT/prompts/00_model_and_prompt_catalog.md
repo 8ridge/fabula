@@ -74,9 +74,9 @@
 | 10 | Компилятор мира | DeepSeek V4 Flash | pre-production StoryPack |
 | 11 | Трекер действий и микросостояний | DeepSeek V4 Flash | модуль авторитетного хода |
 | 12 | Директор сложности | Nemotron 3 Ultra Free | advisory; сервер решает, что применять |
-| 13 | Паковый арт и визуальная библия | Krea 2 Medium | производство контента; блокировка без проверяемой цены |
-| 14 | Ремонт изображения | Riverflow V2.5 Fast | только с approved HTTPS reference и отдельным бюджетом |
-| 15 | Предметная иконка | Recraft V4.1 Utility | общая библиотека или Premium item-art бюджет |
+| 13 | Паковый арт и визуальная библия | Krea 2 Medium | производство контента; обязательная проверка цены перед вызовом |
+| 14 | Ремонт изображения | Riverflow V2.5 Fast | только с approved HTTPS reference и серверной проверкой цены |
+| 15 | Предметная иконка | Recraft V4.1 Utility | общая библиотека или Premium item-art с серверным пределом цены |
 
 ## Правило маршрутизации
 
@@ -87,8 +87,8 @@
 - Бесплатный Nemotron вызывается без `response_format`, потому что текущий
   Models API его не заявляет. Ответ все равно проходит строгий локальный
   `scene-plan@0.2` или `difficulty-advisory@0.2`.
-- Платный Nemotron имеет отдельный feature flag и реальный module ID
-  `scene-plan-paid`; также он служит fallback бесплатного advisory-маршрута.
+- Платный Nemotron имеет реальный module ID `scene-plan-paid` и без отдельного
+  переключателя служит fallback бесплатного advisory-маршрута.
 - Aion не вызывается, пока OpenRouter не публикует ZDR-совместимый endpoint;
   Prompt 03 и строгий `aion-narrative@0.2` сохранены как честно заблокированный маршрут.
 - Mistral возвращает тот же типизированный контракт, а не отдельную версию мира.
@@ -98,6 +98,6 @@
 - Для текста включены `max_tokens` и `provider.max_price`. Для dedicated Image
   API, где `max_price` не заявлен, сервер проверяет endpoint pricing перед
   платным POST и отказывает при неизвестной цене.
-- Видео программно заблокировано до durable idempotency, HTTPS origin,
-  утвержденного первого кадра и отдельного лимита расходов.
+- Видео программно заблокировано до durable idempotency, HTTPS origin и
+  утвержденного первого кадра; предел расходов задан в серверном каталоге.
 - Для минимальной задержки OpenRouter позволяет сортировать провайдеров по `latency` или `throughput`; текущие метрики нужно читать во время bake-off, а не фиксировать навсегда: [Provider Routing](https://openrouter.ai/docs/guides/routing/provider-selection).

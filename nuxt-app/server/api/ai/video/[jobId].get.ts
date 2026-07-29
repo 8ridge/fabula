@@ -2,7 +2,7 @@ import { getHeader, getRouterParam, setHeader } from 'h3'
 import { resolveAiConfig } from '../../../ai/config'
 import { respondWithError, FabulaApiError } from '../../../ai/http'
 import { OpenRouterClient } from '../../../ai/openrouter'
-import { acquireRateLimit, assertAiEnabled, assertSameOrigin } from '../../../ai/security'
+import { acquireRateLimit, assertAiConfigured, assertSameOrigin } from '../../../ai/security'
 import { assertVideoJobOwner } from '../../../ai/video-jobs'
 
 const SAFE_JOB_ID = /^[A-Za-z0-9_-]{1,160}$/
@@ -14,10 +14,8 @@ export default defineEventHandler(async (event) => {
   try {
     assertSameOrigin(event)
     const config = resolveAiConfig(useRuntimeConfig(event) as unknown as Record<string, unknown>)
-    assertAiEnabled(config)
-    if (!config.mediaEnabled)
-      throw new FabulaApiError('MODULE_DISABLED', 'Медиа-контур выключен.', 403)
-    release = acquireRateLimit(event, config)
+    assertAiConfigured(config)
+    release = acquireRateLimit(event)
     const jobId = getRouterParam(event, 'jobId') || ''
     const ownerKey = getHeader(event, 'x-fabula-request-id') || ''
     if (!SAFE_JOB_ID.test(jobId) || !SAFE_REQUEST_ID.test(ownerKey))

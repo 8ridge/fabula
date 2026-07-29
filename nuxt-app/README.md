@@ -16,44 +16,33 @@ cp .env.example .env
 
 ```text
 NUXT_OPENROUTER_API_KEY=<server-only key>
-NUXT_FABULA_AI_ENABLED=true
-NUXT_FABULA_AI_ALLOW_UNAUTHENTICATED=true
 ```
 
-`NUXT_FABULA_AI_ALLOW_UNAUTHENTICATED=true` допустим только для локального или
-закрытого preview. В репозитории пока нет аккаунтов, проверки владельца сессии,
-PostgreSQL-транзакций и durable budget ledger. По умолчанию AI-контур закрыт.
+При наличии ключа AI-маршруты доступны сразу. Отдельных env-переключателей
+ролей, медиа, бюджета, таймаутов и частоты запросов нет. Сервер принимает только
+same-origin запросы и ограничивает одного клиента восемью AI-запросами в минуту
+и двумя одновременными запросами.
 
-Опциональные роли включаются отдельно:
-
-```text
-NUXT_FABULA_AI_NEMOTRON_ENABLED=true
-NUXT_FABULA_AI_NEMOTRON_PAID_ENABLED=false
-NUXT_FABULA_AI_AION_ENABLED=true
-NUXT_FABULA_AI_MEDIA_ENABLED=true
-NUXT_FABULA_AI_PREMIUM_MEDIA_ENABLED=true
-```
-
-Платный Nemotron включается отдельно и служит реальным fallback для
-`scene-plan` и `difficulty`. Бесплатный endpoint не получает `response_format`,
+Платный Nemotron служит реальным fallback для `scene-plan` и `difficulty` без
+отдельного включения. Бесплатный endpoint не получает `response_format`,
 которого сейчас нет в его опубликованных возможностях, и принимает только
 обезличенный allowlist.
 
-Таймауты можно задать через
-`NUXT_FABULA_AI_TEXT_TIMEOUT_MS`, `NUXT_FABULA_AI_IMAGE_TIMEOUT_MS`,
-`NUXT_FABULA_AI_VIDEO_SUBMIT_TIMEOUT_MS` и
-`NUXT_FABULA_AI_VIDEO_POLL_TIMEOUT_MS`. Таймер остается активным до полного
-чтения JSON-тела, а не только до получения HTTP-заголовков.
+Серверные таймауты заданы в коде: 180 секунд для текста, 120 секунд для
+изображения, 30 секунд для отправки видео и 20 секунд для опроса video job.
+Таймер остается активным до полного чтения JSON-тела, а не только до получения
+HTTP-заголовков.
 
-Image route требует ненулевой `NUXT_FABULA_AI_IMAGE_MAX_COST_USD`. Перед
-платным POST сервер читает текущий endpoint-каталог OpenRouter, проверяет цену
-и закрепляет провайдера. Если OpenRouter не публикует проверяемую цену, вызов
-не выполняется. Сейчас это честно блокирует Krea; Riverflow и Recraft имеют
-проверяемые цены в endpoint-каталоге.
+Каждый image-модуль имеет собственный жесткий предел стоимости в серверном
+каталоге. Перед платным POST сервер читает текущий endpoint-каталог OpenRouter,
+проверяет цену и закрепляет провайдера. Если OpenRouter не публикует проверяемую
+цену или цена выше предела модуля, платный вызов не выполняется. Для Krea это
+условие проверяется при каждом вызове; Riverflow и Recraft имеют проверяемые
+цены в endpoint-каталоге.
 
 Video route дополнительно требует `NUXT_OPENROUTER_SITE_URL` с HTTPS origin,
-утвержденный стартовый кадр и ненулевой
-`NUXT_FABULA_AI_VIDEO_MAX_COST_USD`. Произвольные внешние URL отклоняются.
+утвержденный стартовый кадр и жесткий предел стоимости из серверного каталога.
+Произвольные внешние URL отклоняются.
 Несмотря на наличие транспорта, оба Grok video-модуля остаются программно
 заблокированы, пока mini-backend не получит durable idempotency: память
 процесса недостаточна для безопасного платного video submit.

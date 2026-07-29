@@ -1,9 +1,18 @@
 import { describe, expect, test } from 'bun:test'
 import { resolveAiConfig } from './config'
 import { FabulaApiError } from './http'
-import { assertApprovedAssetUrls, sanitizeNemotronPayload } from './security'
+import { assertAiConfigured, assertApprovedAssetUrls, sanitizeNemotronPayload } from './security'
 
 describe('Nemotron privacy projection', () => {
+  test('requires only the server OpenRouter key to make AI available', () => {
+    expect(() => assertAiConfigured(resolveAiConfig({
+      openrouterApiKey: 'test-key-never-log',
+      fabulaAiEnabled: false,
+      fabulaAiAllowUnauthenticated: false,
+    }))).not.toThrow()
+    expect(() => assertAiConfigured(resolveAiConfig({}))).toThrow(FabulaApiError)
+  })
+
   test('keeps only server allowlisted aggregate fields', () => {
     const sanitized = sanitizeNemotronPayload({
       story_pack_id: 'eighth-seal',

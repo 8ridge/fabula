@@ -1,6 +1,5 @@
 import type { H3Event } from 'h3'
 import { getHeader, getRequestIP, getRequestURL } from 'h3'
-import type { AiModuleDefinition } from './catalog'
 import type { FabulaAiConfig } from './config'
 import type { JsonValue } from './contracts'
 import { FabulaApiError } from './http'
@@ -14,6 +13,7 @@ interface RateBucket {
 const buckets = new Map<string, RateBucket>()
 const WINDOW_MS = 60_000
 const MAX_CONCURRENT = 2
+const MAX_REQUESTS_PER_MINUTE = 8
 
 function clientKey(event: H3Event): string {
   return getRequestIP(event) || 'unknown'
@@ -43,32 +43,12 @@ export function assertSameOrigin(event: H3Event): void {
     throw new FabulaApiError('ORIGIN_REJECTED', 'Запрос с другого origin запрещен.', 403)
 }
 
-export function assertAiEnabled(config: FabulaAiConfig): void {
-  if (!config.enabled)
-    throw new FabulaApiError('AI_DISABLED', 'AI-контур выключен серверной настройкой.', 503)
+export function assertAiConfigured(config: FabulaAiConfig): void {
   if (!config.apiKey)
     throw new FabulaApiError('AI_NOT_CONFIGURED', 'На сервере не настроен ключ OpenRouter.', 503)
-  if (!config.allowUnauthenticated) {
-    throw new FabulaApiError(
-      'AUTH_REQUIRED',
-      'Публичные AI-вызовы заблокированы до подключения авторизации.',
-      503,
-    )
-  }
 }
 
-export function assertModuleGate(module: AiModuleDefinition, config: FabulaAiConfig): void {
-  const enabled = module.gate === 'core'
-    || (module.gate === 'nemotron' && config.nemotronEnabled)
-    || (module.gate === 'nemotron-paid' && config.nemotronPaidEnabled)
-    || (module.gate === 'aion' && config.aionEnabled)
-    || (module.gate === 'media' && config.mediaEnabled)
-    || (module.gate === 'premium-media' && config.mediaEnabled && config.premiumMediaEnabled)
-  if (!enabled)
-    throw new FabulaApiError('MODULE_DISABLED', 'Модуль выключен серверной политикой.', 403)
-}
-
-export function acquireRateLimit(event: H3Event, config: FabulaAiConfig): () => void {
+export function acquireRateLimit(event: H3Event): () => void {
   const now = Date.now()
   pruneBuckets(now)
   const key = clientKey(event)
@@ -77,7 +57,7 @@ export function acquireRateLimit(event: H3Event, config: FabulaAiConfig): () => 
     bucket = { startedAt: now, count: 0, concurrent: 0 }
     buckets.set(key, bucket)
   }
-  if (bucket.count >= config.requestsPerMinute)
+  if (bucket.count >= MAX_REQUESTS_PER_MINUTE)
     throw new FabulaApiError('RATE_LIMITED', 'Слишком много AI-запросов. Повтори позже.', 429, true)
   if (bucket.concurrent >= MAX_CONCURRENT)
     throw new FabulaApiError('CONCURRENCY_LIMITED', 'Два AI-запроса уже выполняются.', 429, true)

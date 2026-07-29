@@ -107,6 +107,13 @@ export interface OpenRouterTimeouts {
   videoPollMs: number
 }
 
+export const OPENROUTER_TIMEOUTS: OpenRouterTimeouts = {
+  chatMs: 180_000,
+  imageMs: 120_000,
+  videoSubmitMs: 30_000,
+  videoPollMs: 20_000,
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
@@ -148,19 +155,14 @@ export class OpenRouterClient {
   ) {
     this.config = config
     this.fetchImpl = fetchImpl
-    this.timeouts = timeouts || {
-      chatMs: config.textTimeoutMs,
-      imageMs: config.imageTimeoutMs,
-      videoSubmitMs: config.videoSubmitTimeoutMs,
-      videoPollMs: config.videoPollTimeoutMs,
-    }
+    this.timeouts = timeouts || OPENROUTER_TIMEOUTS
   }
 
   private headers(): Record<string, string> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.config.apiKey}`,
       'Content-Type': 'application/json',
-      'X-OpenRouter-Title': this.config.appName,
+      'X-OpenRouter-Title': 'Fabula',
     }
     if (this.config.siteUrl)
       headers['HTTP-Referer'] = this.config.siteUrl
