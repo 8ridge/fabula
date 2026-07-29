@@ -1446,7 +1446,7 @@ if('serviceWorker' in navigator){
     const label=submit.textContent; submit.textContent='Секунду…';
     try{
       const {r, data} = await apiPost(reg ? '/auth/register' : '/auth/login',
-        reg ? {name, email, password:pass} : {email, password:pass});
+        reg ? {username: name, email, password:pass} : {email, password:pass});
       if(r.ok){ saveSession(data); ok('Готово, входим…'); return go(); }
       if(r.status===409)      fail('Эта почта уже зарегистрирована — попробуй войти.');
       else if(r.status===401) fail('Неверная почта или пароль.');
