@@ -313,8 +313,14 @@
     </form>
     <div class="auth-or">или</div>
     <div class="auth-soc">
-      <button data-soc="google"><svg class="ic" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.4 29.3 35 24 35c-6.1 0-11-4.9-11-11s4.9-11 11-11c2.8 0 5.4 1.1 7.3 2.8l5.7-5.7C33.6 6.1 29 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20c11 0 19.7-8 19.7-20 0-1.2-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c2.8 0 5.4 1.1 7.3 2.8l5.7-5.7C33.6 6.1 29 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 34.9 26.7 36 24 36c-5.3 0-9.7-2.6-11.3-6.9l-6.5 5C9.6 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4.1 5.6l6.2 5.2C41.9 35.5 44 30.2 44 24c0-1.2-.1-2.3-.4-3.5z"/></svg>Продолжить с Google</button>
+      <div id="googleBtnHolder"></div>
       <button data-soc="tg"><svg class="ic" viewBox="0 0 24 24" fill="#2AABEE"><path d="M21.9 4.3l-3.3 15.6c-.25 1.1-.9 1.37-1.83.85l-5.05-3.72-2.44 2.35c-.27.27-.5.5-1 .5l.36-5.13L18 6.36c.4-.36-.09-.56-.62-.2L6.98 13.02l-4.7-1.47c-1.02-.32-1.04-1.02.22-1.5l18.36-7.08c.85-.31 1.6.2 1.32 1.33z"/></svg>Продолжить с Telegram</button>
+    </div>
+    <div id="nickStep" style="display:none;margin-top:14px">
+      <div class="auth-field"><label>Придумай ник</label>
+        <input type="text" id="gNick" autocomplete="off" placeholder="Ник: латиница, цифры, _"></div>
+      <div class="auth-msg" id="gNickMsg"></div>
+      <button type="button" class="btn btn-solid auth-submit" id="gNickSubmit">Продолжить</button>
     </div>
   </div>
 </div>
@@ -324,6 +330,7 @@
 <script setup>
 import { onMounted } from 'vue'
 import '~/assets/css/main.css'
+const googleClientId = useRuntimeConfig().public.googleClientId || ''
 onMounted(() => {
   document.querySelectorAll('.fabula-landing img').forEach(img => {
     img.addEventListener('error', () => { img.style.display = 'none' }, { once: true })
@@ -872,10 +879,48 @@ if('serviceWorker' in navigator){
     }
   });
 
-  // соцвход — пока не подключён (Telegram/Google появятся на бэкенде)
+  // соцвход — пока не подключён (Telegram появится на бэкенде)
   document.querySelectorAll('[data-soc]').forEach(b=>b.addEventListener('click',()=>{
     fail('Вход через '+(b.dataset.soc==='google'?'Google':'Telegram')+' скоро — подключаем на бэкенде.');
   }));
+
+  // ===== вход через Google (GIS ID-token flow) =====
+  const clientId = googleClientId;
+  let pendingRegToken = '';
+
+  function loadGis(){
+    return new Promise((res)=>{
+      if (window.google && window.google.accounts) return res();
+      const s=document.createElement('script'); s.src='https://accounts.google.com/gsi/client'; s.async=true; s.defer=true; s.onload=()=>res(); document.head.appendChild(s);
+    });
+  }
+
+  async function onGoogleCredential(resp){
+    const { r, data } = await apiPost('/auth/google', { id_token: resp.credential });
+    if (!r.ok){ fail('Не удалось войти через Google.'); return; }
+    if (data.needs_username){ pendingRegToken = data.registration_token; showNickStep(); return; }
+    saveSession(data); ok('Готово, входим…'); go();
+  }
+
+  async function initGoogle(){
+    if(!clientId) return;  // нет client_id — Google-вход выключен, деградируем к текущему состоянию
+    await loadGis();
+    window.google.accounts.id.initialize({ client_id: clientId, callback: onGoogleCredential });
+    const holder = document.getElementById('googleBtnHolder');
+    if (holder){ holder.innerHTML=''; window.google.accounts.id.renderButton(holder, { theme:'filled_black', size:'large', text:'continue_with', shape:'pill', width: 280 }); }
+  }
+  initGoogle();
+
+  function showNickStep(){ const n=document.getElementById('nickStep'); if(n) n.style.display='block'; const g=document.getElementById('gNick'); if(g) g.focus(); }
+  const gSubmit=document.getElementById('gNickSubmit');
+  if (gSubmit) gSubmit.addEventListener('click', async ()=>{
+    const nick=(document.getElementById('gNick').value||'').trim();
+    const m=document.getElementById('gNickMsg');
+    if(!/^[A-Za-z0-9_]{3,20}$/.test(nick)){ if(m) m.textContent='Ник: 3–20 символов, латиница, цифры, _'; return; }
+    const { r, data } = await apiPost('/auth/google/complete', { registration_token: pendingRegToken, username: nick });
+    if (r.ok){ saveSession(data); go(); }
+    else if (m) m.textContent = r.status===409 ? 'Ник занят' : 'Проверь ник';
+  });
 })();
 
 })
