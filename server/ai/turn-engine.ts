@@ -478,6 +478,7 @@ function withServerEnvelope(
     ...storyPackSource.hardCanon.map((_, index) => `canon:${snapshot.storyPackId}:${index + 1}`),
   ])
   const record = canonicalizeModelIds(output, null, allowedIds) as Record<string, unknown>
+  const intent = normalizeIntentReferences(record.intent, snapshot)
   const rawContextCheck = record.context_check
   const contextCheck = rawContextCheck && typeof rawContextCheck === 'object' && !Array.isArray(rawContextCheck)
     ? rawContextCheck as Record<string, unknown>
@@ -544,10 +545,61 @@ function withServerEnvelope(
     ...record,
     turn_id: command.idempotency_key,
     expected_session_version: command.expected_session_version,
+    intent,
     operations,
     context_check: normalizedContextCheck,
     difficulty: normalizedDifficulty,
   }
+}
+
+function normalizeIntentReferences(
+  value: unknown,
+  snapshot: EngineSessionSnapshot,
+): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    return value
+
+  const intent = value as Record<string, unknown>
+  const catalog = knownEntityCatalog(snapshot)
+  const entityIds = new Set(catalog.map(entity => entity.id))
+  const referenceIds = new Set([
+    ...entityIds,
+    ...snapshot.confirmedFacts.map(fact => fact.id),
+    ...snapshot.confirmedEvents.map(event => event.id),
+  ])
+  const aliases = new Map<string, string | null>()
+  for (const entity of catalog) {
+    const alias = normalizeEntityAlias(entity.name)
+    const current = aliases.get(alias)
+    aliases.set(alias, current && current !== entity.id ? null : entity.id)
+  }
+
+  const normalizeList = (raw: unknown, allowed: ReadonlySet<string>) => {
+    if (!Array.isArray(raw))
+      return raw
+    return raw.flatMap((entry) => {
+      if (typeof entry !== 'string')
+        return [entry]
+      if (allowed.has(entry) || entry.includes(':'))
+        return [entry]
+      const alias = aliases.get(normalizeEntityAlias(entry))
+      return alias ? [alias] : []
+    })
+  }
+
+  return {
+    ...intent,
+    targets: normalizeList(intent.targets, entityIds),
+    referenced_entities: normalizeList(intent.referenced_entities, referenceIds),
+  }
+}
+
+function normalizeEntityAlias(value: string): string {
+  return value
+    .normalize('NFKC')
+    .toLocaleLowerCase('ru-RU')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
 }
 
 function canonicalizeModelIds(
@@ -661,6 +713,11 @@ function knownEntityCatalog(snapshot: EngineSessionSnapshot) {
 function assertKnownReferences(output: TurnOutput, snapshot: EngineSessionSnapshot): void {
   const catalog = knownEntityCatalog(snapshot)
   const knownIds = new Set(catalog.map(entity => entity.id))
+  const referenceIds = new Set([
+    ...knownIds,
+    ...snapshot.confirmedFacts.map(fact => fact.id),
+    ...snapshot.confirmedEvents.map(event => event.id),
+  ])
   const locationIds = new Set(catalog.filter(entity => entity.kind === 'location').map(entity => entity.id))
   const characterIds = new Set([
     'player',
@@ -691,7 +748,7 @@ function assertKnownReferences(output: TurnOutput, snapshot: EngineSessionSnapsh
   }
 
   assertIds(output.intent.targets, knownIds, '$.intent.targets')
-  assertIds(output.intent.referenced_entities, knownIds, '$.intent.referenced_entities')
+  assertIds(output.intent.referenced_entities, referenceIds, '$.intent.referenced_entities')
   output.intent.atomic_steps.forEach((step, index) => {
     assertIds([String(step.actor_id)], knownIds, `$.intent.atomic_steps[${index}].actor_id`)
     assertIds(step.target_ids as string[], knownIds, `$.intent.atomic_steps[${index}].target_ids`)

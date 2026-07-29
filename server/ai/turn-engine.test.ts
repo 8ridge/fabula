@@ -429,6 +429,55 @@ describe('turn engine model telemetry', () => {
     ])
   })
 
+  test('allows a confirmed fact as an intent reference without making it a target entity', async () => {
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        const output = successfulTurnOutput()
+        output.intent.referenced_entities = ['fact:confirmed']
+        return {
+          requestId: 'request:confirmed-fact',
+          model: request.model,
+          output,
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+
+    const result = await createEngine(client).execute(command, {
+      ...snapshot,
+      confirmedFacts: [{
+        id: 'fact:confirmed',
+        claim: 'Печать уже реагировала на движение.',
+        truthStatus: 'observed',
+        sourceEventIds: ['event:confirmed'],
+        createdAt: '2026-01-01T00:00:00.000Z',
+      }],
+    })
+
+    expect(result.output.intent.referenced_entities).toEqual(['fact:confirmed'])
+  })
+
+  test('maps exact entity names and drops non-authoritative prose labels from intent hints', async () => {
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        const output = successfulTurnOutput()
+        output.intent.targets = ['Зал Призыва', 'the eighth circle']
+        output.intent.referenced_entities = ['Зал Призыва', 'unregistered prose label']
+        return {
+          requestId: 'request:intent-labels',
+          model: request.model,
+          output,
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+
+    const result = await createEngine(client).execute(command, snapshot)
+
+    expect(result.output.intent.targets).toEqual(['location:summoning-hall'])
+    expect(result.output.intent.referenced_entities).toEqual(['location:summoning-hall'])
+  })
+
   test('passes exact repository rejection paths to the fallback without accepting the invalid turn', async () => {
     const requests: ChatJsonRequest[] = []
     const client = {

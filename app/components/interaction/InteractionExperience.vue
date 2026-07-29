@@ -141,6 +141,7 @@ async function submitTurn() {
     selectedSuggestionId.value = null
     selectedItemIds.value = []
     showToast('Ход подтвержден')
+    nextTick(() => composer.value?.focus())
   }
   else {
     composer.value?.focus()
@@ -226,6 +227,11 @@ watch(() => game.session.value?.id, (nextId, previousId) => {
 watch(() => game.session.value?.messages.length, (length, previousLength) => {
   if (length && previousLength && length > previousLength)
     scrollToLatest(true)
+})
+
+watch(() => game.sending.value, (sending) => {
+  if (sending)
+    scrollToLatest()
 })
 
 onMounted(async () => {
@@ -366,16 +372,13 @@ onBeforeUnmount(() => {
                 @edit="editMessage"
               />
 
-              <div v-if="game.sending.value" class="flex items-center gap-3 py-2 font-interface text-[11px] text-[#9b9ba6]" role="status">
-                <span><span class="mr-2 text-[var(--accent)]">● ● ●</span>Мир проверяет последствия · {{ game.turnElapsedSeconds.value }} с</span>
-                <button
-                  type="button"
-                  class="rounded-lg border border-white/10 px-2.5 py-1 text-[10px] text-fabula-300 transition hover:border-red-300/35 hover:text-red-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-                  @click="game.cancelTurn()"
-                >
-                  Остановить
-                </button>
-              </div>
+              <InteractionGenerationStatus
+                v-if="game.sending.value"
+                :elapsed-seconds="game.turnElapsedSeconds.value"
+                :intent="game.pendingTurn.value?.command.text || input"
+                @cancel="game.cancelTurn()"
+                @open-tool="openTool"
+              />
             </div>
           </div>
 

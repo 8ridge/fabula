@@ -42,8 +42,10 @@ function apiMessage(error: unknown): string {
     return 'Нейросетевой контур еще не подключен на этом сервере. История сохранена, но новый ход пока недоступен.'
   if (data?.code === 'SESSION_VERSION_CONFLICT')
     return 'История уже изменилась в другой вкладке. Свежая версия загружена; проверь текст и отправь его снова.'
-  if (data?.code === 'MODEL_FALLBACK_EXHAUSTED' || data?.code === 'UPSTREAM_TIMEOUT')
+  if (data?.code === 'UPSTREAM_TIMEOUT')
     return 'Нейросети не завершили ход вовремя. Текст сохранен — можно повторить без создания дубликата.'
+  if (data?.code === 'MODEL_FALLBACK_EXHAUSTED')
+    return 'Модели не смогли подтвердить безопасное продолжение. Текст сохранен — повтор отправит тот же ход без дубликата.'
   if (data?.code === 'UPSTREAM_RATE_LIMITED')
     return 'OpenRouter временно ограничил запросы. Текст сохранен — повтори ход немного позже.'
   return data?.message || 'Не удалось получить продолжение. Текст сохранен — можно повторить отправку.'
