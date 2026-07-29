@@ -19,7 +19,7 @@ onBeforeUnmount(() => dispose())
 
 <template>
   <div ref="pageRoot" class="interaction-page">
-<div class="interaction-app" id="interactionApp" data-story="fant">
+<div class="interaction-app" id="interactionApp" data-story="fant" data-theme="fantasy">
     <header class="topbar">
       <a class="brand" href="/app" aria-label="Вернуться в ФАБУЛУ">ФАБУЛА</a>
       <div class="topbar-context">
@@ -51,29 +51,28 @@ onBeforeUnmount(() => dispose())
           <span>⌕</span><span>Найти сцену</span><kbd>⌘ K</kbd>
         </button>
         <div class="thread-group">
-          <div class="group-label"><span>СЕЙЧАС</span><span>3</span></div>
+          <div class="group-label"><span>ОСНОВНЫЕ ПАКИ</span><span>4</span></div>
           <button class="thread-item is-active" type="button" data-story="fant">
             <span class="thread-cover thread-cover-fant"></span>
-            <span class="thread-copy"><strong>Пепельные земли</strong><small>Старик ждет ответа</small></span>
+            <span class="thread-copy"><strong>Пепельные земли</strong><small>Клинок выбирает наследника</small></span>
             <span class="thread-meta"><b>2</b><small>сейчас</small></span>
           </button>
           <button class="thread-item" type="button" data-story="scifi">
             <span class="thread-cover thread-cover-scifi"></span>
-            <span class="thread-copy"><strong>Станция "Кассандра"</strong><small>Реактор просыпается</small></span>
+            <span class="thread-copy"><strong>Станция "Кассандра"</strong><small>Твое имя исчезло из журнала</small></span>
             <span class="thread-meta"><small>вчера</small></span>
           </button>
           <button class="thread-item" type="button" data-story="hist">
             <span class="thread-cover thread-cover-hist"></span>
-            <span class="thread-copy"><strong>Восстание Спартака</strong><small>Дорога из Капуи</small></span>
+            <span class="thread-copy"><strong>Восстание Спартака</strong><small>До восстания - одна ночь</small></span>
             <span class="thread-meta"><small>22 июл</small></span>
           </button>
         </div>
         <div class="thread-group thread-group-muted">
-          <div class="group-label"><span>АРХИВ</span><span>1</span></div>
           <button class="thread-item" type="button" data-story="post">
-            <span class="thread-cover thread-cover-post"></span>
-            <span class="thread-copy"><strong>После тишины</strong><small>Мира у водонапорной</small></span>
-            <span class="thread-meta"><small>18 июл</small></span>
+            <span class="thread-cover thread-cover-modern"></span>
+            <span class="thread-copy"><strong>Линия разрыва</strong><small>Эфир уже записан из будущего</small></span>
+            <span class="thread-meta"><small>новое</small></span>
           </button>
         </div>
         <div class="thread-rail-foot">
@@ -102,6 +101,12 @@ onBeforeUnmount(() => dispose())
           <span><strong>Сцена 02</strong><small>Действия сохраняются в канон после подтверждения</small></span>
           <button class="context-link" type="button" data-tool="models">Контур хода <b>›</b></button>
         </div>
+
+        <section class="story-pulse" aria-live="polite" aria-label="Сюжетный контекст">
+          <span class="story-pulse-mark" id="storyThemeIcon">✦</span>
+          <div class="story-pulse-copy"><span class="eyebrow" id="storyThemeLabel">ФЭНТЕЗИ</span><strong id="storyPremiseTitle">Пепельные земли</strong><p id="storyPremise">Клинок Тихого Пепла откликается на твое имя, которого ты не помнишь.</p></div>
+          <div class="story-pulse-stake"><span>СТАВКА</span><strong id="storyStake">До темного пламени - один переход</strong></div>
+        </section>
 
         <div class="chat-scroll" id="chatScroll" aria-live="polite">
           <div class="day-divider"><span>СЕГОДНЯ · 21:14</span></div>
@@ -172,18 +177,34 @@ onBeforeUnmount(() => dispose())
           <button type="button" data-tool="models"><span>⌘</span><small>Модели</small></button>
         </div>
 
+        <section class="theme-card" aria-label="Выбор темы истории">
+          <div class="card-heading"><span>АРХИЖАНР</span><span class="theme-active" id="themeActiveLabel">Фэнтези</span></div>
+          <div class="theme-grid" role="tablist" aria-label="Темы оформления">
+            <button type="button" class="theme-choice is-active" role="tab" aria-selected="true" data-story-select="fant"><span>✦</span><small>Фэнтези</small></button>
+            <button type="button" class="theme-choice" role="tab" aria-selected="false" data-story-select="scifi"><span>⌁</span><small>Научная фантастика</small></button>
+            <button type="button" class="theme-choice" role="tab" aria-selected="false" data-story-select="hist"><span>⚜</span><small>История</small></button>
+            <button type="button" class="theme-choice" role="tab" aria-selected="false" data-story-select="post"><span>◒</span><small>Современность</small></button>
+          </div>
+        </section>
+
+        <section class="story-arc-card" aria-live="polite">
+          <div class="card-heading"><span>ЯДРО ПАКА</span><span class="arc-status">В СЦЕНЕ</span></div>
+          <p id="storyArcPremise">Клинок Тихого Пепла откликается на твое имя, которого ты не помнишь.</p>
+          <div class="arc-objective"><span>Твоя цель</span><strong id="storyObjective">Решить, кому достанется право разбудить Цитадель</strong></div>
+        </section>
+
         <section class="presence-card">
-          <div class="presence-top"><span class="presence-avatar"><img src="/assets/avatar.jpg" alt=""></span><span><strong id="railCharacterName">Старик-хранитель</strong><small>NPC · рядом</small></span><span class="presence-status">жив</span></div>
-          <div class="presence-relation"><span><small>Отношение</small><b>Насторожен</b></span><span><small>Знает</small><b>Клинок</b></span></div>
+          <div class="presence-top"><span class="presence-avatar"><img src="/assets/avatar.jpg" alt=""></span><span><strong id="railCharacterName">Старик-хранитель</strong><small id="presenceRole">NPC · рядом</small></span><span class="presence-status">в сцене</span></div>
+          <div class="presence-relation"><span><small>Отношение</small><b id="presenceRelation">Насторожен</b></span><span><small>Знает</small><b id="presenceKnowledge">Три звезды</b></span></div>
           <div class="relation-meter"><i></i></div>
-          <p>Он ждал носителя клинка двадцать лет. Его знания ограничены тем, что он видел у руин.</p>
+          <p id="presenceSummary">Хранитель видел прежнего носителя клинка и скрывает последнюю клятву.</p>
         </section>
 
         <section class="state-card">
           <div class="card-heading"><span>СЕЙЧАС В МИРЕ</span><button type="button" data-tool="journal" aria-label="Открыть журнал">→</button></div>
-          <div class="state-row"><span class="state-icon">◷</span><span><strong>Сумерки</strong><small>До темноты около 40 минут</small></span></div>
-          <div class="state-row"><span class="state-icon">⌁</span><span><strong>Пепельный ветер</strong><small>Видимость снижена</small></span></div>
-          <div class="state-row"><span class="state-icon">!</span><span><strong>Открытое последствие</strong><small>Кто оставил клинок</small></span></div>
+          <div class="state-row"><span class="state-icon">◷</span><span><strong id="storyStateOne">Сумерки</strong><small>Сцена развивается в реальном времени</small></span></div>
+          <div class="state-row"><span class="state-icon">⌁</span><span><strong id="storyStateTwo">Пепельный ветер</strong><small>Условия меняют возможные действия</small></span></div>
+          <div class="state-row"><span class="state-icon">!</span><span><strong id="storyStateThree">Клятва не названа</strong><small>Открытое последствие</small></span></div>
         </section>
 
         <section class="runtime-card">
@@ -259,17 +280,29 @@ onBeforeUnmount(() => dispose())
 
 .interaction-page .interaction-app {
   --font-scale: 1.1;
+  --accent-light: #f2cd7c;
+  --accent-deep: #8a6122;
+  --accent-soft: rgba(217, 169, 74, .14);
+  --theme-glow: rgba(110, 68, 163, .26);
+  --player-surface: rgba(89, 54, 20, .58);
+  --gold: var(--accent);
+  --gold-light: var(--accent-light);
+  --gold-deep: var(--accent-deep);
   height: 100dvh;
   min-height: 560px;
   display: flex;
   flex-direction: column;
   background:
-    radial-gradient(70% 90% at 66% 0%, rgba(86, 57, 22, .18), transparent 58%),
+    radial-gradient(70% 90% at 66% 0%, var(--theme-glow), transparent 58%),
     linear-gradient(135deg, #0c0c10, #09090c 64%, #11100d);
 }
 .interaction-page .interaction-app[data-font-size="normal"] { --font-scale: 1; }
 .interaction-page .interaction-app[data-font-size="large"] { --font-scale: 1.1; }
 .interaction-page .interaction-app[data-font-size="xlarge"] { --font-scale: 1.22; }
+.interaction-page .interaction-app[data-theme="fantasy"] { --accent: #d9a94a; --accent-light: #f2cd7c; --accent-deep: #8a6122; --accent-soft: rgba(217, 169, 74, .14); --theme-glow: rgba(110, 68, 163, .26); --player-surface: rgba(89, 54, 20, .58); }
+.interaction-page .interaction-app[data-theme="scifi"] { --accent: #57e6d0; --accent-light: #b7fff2; --accent-deep: #197e83; --accent-soft: rgba(87, 230, 208, .14); --theme-glow: rgba(50, 114, 185, .32); --player-surface: rgba(20, 86, 99, .58); background: radial-gradient(75% 80% at 70% 0%, rgba(43, 153, 181, .28), transparent 58%), radial-gradient(45% 60% at 0% 100%, rgba(97, 63, 169, .18), transparent 64%), linear-gradient(135deg, #071018, #080d16 64%, #0b1620); }
+.interaction-page .interaction-app[data-theme="history"] { --accent: #d78c54; --accent-light: #f3ca96; --accent-deep: #7f4228; --accent-soft: rgba(215, 140, 84, .14); --theme-glow: rgba(143, 73, 37, .28); --player-surface: rgba(96, 46, 28, .58); background: radial-gradient(75% 85% at 65% 0%, rgba(143, 73, 37, .26), transparent 60%), linear-gradient(135deg, #17100c, #100d0b 64%, #1b110d); }
+.interaction-page .interaction-app[data-theme="modern"] { --accent: #ff7d6b; --accent-light: #ffc0b5; --accent-deep: #9c3d45; --accent-soft: rgba(255, 125, 107, .14); --theme-glow: rgba(38, 167, 159, .26); --player-surface: rgba(110, 45, 50, .58); background: radial-gradient(70% 80% at 70% 0%, rgba(37, 168, 159, .25), transparent 58%), radial-gradient(44% 52% at 15% 100%, rgba(233, 74, 83, .18), transparent 68%), linear-gradient(135deg, #0d1116, #0d0f12 64%, #15100f); }
 
 .interaction-page .topbar {
   height: 72px;
@@ -350,7 +383,7 @@ onBeforeUnmount(() => dispose())
 .interaction-page .thread-cover-fant { background-image: linear-gradient(135deg, #251b0e88, #0f0904aa), url('/assets/cover_fantasy.jpg'); }
 .interaction-page .thread-cover-scifi { background-image: linear-gradient(135deg, #0d354588, #061012aa), url('/assets/cover_scifi.jpg'); }
 .interaction-page .thread-cover-hist { background-image: linear-gradient(135deg, #6b4d2788, #201208aa), url('/assets/cover_history.jpg'); }
-.interaction-page .thread-cover-post { background-image: linear-gradient(135deg, #455f2288, #12180aaa), url('/assets/cover_postapoc.jpg'); }
+.interaction-page .thread-cover-modern { background-image: linear-gradient(135deg, #244f5888, #201015aa), url('/assets/cover_modern.png'); }
 .interaction-page .thread-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
 .interaction-page .thread-copy strong { overflow: hidden; color: var(--ink); font-family: var(--display); font-size: 15px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .interaction-page .thread-copy small, .interaction-page .thread-meta small { overflow: hidden; color: var(--faint); font-family: var(--mono); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
@@ -384,6 +417,16 @@ onBeforeUnmount(() => dispose())
 .interaction-page .context-link { display: flex; align-items: center; gap: 7px; border: 0; background: transparent; color: var(--gold-light); font-family: var(--mono); font-size: 9px; cursor: pointer; white-space: nowrap; }
 .interaction-page .context-link b { font-size: 15px; font-weight: 400; }
 
+.interaction-page .story-pulse { min-height: 82px; padding: 13px 24px; display: grid; grid-template-columns: 34px minmax(0, 1fr) minmax(130px, .42fr); align-items: center; gap: 12px; border-bottom: 1px solid var(--line); background: linear-gradient(90deg, var(--accent-soft), transparent 68%); }
+.interaction-page .story-pulse-mark { width: 31px; height: 31px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--gold) 55%, transparent); border-radius: 10px; background: var(--accent-soft); color: var(--gold-light); box-shadow: 0 0 26px -13px var(--gold); }
+.interaction-page .story-pulse-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.interaction-page .story-pulse-copy .eyebrow { color: var(--gold); }
+.interaction-page .story-pulse-copy strong { color: var(--ink); font-family: var(--display); font-size: 16px; font-weight: 400; }
+.interaction-page .story-pulse-copy p { max-width: 670px; margin: 0; overflow: hidden; color: var(--muted); font-size: 14px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.interaction-page .story-pulse-stake { min-width: 0; padding-left: 13px; display: flex; flex-direction: column; gap: 4px; border-left: 1px solid var(--line); }
+.interaction-page .story-pulse-stake span { color: var(--faint); font-family: var(--mono); font-size: 8px; letter-spacing: .12em; }
+.interaction-page .story-pulse-stake strong { color: var(--gold-light); font-family: var(--display); font-size: 14px; font-weight: 400; line-height: 1.1; }
+
 .interaction-page .chat-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 22px clamp(18px, 4vw, 76px) 18px; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .13) transparent; }
 .interaction-page .chat-scroll::-webkit-scrollbar, .interaction-page .detail-rail::-webkit-scrollbar { width: 5px; }
 .interaction-page .chat-scroll::-webkit-scrollbar-thumb, .interaction-page .detail-rail::-webkit-scrollbar-thumb { border-radius: 5px; background: rgba(255, 255, 255, .13); }
@@ -391,8 +434,8 @@ onBeforeUnmount(() => dispose())
 .interaction-page .day-divider::before, .interaction-page .day-divider::after { content: ''; height: 1px; flex: 1; background: var(--line); }
 .interaction-page .message { max-width: 720px; margin: 0 auto 18px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 7px 17px 17px 17px; background: linear-gradient(145deg, rgba(25, 23, 20, .96), rgba(17, 16, 17, .98)); box-shadow: 0 14px 32px -25px #000; animation: message-in .35s ease both; }
 @keyframes message-in { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
-.interaction-page .message-character { border-color: rgba(217, 169, 74, .25); background: linear-gradient(145deg, rgba(33, 26, 16, .98), rgba(18, 15, 12, .98)); }
-.interaction-page .message-player { margin-left: auto; border-color: rgba(217, 169, 74, .45); border-radius: 17px 7px 17px 17px; background: linear-gradient(145deg, #ebc36c, #a87627); color: #1d1508; }
+.interaction-page .message-character { border-color: color-mix(in srgb, var(--gold) 31%, transparent); background: linear-gradient(145deg, var(--accent-soft), rgba(18, 15, 12, .98)); }
+.interaction-page .message-player { margin-left: auto; border-color: color-mix(in srgb, var(--gold) 66%, transparent); border-radius: 17px 7px 17px 17px; background: linear-gradient(145deg, var(--gold-light), var(--gold)); color: #1d1508; }
 .interaction-page .message-pending { border-style: dashed; opacity: .9; }
 .interaction-page .message-head { display: flex; align-items: center; gap: 9px; margin-bottom: 11px; }
 .interaction-page .message-head > span:last-child { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
@@ -473,6 +516,21 @@ onBeforeUnmount(() => dispose())
 .interaction-page .detail-actions button:hover { border-color: rgba(217, 169, 74, .28); background: rgba(217, 169, 74, .08); color: var(--gold-light); }
 .interaction-page .detail-actions span { font-size: 19px; line-height: 1; }
 .interaction-page .detail-actions small { font-family: var(--mono); font-size: 8px; white-space: nowrap; }
+.interaction-page .theme-card, .interaction-page .story-arc-card { margin-top: 17px; padding: 14px; border: 1px solid var(--line); border-radius: 13px; background: rgba(255, 255, 255, .025); }
+.interaction-page .theme-card { border-color: color-mix(in srgb, var(--gold) 31%, transparent); background: linear-gradient(145deg, var(--accent-soft), rgba(255, 255, 255, .02)); }
+.interaction-page .theme-active, .interaction-page .arc-status { color: var(--gold-light); font-family: var(--mono); font-size: 8px; letter-spacing: .05em; text-align: right; }
+.interaction-page .theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.interaction-page .theme-choice { min-height: 54px; padding: 8px 7px; display: flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 10px; background: rgba(7, 8, 11, .22); color: var(--muted); text-align: left; cursor: pointer; transition: border-color .18s ease, background .18s ease, color .18s ease, transform .18s ease; }
+.interaction-page .theme-choice span { width: 22px; height: 22px; display: grid; place-items: center; flex: none; border-radius: 7px; background: rgba(255, 255, 255, .05); color: var(--gold); font-size: 13px; }
+.interaction-page .theme-choice small { font-family: var(--mono); font-size: 8px; line-height: 1.25; }
+.interaction-page .theme-choice:hover { border-color: color-mix(in srgb, var(--gold) 50%, transparent); color: var(--ink); transform: translateY(-1px); }
+.interaction-page .theme-choice.is-active { border-color: var(--gold); background: var(--accent-soft); color: var(--gold-light); box-shadow: 0 10px 22px -20px var(--gold); }
+.interaction-page .theme-choice.is-active span { background: var(--gold); color: var(--panel); }
+.interaction-page .story-arc-card { background: linear-gradient(145deg, rgba(255, 255, 255, .035), rgba(255, 255, 255, .012)); }
+.interaction-page .story-arc-card > p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.33; }
+.interaction-page .arc-objective { margin-top: 13px; padding-top: 11px; display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--line); }
+.interaction-page .arc-objective span { color: var(--faint); font-family: var(--mono); font-size: 8px; }
+.interaction-page .arc-objective strong { color: var(--gold-light); font-family: var(--display); font-size: 15px; font-weight: 400; line-height: 1.2; }
 .interaction-page .presence-card, .interaction-page .state-card, .interaction-page .runtime-card { margin-top: 17px; padding: 14px; border: 1px solid var(--line); border-radius: 13px; background: rgba(255, 255, 255, .025); }
 .interaction-page .presence-card { border-color: rgba(217, 169, 74, .24); background: linear-gradient(145deg, rgba(217, 169, 74, .1), rgba(255, 255, 255, .02)); }
 .interaction-page .presence-top { display: flex; align-items: center; gap: 9px; }
@@ -673,6 +731,9 @@ onBeforeUnmount(() => dispose())
   .interaction-page .turn-badge { padding: 6px 7px; font-size: 8px; }
   .interaction-page .scene-context { padding: 9px 14px; }
   .interaction-page .context-link { font-size: 8px; }
+  .interaction-page .story-pulse { min-height: 0; padding: 10px 14px; grid-template-columns: 30px minmax(0, 1fr); gap: 9px; }
+  .interaction-page .story-pulse-stake { display: none; }
+  .interaction-page .story-pulse-copy p { font-size: 13px; }
   .interaction-page .chat-scroll { padding: 18px 14px 12px; }
   .interaction-page .message { padding: 14px; }
   .interaction-page .composer-shell { padding: 10px 12px 10px; }
@@ -689,6 +750,10 @@ onBeforeUnmount(() => dispose())
   .interaction-page .scene-context { min-height: 49px; }
   .interaction-page .scene-context small { overflow: hidden; max-width: 185px; text-overflow: ellipsis; white-space: nowrap; }
   .interaction-page .context-link { padding: 0; }
+  .interaction-page .story-pulse { padding-top: 9px; padding-bottom: 9px; }
+  .interaction-page .story-pulse-copy strong { font-size: 15px; }
+  .interaction-page .story-pulse-copy p { display: none; }
+  .interaction-page .story-pulse-mark { width: 28px; height: 28px; }
   .interaction-page .message { margin-bottom: 13px; padding: 12px; }
   .interaction-page .message p { font-size: 17px; }
   .interaction-page .message-head strong { font-size: 15px; }

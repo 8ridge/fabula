@@ -24,6 +24,21 @@ export function mountInteractionRuntime(root) {
   const characterName = document.getElementById('characterName');
   const railCharacterName = document.getElementById('railCharacterName');
   const storyLocation = document.getElementById('storyLocation');
+  const storyThemeIcon = document.getElementById('storyThemeIcon');
+  const storyThemeLabel = document.getElementById('storyThemeLabel');
+  const themeActiveLabel = document.getElementById('themeActiveLabel');
+  const storyPremiseTitle = document.getElementById('storyPremiseTitle');
+  const storyPremise = document.getElementById('storyPremise');
+  const storyArcPremise = document.getElementById('storyArcPremise');
+  const storyStake = document.getElementById('storyStake');
+  const storyObjective = document.getElementById('storyObjective');
+  const presenceRole = document.getElementById('presenceRole');
+  const presenceRelation = document.getElementById('presenceRelation');
+  const presenceKnowledge = document.getElementById('presenceKnowledge');
+  const presenceSummary = document.getElementById('presenceSummary');
+  const storyStateOne = document.getElementById('storyStateOne');
+  const storyStateTwo = document.getElementById('storyStateTwo');
+  const storyStateThree = document.getElementById('storyStateThree');
   const selectionToolbar = document.getElementById('selectionToolbar');
   const selectionToolbarText = document.getElementById('selectionToolbarText');
 
@@ -35,57 +50,85 @@ export function mountInteractionRuntime(root) {
   let selectionState = null;
   const inventoryState = { query: '', filter: 'all', selectedId: 'ash-blade' };
 
-  const storyFixtures = {
+  const storyTools = {
     fant: {
-      messages: [
-        { type: 'narrator', name: 'Рассказчик', meta: 'Подтвержденный исход · сцена 02', text: 'Пепел идет с востока, хотя ветра там нет. За спиной старика осыпается каменная арка, и на миг в проломе видно темное пламя Цитадели. Он ждет, не отводя взгляда от клинка в твоей руке.', foot: 'Руины Эхокарты' },
-        { type: 'character', name: 'Старик-хранитель', meta: 'Персонаж · отношение: насторожен', text: 'Ты снова смотришь на клинок, будто надеешься, что он назовет тебя по имени. Не назовет. Но я могу показать дорогу, если ты скажешь, зачем идешь к Цитадели.', foot: 'Он ждет честного ответа' },
-        { type: 'player', name: 'Ты', meta: 'Речь · только что', text: 'Я поднимаю клинок так, чтобы старик увидел три звезды, и спрашиваю, кто оставил его среди руин.', foot: 'Ход записан в журнал' },
-        { type: 'narrator', name: 'Рассказчик', meta: 'Готовит последствие', text: 'Старик медленно протягивает руку к рукояти, но не касается ее. В его лице впервые появляется не страх, а узнавание.', foot: 'Кадр сцены может быть предложен после подтверждения события', pending: true }
+      currency: '248 золота',
+      inventory: [
+        { id: 'ash-blade', icon: '⚔', name: 'Клинок Тихого Пепла', category: 'weapon', categoryLabel: 'Оружие', rarity: 'legendary', rarityLabel: 'Легендарный', quantity: 1, condition: 'Цел', weight: '2.4 кг', description: 'Выкован из остывшего сердца павшей звезды. На лезвии три звезды над разбитой короной.', inspect: 'Клинок теплый, хотя вокруг стынет пепел. Он отзывается на прикосновение короткой дрожью.', text: 'Я показываю Клинок Тихого Пепла.' },
+        { id: 'wanderer-cloak', icon: '☙', name: 'Плащ Скитальца', category: 'armor', categoryLabel: 'Броня', rarity: 'epic', rarityLabel: 'Эпический', quantity: 1, condition: 'Потерт', weight: '1.1 кг', description: 'Хранит тепло костров всех дорог, которые ты прошел. Подкладка скрывает несколько потайных швов.', inspect: 'На внутренней стороне вышиты названия мест, которых нет ни на одной карте.', text: 'Я расправляю Плащ Скитальца и проверяю потайные швы.' },
+        { id: 'star-amulet', icon: '✦', name: 'Амулет Трех Звезд', category: 'artifact', categoryLabel: 'Артефакт', rarity: 'epic', rarityLabel: 'Эпический', quantity: 1, condition: 'Настроен', weight: '0.2 кг', description: 'Тот же герб, что и на клинке. Камень внутри амулета темнеет рядом с руинами.', inspect: 'Тепло амулета усиливается, когда ты смотришь на темное пламя Цитадели.', text: 'Я показываю Амулет Трех Звезд и жду реакции хранителя.' },
+        { id: 'burnt-map', icon: '❦', name: 'Обрывок карты', category: 'key', categoryLabel: 'Ключ', rarity: 'common', rarityLabel: 'Обычный', quantity: 1, condition: 'Хрупкий', weight: '0.1 кг', description: 'Полусгоревший лист. Сквозь копоть виден только путь к каменному мосту.', inspect: 'Если поднести карту к пеплу, на полях проступает вторая линия.', text: 'Я разворачиваю Обрывок карты и сверяю его с дорогой.' }
+      ],
+      journal: [
+        { title: 'Старик-хранитель', meta: 'Персонажи · сцена 02', text: 'Ждал носителя клинка двадцать лет.' },
+        { title: 'Клинок Тихого Пепла', meta: 'Предметы · подтверждено', text: 'На лезвии три звезды над разбитой короной.' },
+        { title: 'Темная Цитадель', meta: 'Места · открытое последствие', text: 'Горит на горизонте вечным пламенем.' }
+      ],
+      checks: [
+        { title: 'Ловкость', text: 'Тихо обойти разрушенную арку', meta: '+3 · пример · DC 13' },
+        { title: 'Харизма', text: 'Убедить старика говорить прямо', meta: '+4 · пример · DC 12' },
+        { title: 'Разум', text: 'Сопоставить герб и старые записи', meta: '+1 · пример · DC 14' },
+        { title: 'Мудрость', text: 'Замечать следы до того, как станет поздно', meta: '+1 · пример · DC 13' }
       ]
     },
     scifi: {
-      messages: [
-        { type: 'narrator', name: 'Системный рассказчик', meta: 'Подтвержденный исход · сектор D-17', text: 'Свет аварийных полос рвется на отдельные импульсы. Между ними станция показывает себя настоящей: пустые кресла, открытый шлюз и тонкая пленка инея на внутренней стороне стекла.', foot: 'Сектор D-17' },
-        { type: 'character', name: 'Кассандра / AI', meta: 'Система · доверие: 18%', text: 'Ты проснулся раньше расчетного срока. Я могу вернуть тебе доступ к навигации, но сначала ответь: почему в журнале экипажа твое имя отмечено как "отсутствующий"?', foot: 'Система ждет подтверждения личности' },
-        { type: 'player', name: 'Ты', meta: 'Речь · только что', text: 'Я не отвечаю сразу. Сначала проверяю шлюз и ищу следы того, кто покинул станцию последним.', foot: 'Ход записан в журнал' },
-        { type: 'narrator', name: 'Системный рассказчик', meta: 'Готовит последствие', text: 'За панелью шлюза включается второй источник питания. Кассандра молчит ровно три секунды - слишком долго для обычного расчета.', foot: 'Сигнал требует проверки', pending: true }
+      currency: '4% резерва',
+      inventory: [
+        { id: 'nav-key', icon: '⌁', name: 'Ключ навигации', category: 'key', categoryLabel: 'Доступ', rarity: 'rare', rarityLabel: 'Редкий', quantity: 1, condition: 'Заблокирован', weight: '0.1 кг', description: 'Физический ключ капитана. Он вернет доступ к карте прыжка только после сверки личности.', inspect: 'На корпусе мигает чужой идентификатор допуска.', text: 'Я прикладываю Ключ навигации к панели шлюза.' },
+        { id: 'frost-log', icon: '▤', name: 'Фрагмент журнала', category: 'artifact', categoryLabel: 'Данные', rarity: 'epic', rarityLabel: 'Эпический', quantity: 1, condition: 'Поврежден', weight: '0 кг', description: 'Последние тридцать секунд перед исчезновением экипажа записаны с временным сдвигом.', inspect: 'В шуме слышен второй голос, которого нет в реестре станции.', text: 'Я сверяю Фрагмент журнала с ответами Кассандры.' },
+        { id: 'repair-foam', icon: '✚', name: 'Ремонтная пена', category: 'consumable', categoryLabel: 'Расходник', rarity: 'common', rarityLabel: 'Обычный', quantity: 2, condition: 'Стабильна', weight: '0.8 кг', description: 'Закрывает трещины в обшивке и держит давление до конца сцены.', inspect: 'Баллон еще теплый от аварийного отсека.', text: 'Я герметизирую трещину Ремонтной пеной.' }
+      ],
+      journal: [
+        { title: 'Кассандра', meta: 'Системы · сцена 02', text: 'Утверждает, что твое имя отсутствует в журнале экипажа.' },
+        { title: 'Сектор D-17', meta: 'Места · подтверждено', text: 'Шлюз открыт, а на стекле иней с внутренней стороны.' },
+        { title: 'Второе питание', meta: 'События · открытое последствие', text: 'Неизвестный источник включился за панелью шлюза.' }
+      ],
+      checks: [
+        { title: 'Инженерия', text: 'Изолировать аварийную шину без отключения жизни', meta: '+3 · пример · DC 14' },
+        { title: 'Анализ', text: 'Найти сдвиг во временной метке журнала', meta: '+4 · пример · DC 13' },
+        { title: 'Самообладание', text: 'Не принять голос ИИ за доказательство', meta: '+2 · пример · DC 12' },
+        { title: 'Навигация', text: 'Прочитать маршрут до потери тяги', meta: '+1 · пример · DC 15' }
       ]
     },
     hist: {
-      messages: [
-        { type: 'narrator', name: 'Рассказчик', meta: 'Подтвержденный исход · дорога из Капуи', text: 'Пыль липнет к босым ступням, а впереди уже видны первые костры лагеря. На дороге нет стражи, но слишком многие путники смотрят на тебя, будто ждут сигнала.', foot: 'Дорога из Капуи' },
-        { type: 'character', name: 'Марк Лициний', meta: 'Союзник · отношение: расчетлив', text: 'Не произноси имя Спартака вслух. Здесь стены тонкие, а у каждого костра есть человек, который умеет слушать. Скажи лучше, чего ты хочешь до рассвета.', foot: 'Он проверяет твою осторожность' },
-        { type: 'player', name: 'Ты', meta: 'Речь · только что', text: 'Я показываю ему пустые ладони и спрашиваю, кто в лагере может провести меня к кузнецу.', foot: 'Ход записан в журнал' },
-        { type: 'narrator', name: 'Рассказчик', meta: 'Готовит последствие', text: 'Марк смотрит на твои руки дольше, чем нужно. Затем кивает в сторону дальнего костра, где один человек не снимает плащ даже у огня.', foot: 'Свидетель замечен на краю сцены', pending: true }
+      currency: '12 денариев',
+      inventory: [
+        { id: 'wax-tablet', icon: '▤', name: 'Восковая табличка', category: 'key', categoryLabel: 'Доказательство', rarity: 'epic', rarityLabel: 'Эпический', quantity: 1, condition: 'Запечатана', weight: '0.2 кг', description: 'Список имен тех, кто наживается на гладиаторской школе. Ее нельзя читать у огня.', inspect: 'Печать Батиата треснула, но не сломана.', text: 'Я прячу Восковую табличку под ремень.' },
+        { id: 'arena-knife', icon: '†', name: 'Арена-нож', category: 'weapon', categoryLabel: 'Оружие', rarity: 'common', rarityLabel: 'Обычный', quantity: 1, condition: 'Заточен', weight: '0.4 кг', description: 'Неприметный нож кухонного раба. Им можно перерезать веревку, не поднимая тревоги.', inspect: 'На рукояти вырезан знак твоей когорты.', text: 'Я достаю Арена-нож и перерезаю веревку.' },
+        { id: 'camp-token', icon: '⚜', name: 'Жетон кузнеца', category: 'artifact', categoryLabel: 'Знак', rarity: 'rare', rarityLabel: 'Редкий', quantity: 1, condition: 'Скрыт', weight: '0.1 кг', description: 'Позволит войти в лагерь через кузницу до рассвета.', inspect: 'Металл пахнет углем и маслом.', text: 'Я показываю Жетон кузнеца у дальнего костра.' }
+      ],
+      journal: [
+        { title: 'Марк Лициний', meta: 'Союзники · сцена 02', text: 'Знает путь к кузнице, но проверяет твою осторожность.' },
+        { title: 'Восковая табличка', meta: 'Предметы · подтверждено', text: 'Содержит имена покровителей школы Батиата.' },
+        { title: 'Человек в плаще', meta: 'Персонажи · открытое последствие', text: 'Не снимает плащ даже у огня.' }
+      ],
+      checks: [
+        { title: 'Скрытность', text: 'Пройти мимо костров без лишнего взгляда', meta: '+3 · пример · DC 13' },
+        { title: 'Убеждение', text: 'Заставить Марка выбрать сторону', meta: '+2 · пример · DC 14' },
+        { title: 'Выносливость', text: 'Дойти до Везувия до переклички', meta: '+4 · пример · DC 12' },
+        { title: 'Наблюдательность', text: 'Узнать римского осведомителя', meta: '+1 · пример · DC 15' }
       ]
     },
     post: {
-      messages: [
-        { type: 'narrator', name: 'Рассказчик', meta: 'Подтвержденный исход · старая водонапорная', text: 'Насос не работает, но вода внутри есть. На бетонном кольце остались свежие царапины, а на ступени лежит мокрый кусок ткани, которого не было утром.', foot: 'Старая водонапорная' },
-        { type: 'character', name: 'Мира', meta: 'Союзник · отношение: осторожна', text: 'Если ты нашел это первым, значит, тот, кто оставил след, все еще рядом. Я не уйду без воды, но не стану ждать, пока нас заметят.', foot: 'Она готова рискнуть ради запаса' },
-        { type: 'player', name: 'Ты', meta: 'Исследование · только что', text: 'Я осматриваю царапины, не поднимая ткань, и ищу направление, в котором уходил человек.', foot: 'Ход записан в журнал' },
-        { type: 'narrator', name: 'Рассказчик', meta: 'Готовит последствие', text: 'Следы уходят к сухому руслу. На глине виден отпечаток тяжелого ботинка, а рядом - маленькая вмятина от металлического контейнера.', foot: 'Найдено новое направление', pending: true }
+      currency: '3 контакта',
+      inventory: [
+        { id: 'future-audio', icon: '≋', name: 'Запись будущего эфира', category: 'artifact', categoryLabel: 'Данные', rarity: 'legendary', rarityLabel: 'Критическая', quantity: 1, condition: 'Зашифрована', weight: '0 кг', description: 'Аудиофайл с твоим голосом и признанием в еще не совершенном преступлении.', inspect: 'В спектрограмме есть короткий шум лифта на частоте служебной связи.', text: 'Я запускаю спектральный анализ Записи будущего эфира.' },
+        { id: 'press-pass', icon: '◒', name: 'Пресс-пропуск', category: 'key', categoryLabel: 'Доступ', rarity: 'rare', rarityLabel: 'Редкий', quantity: 1, condition: 'Активен', weight: '0.1 кг', description: 'Открывает служебные коридоры редакции и архив новостей.', inspect: 'На чипе есть незнакомая метка гостевого доступа.', text: 'Я использую Пресс-пропуск, чтобы открыть архив станции.' },
+        { id: 'burner-phone', icon: '☎', name: 'Телефон-однодневка', category: 'consumable', categoryLabel: 'Связь', rarity: 'common', rarityLabel: 'Обычный', quantity: 1, condition: 'Без сети', weight: '0.2 кг', description: 'Аппарат для одного вызова. Сеть появится только рядом с источником утечки.', inspect: 'Экран показывает одно непрочитанное сообщение без отправителя.', text: 'Я включаю Телефон-однодневку и жду сеть.' }
+      ],
+      journal: [
+        { title: 'Лера Орлова', meta: 'Персонажи · сцена 02', text: 'Ее брат отмечен в утечке как следующий источник.' },
+        { title: 'Будущий эфир', meta: 'Данные · подтверждено', text: 'Запись содержит твой голос и упоминание завтрашнего пожара.' },
+        { title: 'Лифт редакции', meta: 'События · открытое последствие', text: 'Остановился на этаже, которого нет в расписании.' }
+      ],
+      checks: [
+        { title: 'Расследование', text: 'Найти метаданные поддельной записи', meta: '+4 · пример · DC 13' },
+        { title: 'Самообладание', text: 'Не выдать страх в прямом эфире', meta: '+2 · пример · DC 12' },
+        { title: 'Контакты', text: 'Убедить Леру раскрыть имя источника', meta: '+3 · пример · DC 14' },
+        { title: 'Наблюдательность', text: 'Заметить, кто вошел в редакцию', meta: '+1 · пример · DC 15' }
       ]
     }
   };
-
-  const inventory = [
-    { id: 'ash-blade', icon: '⚔', name: 'Клинок Тихого Пепла', category: 'weapon', categoryLabel: 'Оружие', rarity: 'legendary', rarityLabel: 'Легендарный', quantity: 1, condition: 'Цел', weight: '2.4 кг', description: 'Выкован из остывшего сердца павшей звезды. На лезвии три звезды над разбитой короной.', inspect: 'Клинок теплый, хотя вокруг стынет пепел. Он отзывается на прикосновение короткой дрожью.', text: 'Я показываю Клинок Тихого Пепла.' },
-    { id: 'wanderer-cloak', icon: '☙', name: 'Плащ Скитальца', category: 'armor', categoryLabel: 'Броня', rarity: 'epic', rarityLabel: 'Эпический', quantity: 1, condition: 'Потерт', weight: '1.1 кг', description: 'Хранит тепло костров всех дорог, которые ты прошел. Подкладка скрывает несколько потайных швов.', inspect: 'На внутренней стороне вышиты названия мест, которых нет ни на одной карте.', text: 'Я расправляю Плащ Скитальца и проверяю потайные швы.' },
-    { id: 'star-amulet', icon: '✦', name: 'Амулет Трех Звезд', category: 'artifact', categoryLabel: 'Артефакт', rarity: 'epic', rarityLabel: 'Эпический', quantity: 1, condition: 'Настроен', weight: '0.2 кг', description: 'Тот же герб, что и на клинке. Камень внутри амулета темнеет рядом с руинами.', inspect: 'Тепло амулета усиливается, когда ты смотришь на темное пламя Цитадели.', text: 'Я показываю Амулет Трех Звезд и жду реакции хранителя.' },
-    { id: 'burnt-map', icon: '❦', name: 'Обрывок карты', category: 'key', categoryLabel: 'Ключ', rarity: 'common', rarityLabel: 'Обычный', quantity: 1, condition: 'Хрупкий', weight: '0.1 кг', description: 'Полусгоревший лист. Сквозь копоть виден только путь к каменному мосту.', inspect: 'Если поднести карту к пеплу, на полях проступает вторая линия.', text: 'Я разворачиваю Обрывок карты и сверяю его с дорогой.' },
-    { id: 'healing-moss', icon: '✚', name: 'Целебный мох', category: 'consumable', categoryLabel: 'Расходник', rarity: 'rare', rarityLabel: 'Редкий', quantity: 2, condition: 'Свежий', weight: '0.3 кг', description: 'Растет только на пепле. Затягивает неглубокие раны и оставляет на коже холодный след.', inspect: 'Внутри мха мерцают крошечные серебряные точки - он еще сохраняет силу.', text: 'Я достаю Целебный мох и осматриваю его.' },
-    { id: 'ash-salt', icon: '†', name: 'Пепельная соль', category: 'consumable', categoryLabel: 'Расходник', rarity: 'common', rarityLabel: 'Обычный', quantity: 5, condition: 'Сухая', weight: '0.6 кг', description: 'Отгоняет то, что бродит в ночи. Осталось пять щепоток.', inspect: 'Соль скрипит на ладони и темнеет возле следов, которых ты еще не видишь.', text: 'Я рассыпаю щепотку Пепельной соли у входа в руины.' },
-    { id: 'house-seal', icon: '☖', name: 'Печать Дома', category: 'key', categoryLabel: 'Ключ', rarity: 'rare', rarityLabel: 'Редкий', quantity: 1, condition: 'Скрыта', weight: '0.2 кг', description: 'Открывает двери, о которых ты еще не знаешь. На обороте выбито имя, стертое наполовину.', inspect: 'Металл не остывает и едва заметно тянется к старой арке.', text: 'Я достаю Печать Дома и ищу на арке подходящий знак.' },
-    { id: 'rust-compass', icon: '♆', name: 'Ржавый компас', category: 'artifact', categoryLabel: 'Артефакт', rarity: 'common', rarityLabel: 'Обычный', quantity: 1, condition: 'Сбоит', weight: '0.4 кг', description: 'Стрелка давно смотрит только на Цитадель, даже когда ты меняешь направление.', inspect: 'Компас на миг отклоняется от Цитадели и указывает на следы за твоей спиной.', text: 'Я открываю Ржавый компас и сравниваю его стрелку с дорогой.' }
-  ];
-
-  const journal = [
-    { title: 'Старик-хранитель', meta: 'Персонажи · сцена 02', text: 'Ждал носителя клинка двадцать лет.' },
-    { title: 'Клинок Тихого Пепла', meta: 'Предметы · подтверждено', text: 'На лезвии три звезды над разбитой короной.' },
-    { title: 'Тёмная Цитадель', meta: 'Места · открытое последствие', text: 'Горит на горизонте вечным пламенем.' }
-  ];
 
   function escapeHTML(value) {
     return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
@@ -93,6 +136,10 @@ export function mountInteractionRuntime(root) {
 
   function currentStory() {
     return config.storyPacks[storyId] || config.storyPacks.fant;
+  }
+
+  function currentTools() {
+    return storyTools[storyId] || storyTools.fant;
   }
 
   function showToast(message) {
@@ -165,8 +212,8 @@ export function mountInteractionRuntime(root) {
   }
 
   function renderConversation() {
-    const fixture = storyFixtures[storyId] || storyFixtures.fant;
-    chatScroll.innerHTML = '<div class="day-divider"><span>СЕГОДНЯ · 21:14</span></div>' + fixture.messages.map(messageMarkup).join('');
+    const pack = currentStory();
+    chatScroll.innerHTML = '<div class="day-divider"><span>СЕГОДНЯ · 21:14</span></div>' + pack.messages.map(messageMarkup).join('');
     requestAnimationFrame(() => { chatScroll.scrollTop = chatScroll.scrollHeight; });
   }
 
@@ -351,15 +398,48 @@ export function mountInteractionRuntime(root) {
   function applyStory(nextId) {
     storyId = config.storyPacks[nextId] ? nextId : 'fant';
     const story = currentStory();
+    const theme = config.themes[story.themeId] || config.themes.fantasy;
     app.dataset.story = storyId;
-    app.style.setProperty('--accent', story.accent);
+    app.dataset.theme = story.themeId;
+    app.style.setProperty('--accent', theme.accent);
+    app.style.setProperty('--accent-light', theme.accentLight);
+    app.style.setProperty('--accent-deep', theme.accentDeep);
+    app.style.setProperty('--accent-soft', theme.accentSoft);
+    app.style.setProperty('--theme-glow', theme.glow);
+    app.style.setProperty('--player-surface', theme.playerSurface);
     storyTitle.textContent = story.title;
     storyEyebrow.textContent = story.eyebrow;
     storyLocation.textContent = story.location;
     characterName.textContent = story.character;
     railCharacterName.textContent = story.character;
+    storyThemeIcon.textContent = theme.icon;
+    storyThemeLabel.textContent = theme.label.toUpperCase();
+    themeActiveLabel.textContent = theme.label;
+    storyPremiseTitle.textContent = story.title;
+    storyPremise.textContent = story.premise;
+    storyArcPremise.textContent = story.premise;
+    storyStake.textContent = story.stake;
+    storyObjective.textContent = story.objective;
+    presenceRole.textContent = (story.presenceRole || story.role) + ' · рядом';
+    presenceRelation.textContent = story.relation;
+    presenceKnowledge.textContent = story.knowledge;
+    presenceSummary.textContent = story.presence;
+    storyStateOne.textContent = story.state[0];
+    storyStateTwo.textContent = story.state[1];
+    storyStateThree.textContent = story.state[2];
+    inventoryState.query = '';
+    inventoryState.filter = 'all';
+    inventoryState.selectedId = currentTools().inventory[0]?.id || null;
     document.title = 'ФАБУЛА · ' + story.title;
     document.querySelectorAll('.thread-item[data-story]').forEach((item) => item.classList.toggle('is-active', item.dataset.story === storyId));
+    document.querySelectorAll('[data-story-select]').forEach((item) => {
+      const active = item.dataset.storySelect === storyId;
+      item.classList.toggle('is-active', active);
+      item.setAttribute('aria-selected', String(active));
+    });
+    const url = new URL(window.location.href);
+    url.searchParams.set('story', storyId);
+    window.history.replaceState({}, '', url);
     renderConversation();
   }
 
@@ -453,6 +533,7 @@ export function mountInteractionRuntime(root) {
   }
 
   function filteredInventory() {
+    const inventory = currentTools().inventory;
     const query = inventoryState.query.trim().toLowerCase();
     return inventory.filter((item) => {
       const matchesFilter = inventoryState.filter === 'all' || item.category === inventoryState.filter;
@@ -467,13 +548,15 @@ export function mountInteractionRuntime(root) {
   }
 
   function renderInventory() {
+    const tools = currentTools();
+    const inventory = tools.inventory;
     const visible = filteredInventory();
     const selected = visible.find((item) => item.id === inventoryState.selectedId) || visible[0] || null;
     if (selected) inventoryState.selectedId = selected.id;
     const categories = [['all', 'Все'], ['weapon', 'Оружие'], ['armor', 'Броня'], ['artifact', 'Артефакты'], ['key', 'Ключи'], ['consumable', 'Расходники']];
     const filters = categories.map(([key, label]) => '<button class="inventory-filter' + (inventoryState.filter === key ? ' is-active' : '') + '" type="button" data-inventory-filter="' + key + '" aria-pressed="' + (inventoryState.filter === key) + '">' + label + '</button>').join('');
     const cards = visible.map((item) => '<button class="inventory-card' + (item.id === inventoryState.selectedId ? ' is-selected' : '') + '" type="button" data-inventory-select="' + escapeHTML(item.id) + '" aria-pressed="' + (item.id === inventoryState.selectedId) + '"><span class="inventory-symbol inventory-symbol-' + escapeHTML(item.rarity) + '">' + item.icon + '</span><span class="inventory-card-copy"><strong>' + escapeHTML(item.name) + '</strong><small>' + escapeHTML(item.rarityLabel) + ' · ' + escapeHTML(item.categoryLabel) + '</small></span><b class="inventory-quantity">×' + item.quantity + '</b></button>').join('');
-    return '<div class="inventory-summary"><div><span class="eyebrow">РЮКЗАК · ЛОКАЛЬНАЯ ДЕМО-СЕССИЯ</span><strong><b>' + inventory.length + '</b> / 24 слота</strong></div><span class="inventory-load">' + inventory.reduce((total, item) => total + item.quantity, 0) + ' предметов · 248 золота</span></div><p class="modal-note">Выбери предмет, чтобы увидеть состояние, описание и безопасное действие для текущего хода.</p><div class="inventory-toolbar"><label class="inventory-search"><span>⌕</span><span class="sr-only">Поиск по инвентарю</span><input type="search" data-inventory-search value="' + escapeHTML(inventoryState.query) + '" placeholder="Найти предмет" autocomplete="off"></label><span class="inventory-result-count">' + visible.length + ' из ' + inventory.length + '</span></div><div class="inventory-filters" role="toolbar" aria-label="Фильтр инвентаря">' + filters + '</div><div class="inventory-layout"><div class="inventory-grid" role="list" aria-label="Предметы">' + (cards || '<div class="inventory-empty inventory-empty-grid"><span>⌕</span><strong>Предметы не найдены</strong><small>Измени запрос или фильтр.</small></div>') + '</div>' + renderInventoryInspector(selected) + '</div>';
+    return '<div class="inventory-summary"><div><span class="eyebrow">РЮКЗАК · ЛОКАЛЬНАЯ ДЕМО-СЕССИЯ</span><strong><b>' + inventory.length + '</b> / 24 слота</strong></div><span class="inventory-load">' + inventory.reduce((total, item) => total + item.quantity, 0) + ' предметов · ' + escapeHTML(tools.currency) + '</span></div><p class="modal-note">Выбери предмет, чтобы увидеть состояние, описание и безопасное действие для текущего хода.</p><div class="inventory-toolbar"><label class="inventory-search"><span>⌕</span><span class="sr-only">Поиск по инвентарю</span><input type="search" data-inventory-search value="' + escapeHTML(inventoryState.query) + '" placeholder="Найти предмет" autocomplete="off"></label><span class="inventory-result-count">' + visible.length + ' из ' + inventory.length + '</span></div><div class="inventory-filters" role="toolbar" aria-label="Фильтр инвентаря">' + filters + '</div><div class="inventory-layout"><div class="inventory-grid" role="list" aria-label="Предметы">' + (cards || '<div class="inventory-empty inventory-empty-grid"><span>⌕</span><strong>Предметы не найдены</strong><small>Измени запрос или фильтр.</small></div>') + '</div>' + renderInventoryInspector(selected) + '</div>';
   }
 
   function rerenderInventory(restoreSearchFocus) {
@@ -486,15 +569,19 @@ export function mountInteractionRuntime(root) {
   }
 
   function renderJournal() {
+    const journal = currentTools().journal;
     return '<p class="modal-note">Журнал - проекция подтвержденных событий. Его записи не создают параллельный канон.</p><div class="journal-list">' + journal.map((item) => '<div class="journal-item"><span>✒</span><span><strong>' + escapeHTML(item.title) + '</strong><small>' + escapeHTML(item.meta) + ' · ' + escapeHTML(item.text) + '</small></span><button class="insert-button" type="button" data-insert="' + escapeHTML(item.text) + '">В ход</button></div>').join('') + '</div>';
   }
 
   function renderCharacter() {
-    return '<div class="character-sheet"><div class="sheet-portrait"><img src="/assets/avatar.jpg" alt="Портрет Безымянного"></div><div class="sheet-copy"><h3>Безымянный</h3><p>' + escapeHTML(currentStory().role) + ' · уровень 7</p><div class="sheet-stats"><div class="sheet-stat"><b>31</b><small>здоровье</small></div><div class="sheet-stat"><b>14</b><small>защита</small></div><div class="sheet-stat"><b>248</b><small>золото</small></div></div><div class="meter"><i></i></div></div></div><div class="modal-actions"><button class="modal-button primary" type="button" data-tool="inventory">Открыть инвентарь</button></div>';
+    const story = currentStory();
+    const tools = currentTools();
+    return '<div class="character-sheet"><div class="sheet-portrait"><img src="/assets/avatar.jpg" alt="Портрет игрока"></div><div class="sheet-copy"><h3>Ты</h3><p>' + escapeHTML(story.role) + ' · сцена 02</p><div class="sheet-stats"><div class="sheet-stat"><b>31</b><small>стойкость</small></div><div class="sheet-stat"><b>14</b><small>влияние</small></div><div class="sheet-stat"><b>' + escapeHTML(tools.currency) + '</b><small>ресурс</small></div></div><div class="meter"><i></i></div></div></div><div class="modal-actions"><button class="modal-button primary" type="button" data-tool="inventory">Открыть инвентарь</button></div>';
   }
 
   function renderCheck() {
-    return '<p class="modal-note">Проверка остается инструментом игрока. В runtime итоговый порог и typed operations решает сервер.</p><div class="modal-grid"><div class="modal-card"><h3>Ловкость</h3><p>Тихо обойти разрушенную арку</p><div class="modal-meta"><b>+3</b> · пример · DC 13</div></div><div class="modal-card"><h3>Харизма</h3><p>Убедить старика говорить прямо</p><div class="modal-meta"><b>+4</b> · пример · DC 12</div></div><div class="modal-card"><h3>Разум</h3><p>Сопоставить герб и старые записи</p><div class="modal-meta"><b>+1</b> · пример · DC 14</div></div><div class="modal-card"><h3>Мудрость</h3><p>Замечать следы до того, как станет поздно</p><div class="modal-meta"><b>+1</b> · пример · DC 13</div></div></div>';
+    const checks = currentTools().checks;
+    return '<p class="modal-note">Проверка остается инструментом игрока. В runtime итоговый порог и typed operations решает сервер.</p><div class="modal-grid">' + checks.map((check) => '<div class="modal-card"><h3>' + escapeHTML(check.title) + '</h3><p>' + escapeHTML(check.text) + '</p><div class="modal-meta"><b>' + escapeHTML(check.meta) + '</b></div></div>').join('') + '</div>';
   }
 
   function renderSettings() {
@@ -566,9 +653,9 @@ export function mountInteractionRuntime(root) {
       closeDrawers();
       return;
     }
-    const storyButton = event.target.closest('.thread-item[data-story]');
+    const storyButton = event.target.closest('.thread-item[data-story], [data-story-select]');
     if (storyButton) {
-      applyStory(storyButton.dataset.story);
+      applyStory(storyButton.dataset.story || storyButton.dataset.storySelect);
       closeDrawers();
       showToast('Открыта история: ' + currentStory().title);
       return;
@@ -592,13 +679,13 @@ export function mountInteractionRuntime(root) {
     }
     const inventoryInsert = event.target.closest('[data-inventory-insert]');
     if (inventoryInsert) {
-      const item = inventory.find((entry) => entry.id === inventoryInsert.dataset.inventoryInsert);
+      const item = currentTools().inventory.find((entry) => entry.id === inventoryInsert.dataset.inventoryInsert);
       if (item) compose(item.text);
       return;
     }
     const inventoryLook = event.target.closest('[data-inventory-look]');
     if (inventoryLook) {
-      const item = inventory.find((entry) => entry.id === inventoryLook.dataset.inventoryLook);
+      const item = currentTools().inventory.find((entry) => entry.id === inventoryLook.dataset.inventoryLook);
       if (item) showToast(item.inspect);
       return;
     }

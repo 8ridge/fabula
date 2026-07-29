@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="interaction.css">
 </head>
 <body>
-  <div class="interaction-app" id="interactionApp" data-story="fant">
+  <div class="interaction-app" id="interactionApp" data-story="fant" data-theme="fantasy">
     <header class="topbar">
       <a class="brand" href="app.html" aria-label="Вернуться в ФАБУЛУ">ФАБУЛА</a>
       <div class="topbar-context">
@@ -44,29 +44,28 @@
           <span>⌕</span><span>Найти сцену</span><kbd>⌘ K</kbd>
         </button>
         <div class="thread-group">
-          <div class="group-label"><span>СЕЙЧАС</span><span>3</span></div>
+          <div class="group-label"><span>ОСНОВНЫЕ ПАКИ</span><span>4</span></div>
           <button class="thread-item is-active" type="button" data-story="fant">
             <span class="thread-cover thread-cover-fant"></span>
-            <span class="thread-copy"><strong>Пепельные земли</strong><small>Старик ждет ответа</small></span>
+            <span class="thread-copy"><strong>Пепельные земли</strong><small>Клинок выбирает наследника</small></span>
             <span class="thread-meta"><b>2</b><small>сейчас</small></span>
           </button>
           <button class="thread-item" type="button" data-story="scifi">
             <span class="thread-cover thread-cover-scifi"></span>
-            <span class="thread-copy"><strong>Станция "Кассандра"</strong><small>Реактор просыпается</small></span>
+            <span class="thread-copy"><strong>Станция "Кассандра"</strong><small>Твое имя исчезло из журнала</small></span>
             <span class="thread-meta"><small>вчера</small></span>
           </button>
           <button class="thread-item" type="button" data-story="hist">
             <span class="thread-cover thread-cover-hist"></span>
-            <span class="thread-copy"><strong>Восстание Спартака</strong><small>Дорога из Капуи</small></span>
+            <span class="thread-copy"><strong>Восстание Спартака</strong><small>До восстания - одна ночь</small></span>
             <span class="thread-meta"><small>22 июл</small></span>
           </button>
         </div>
         <div class="thread-group thread-group-muted">
-          <div class="group-label"><span>АРХИВ</span><span>1</span></div>
           <button class="thread-item" type="button" data-story="post">
-            <span class="thread-cover thread-cover-post"></span>
-            <span class="thread-copy"><strong>После тишины</strong><small>Мира у водонапорной</small></span>
-            <span class="thread-meta"><small>18 июл</small></span>
+            <span class="thread-cover thread-cover-modern"></span>
+            <span class="thread-copy"><strong>Линия разрыва</strong><small>Эфир уже записан из будущего</small></span>
+            <span class="thread-meta"><small>новое</small></span>
           </button>
         </div>
         <div class="thread-rail-foot">
@@ -95,6 +94,12 @@
           <span><strong>Сцена 02</strong><small>Действия сохраняются в канон после подтверждения</small></span>
           <button class="context-link" type="button" data-tool="models">Контур хода <b>›</b></button>
         </div>
+
+        <section class="story-pulse" aria-live="polite" aria-label="Сюжетный контекст">
+          <span class="story-pulse-mark" id="storyThemeIcon">✦</span>
+          <div class="story-pulse-copy"><span class="eyebrow" id="storyThemeLabel">ФЭНТЕЗИ</span><strong id="storyPremiseTitle">Пепельные земли</strong><p id="storyPremise">Клинок Тихого Пепла откликается на твое имя, которого ты не помнишь.</p></div>
+          <div class="story-pulse-stake"><span>СТАВКА</span><strong id="storyStake">До темного пламени - один переход</strong></div>
+        </section>
 
         <div class="chat-scroll" id="chatScroll" aria-live="polite">
           <div class="day-divider"><span>СЕГОДНЯ · 21:14</span></div>
@@ -165,18 +170,34 @@
           <button type="button" data-tool="models"><span>⌘</span><small>Модели</small></button>
         </div>
 
+        <section class="theme-card" aria-label="Выбор темы истории">
+          <div class="card-heading"><span>АРХИЖАНР</span><span class="theme-active" id="themeActiveLabel">Фэнтези</span></div>
+          <div class="theme-grid" role="tablist" aria-label="Темы оформления">
+            <button type="button" class="theme-choice is-active" role="tab" aria-selected="true" data-story-select="fant"><span>✦</span><small>Фэнтези</small></button>
+            <button type="button" class="theme-choice" role="tab" aria-selected="false" data-story-select="scifi"><span>⌁</span><small>Научная фантастика</small></button>
+            <button type="button" class="theme-choice" role="tab" aria-selected="false" data-story-select="hist"><span>⚜</span><small>История</small></button>
+            <button type="button" class="theme-choice" role="tab" aria-selected="false" data-story-select="post"><span>◒</span><small>Современность</small></button>
+          </div>
+        </section>
+
+        <section class="story-arc-card" aria-live="polite">
+          <div class="card-heading"><span>ЯДРО ПАКА</span><span class="arc-status">В СЦЕНЕ</span></div>
+          <p id="storyArcPremise">Клинок Тихого Пепла откликается на твое имя, которого ты не помнишь.</p>
+          <div class="arc-objective"><span>Твоя цель</span><strong id="storyObjective">Решить, кому достанется право разбудить Цитадель</strong></div>
+        </section>
+
         <section class="presence-card">
-          <div class="presence-top"><span class="presence-avatar"><img src="assets/avatar.jpg" alt=""></span><span><strong id="railCharacterName">Старик-хранитель</strong><small>NPC · рядом</small></span><span class="presence-status">жив</span></div>
-          <div class="presence-relation"><span><small>Отношение</small><b>Насторожен</b></span><span><small>Знает</small><b>Клинок</b></span></div>
+          <div class="presence-top"><span class="presence-avatar"><img src="assets/avatar.jpg" alt=""></span><span><strong id="railCharacterName">Старик-хранитель</strong><small id="presenceRole">NPC · рядом</small></span><span class="presence-status">в сцене</span></div>
+          <div class="presence-relation"><span><small>Отношение</small><b id="presenceRelation">Насторожен</b></span><span><small>Знает</small><b id="presenceKnowledge">Три звезды</b></span></div>
           <div class="relation-meter"><i></i></div>
-          <p>Он ждал носителя клинка двадцать лет. Его знания ограничены тем, что он видел у руин.</p>
+          <p id="presenceSummary">Хранитель видел прежнего носителя клинка и скрывает последнюю клятву.</p>
         </section>
 
         <section class="state-card">
           <div class="card-heading"><span>СЕЙЧАС В МИРЕ</span><button type="button" data-tool="journal" aria-label="Открыть журнал">→</button></div>
-          <div class="state-row"><span class="state-icon">◷</span><span><strong>Сумерки</strong><small>До темноты около 40 минут</small></span></div>
-          <div class="state-row"><span class="state-icon">⌁</span><span><strong>Пепельный ветер</strong><small>Видимость снижена</small></span></div>
-          <div class="state-row"><span class="state-icon">!</span><span><strong>Открытое последствие</strong><small>Кто оставил клинок</small></span></div>
+          <div class="state-row"><span class="state-icon">◷</span><span><strong id="storyStateOne">Сумерки</strong><small>Сцена развивается в реальном времени</small></span></div>
+          <div class="state-row"><span class="state-icon">⌁</span><span><strong id="storyStateTwo">Пепельный ветер</strong><small>Условия меняют возможные действия</small></span></div>
+          <div class="state-row"><span class="state-icon">!</span><span><strong id="storyStateThree">Клятва не названа</strong><small>Открытое последствие</small></span></div>
         </section>
 
         <section class="runtime-card">

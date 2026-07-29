@@ -57,7 +57,7 @@ onBeforeUnmount(() => dispose())
           <div class="search"><span>⚲</span> Найти историю…</div>
           <div class="fchips">
             <span class="chip on">Все</span><span class="chip">Фэнтези</span><span class="chip">Sci-Fi</span>
-            <span class="chip">История</span><span class="chip">Пост-апок</span>
+            <span class="chip">История</span><span class="chip">Современность</span>
           </div>
           <div class="featured" data-open="fant">
             <img src="/assets/cover_fantasy.jpg" alt="">
@@ -77,9 +77,9 @@ onBeforeUnmount(() => dispose())
             <div class="pack" data-open="hist"><div class="cover pv-hist"><img src="/assets/cover_history.jpg"></div>
               <span class="tagn t-hist">История</span><span class="glyph">⚜</span>
               <div class="g-name g-hist">Восстание Спартака</div><div class="g-meta">7 историй</div></div>
-            <div class="pack" data-open="post"><div class="cover pv-mod"><img src="/assets/cover_postapoc.jpg"></div>
-              <span class="tagn t-post">Пост-апок</span><span class="glyph">☣</span>
-              <div class="g-name g-post">После тишины</div><div class="g-meta">6 историй</div></div>
+            <div class="pack" data-open="post"><div class="cover pv-mod"><img src="/assets/cover_modern.png"></div>
+              <span class="tagn t-post">Современность</span><span class="glyph">◒</span>
+              <div class="g-name g-post">Линия разрыва</div><div class="g-meta">6 историй</div></div>
           </div>
         </div>
       </section>
@@ -188,7 +188,7 @@ onBeforeUnmount(() => dispose())
     --ember:#e0662f; --blood:#a8402c;
     --rare:#5b8fd6; --epic:#9a6fd0; --leg:#e8b24a;
     --bg-0:#0b0906; --hair:#d9a94a2e;
-    --scifi:#54e6d0; --hist:#c9a865; --post:#9bbf3a;
+    --scifi:#54e6d0; --hist:#c9a865; --post:#ff7d6b;
     --nav-h:76px;
     --display:'Forum',serif;
   }
