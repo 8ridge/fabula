@@ -342,12 +342,15 @@ onMounted(() => {
         }
         const clientId = googleClientId;
         if (!clientId) { toast('Google-вход скоро'); return; }
+        openModal('Привязать Google', `<div id="pmGoogleBtn" style="display:flex;justify-content:center;padding:6px 0"></div>`, async ()=>true);
         await new Promise((resolve)=>{ if(window.google&&window.google.accounts) return resolve(); const s=document.createElement('script'); s.src='https://accounts.google.com/gsi/client'; s.async=true; s.defer=true; s.onload=()=>resolve(); document.head.appendChild(s); });
         window.google.accounts.id.initialize({ client_id: clientId, callback: async (resp)=>{
-          const { res } = await apiAuth('/auth/link/google', 'POST', { id_token: resp.credential });
+          const { res } = await apiAuth('/auth/link/google','POST',{ id_token: resp.credential });
+          document.getElementById('pmodal').classList.remove('on');
           if (res.status === 409) toast('Этот Google уже привязан к другому'); else if (res.ok) { toast('Google привязан'); loadProfile(); }
         }});
-        window.google.accounts.id.prompt();
+        const holder = document.getElementById('pmGoogleBtn');
+        if (holder) window.google.accounts.id.renderButton(holder, { theme:'filled_black', size:'large', text:'continue_with', shape:'pill', width: 280 });
         return;
       }
       if (act === 'delete') {
