@@ -336,15 +336,20 @@ onMounted(() => {
     img.addEventListener('error', () => { img.style.display = 'none' }, { once: true })
   })
 
-  // если уже есть сессия — «Войти» становится «Профиль», «Начать» → «Продолжить»
-  try {
-    if (localStorage.getItem('fabula-token')) {
-      const loginLink = document.querySelector('.nav-links a[data-auth="login"]')
-      if (loginLink) { loginLink.textContent = 'Профиль'; loginLink.setAttribute('href', '/app'); loginLink.removeAttribute('data-auth') }
-      const startBtn = document.querySelector('.nav-links a.btn-solid')
-      if (startBtn) startBtn.textContent = 'Продолжить'
+  // если уже есть сессия — «Войти» становится «Профиль», добавляем «Миры», «Начать» → «Продолжить»
+  function markLoggedInNav(){
+    const loginLink = document.querySelector('.nav-links a[data-auth="login"]')
+    if (loginLink) {
+      loginLink.textContent = 'Профиль'; loginLink.setAttribute('href', '/app?scr=profile'); loginLink.removeAttribute('data-auth')
+      if (!document.querySelector('.nav-links a[data-worlds]')) {
+        const worlds = document.createElement('a'); worlds.textContent = 'Миры'; worlds.href = '/app?scr=packs'; worlds.setAttribute('data-worlds','1')
+        loginLink.parentNode.insertBefore(worlds, loginLink)
+      }
     }
-  } catch (e) {}
+    const startBtn = document.querySelector('.nav-links a.btn-solid')
+    if (startBtn) { startBtn.textContent = 'Продолжить'; startBtn.setAttribute('href','/app') }
+  }
+  try { if (localStorage.getItem('fabula-token')) markLoggedInNav() } catch (e) {}
 
 
 document.documentElement.classList.add('js');
@@ -877,7 +882,7 @@ if('serviceWorker' in navigator){
     try{
       const {r, data} = await apiPost(reg ? '/auth/register' : '/auth/login',
         reg ? {username: name, email, password:pass} : {email, password:pass});
-      if(r.ok){ saveSession(data); ok('Готово, входим…'); return go(); }
+      if(r.ok){ saveSession(data); markLoggedInNav(); ok('Готово! Открой «Профиль» или «Миры».'); close(); return; }
       if(r.status===409)      fail('Эта почта уже зарегистрирована — попробуй войти.');
       else if(r.status===401) fail('Неверная почта или пароль.');
       else if(r.status===422) fail('Проверь поля — что-то заполнено не так.');
@@ -909,7 +914,7 @@ if('serviceWorker' in navigator){
     const { r, data } = await apiPost('/auth/google', { id_token: resp.credential });
     if (!r.ok){ fail('Не удалось войти через Google.'); return; }
     if (data.needs_username){ pendingRegToken = data.registration_token; showNickStep(); return; }
-    saveSession(data); ok('Готово, входим…'); go();
+    saveSession(data); markLoggedInNav(); ok('Готово! Открой «Профиль» или «Миры».'); close();
   }
 
   async function initGoogle(){
@@ -932,7 +937,7 @@ if('serviceWorker' in navigator){
     const m=document.getElementById('gNickMsg');
     if(!/^[A-Za-z0-9_]{3,20}$/.test(nick)){ if(m) m.textContent='Ник: 3–20 символов, латиница, цифры, _'; return; }
     const { r, data } = await apiPost('/auth/google/complete', { registration_token: pendingRegToken, username: nick });
-    if (r.ok){ saveSession(data); go(); }
+    if (r.ok){ saveSession(data); markLoggedInNav(); ok('Готово! Открой «Профиль» или «Миры».'); close(); }
     else if (m) m.textContent = r.status===409 ? 'Ник занят' : 'Проверь ник';
   });
 })();

@@ -377,6 +377,10 @@ function go(name){
   sfxNav();
 }
 document.querySelectorAll('#nav a').forEach(a=>a.addEventListener('click',()=>go(a.dataset.go)));
+  try {
+    const scr = new URLSearchParams(location.search).get('scr')
+    if (scr && ['home','packs','profile'].includes(scr)) go(scr)
+  } catch(e) {}
 
 /* ================= INVENTORY ================= */
 const items=[
