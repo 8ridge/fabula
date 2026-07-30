@@ -62,9 +62,7 @@ function visibleItem(slot: InventoryEquipmentSlot): InventoryItemView | null {
       </span>
     </header>
 
-    <div class="relative mx-auto h-[35rem] w-full max-w-[28rem] overflow-hidden rounded-2xl border border-white/10 bg-[radial-gradient(circle_at_50%_38%,rgb(var(--accent-rgb)/.11),transparent_34%),linear-gradient(145deg,#16171d,#0d0e12)] p-2.5">
-      <div class="pointer-events-none absolute inset-4 rounded-xl border border-dashed border-white/[.08]" />
-
+    <div class="relative mx-auto h-[35rem] w-full max-w-[28rem] overflow-hidden rounded-2xl bg-[radial-gradient(circle_at_50%_38%,rgb(var(--accent-rgb)/.11),transparent_34%),linear-gradient(145deg,#16171d,#0d0e12)] p-2.5">
       <div class="pointer-events-none absolute inset-5 flex items-center justify-center" aria-hidden="true">
         <img
           src="/assets/inventory/human-mannequin-transparent-v2.png"
