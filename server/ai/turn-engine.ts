@@ -294,7 +294,7 @@ export class TurnEngine {
       })
       const proposal = guardQuickActionAlignment(parseQuickTurnProposal(result.output), command)
       const output = quickProposalToTurnOutput(proposal, command, snapshot)
-      assertInventoryAlignment(output, inventoryAdvisory)
+      assertInventoryAlignment(output, inventoryAdvisory, command)
       validateOutput?.(output)
       modelRuns.push({
         role: 'fallback',
@@ -363,7 +363,11 @@ export class TurnEngine {
           schema: contract,
           jsonMode: attempt.jsonMode,
         })
-        const advisory = parseStandaloneOutput('inventory', result.output)
+        const advisory = requireExplicitAcquisitionCandidate(
+          parseStandaloneOutput('inventory', result.output),
+          command,
+          snapshot,
+        )
         assertInventoryAdvisoryAlignment(advisory, command, snapshot)
         modelRuns.push({
           role: attempt.role,
@@ -439,8 +443,8 @@ export class TurnEngine {
         command.expected_session_version,
       )
       assertKnownReferences(output, snapshot)
-      assertInventoryAlignment(output, inventoryAdvisory)
       assertCommandOutcomeAlignment(output, command)
+      assertInventoryAlignment(output, inventoryAdvisory, command)
       validateOutput?.(output)
       modelRuns.push({
         role,
@@ -997,9 +1001,56 @@ function assertInventoryAdvisoryAlignment(
   }
 }
 
+function requireExplicitAcquisitionCandidate(
+  advisory: Record<string, JsonValue>,
+  command: TurnCommand,
+  snapshot: EngineSessionSnapshot,
+): Record<string, JsonValue> {
+  if (!requestsPortableObjectAcquisition(command) || advisory.action_feasible === false)
+    return advisory
+
+  const operationCandidates = advisory.operation_candidates as Array<Record<string, JsonValue>>
+  if (operationCandidates.some(candidate =>
+    candidate.type === 'inventory.create_instance'
+    || (candidate.type === 'inventory.transfer_custody' && candidate.to_entity_id === 'player'))) {
+    return advisory
+  }
+
+  const itemId = snapshot.reservedIds.itemInstances[0]
+  if (!itemId || !snapshot.allowedOperationTypes.includes('inventory.create_instance')) {
+    throw new ContractError(
+      'MODEL_INVENTORY_MISMATCH',
+      'Для выбранного получения предмета сервер не зарезервировал операцию инвентаря.',
+      ['$.authority.reserved_item_ids', '$.authority.allowed_operation_types'],
+    )
+  }
+
+  const reasonCodes = (advisory.reason_codes as string[])
+    .filter(reasonCode => reasonCode !== 'no_item_interaction')
+  if (!reasonCodes.includes('portable_object_acquisition'))
+    reasonCodes.push('portable_object_acquisition')
+
+  return {
+    ...advisory,
+    reason_codes: reasonCodes,
+    operation_candidates: [
+      ...operationCandidates,
+      {
+        type: 'inventory.create_instance',
+        item_id: itemId,
+        amount: null,
+        from_entity_id: null,
+        to_entity_id: 'player',
+        reason: 'Игрок явно берет переносимый предмет себе.',
+      },
+    ],
+  }
+}
+
 function assertInventoryAlignment(
   output: TurnOutput,
   advisory: Record<string, JsonValue>,
+  command: TurnCommand,
 ): void {
   if (advisory.action_feasible === false && output.status === 'resolved') {
     throw new ContractError(
@@ -1037,6 +1088,17 @@ function assertInventoryAlignment(
       throw new ContractError(
         'MODEL_INVENTORY_MISMATCH',
         'Рассказчик подтвердил получение предмета без добавления его в инвентарь.',
+        ['$.resolution.outcome', '$.operations'],
+      )
+    }
+
+    if (requestsPortableObjectAcquisition(command)
+      && !inventoryOperations.some(operation =>
+        (operation.type === 'inventory.create_instance' && operation.holder_id === 'player')
+        || (operation.type === 'inventory.transfer_custody' && operation.to_holder_id === 'player'))) {
+      throw new ContractError(
+        'MODEL_INVENTORY_MISMATCH',
+        'Рассказчик подтвердил получение предмета, но не передал его игроку.',
         ['$.resolution.outcome', '$.operations'],
       )
     }

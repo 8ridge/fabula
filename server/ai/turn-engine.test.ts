@@ -706,7 +706,7 @@ describe('turn engine model telemetry', () => {
     const bottleCommand: TurnCommand = {
       ...command,
       mode: 'action',
-      text: 'Я все равно беру эту бутылку в руки',
+      text: 'Беру бутылку к себе',
     }
     const bottleSnapshot: EngineSessionSnapshot = {
       ...snapshot,
@@ -724,18 +724,7 @@ describe('turn engine model telemetry', () => {
           return {
             requestId: 'request:bottle-inventory',
             model: request.model,
-            output: {
-              ...inventoryAdvisoryFor(request),
-              reason_codes: ['portable_object_acquisition'],
-              operation_candidates: [{
-                type: 'inventory.create_instance',
-                item_id: bottleItemId,
-                amount: null,
-                from_entity_id: null,
-                to_entity_id: 'player',
-                reason: 'Игрок явно берет переносимую бутылку.',
-              }],
-            },
+            output: inventoryAdvisoryFor(request),
             usage: { total_tokens: 10, cost: 0.001 },
           }
         }
@@ -788,6 +777,18 @@ describe('turn engine model telemetry', () => {
       'fabula_inventory_advisory_1_0',
       'fabula_turn_output_0_2',
     ])
+    expect(requests[1]).toMatchObject({
+      payload: {
+        inventory_advisory: {
+          reason_codes: ['portable_object_acquisition'],
+          operation_candidates: [{
+            type: 'inventory.create_instance',
+            item_id: bottleItemId,
+            to_entity_id: 'player',
+          }],
+        },
+      },
+    })
     expect(result.output.operations.find(operation =>
       operation.type === 'inventory.create_instance')).toMatchObject({
       type: 'inventory.create_instance',
@@ -797,11 +798,95 @@ describe('turn engine model telemetry', () => {
     expect(result.advisoryUsed).toBe(true)
   })
 
+  test('rejects a successful take when the narrator does not give the item to the player', async () => {
+    const bottleItemId = 'item:reserved:bottle'
+    const bottleCommand: TurnCommand = {
+      ...command,
+      mode: 'action',
+      text: 'Беру бутылку к себе',
+    }
+    const bottleSnapshot: EngineSessionSnapshot = {
+      ...snapshot,
+      reservedIds: {
+        ...snapshot.reservedIds,
+        itemInstances: [bottleItemId],
+      },
+      allowedOperationTypes: ['event.create', 'inventory.create_instance'],
+    }
+    const requests: ChatJsonRequest[] = []
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        requests.push(request)
+        if (request.schema?.name === 'fabula_inventory_advisory_1_0') {
+          return {
+            requestId: 'request:bottle-inventory',
+            model: request.model,
+            output: inventoryAdvisoryFor(request),
+            usage: { total_tokens: 10, cost: 0.001 },
+          }
+        }
+        if (request.schema?.name === 'fabula_turn_output_0_2') {
+          const output = successfulTurnOutput()
+          output.resolution.summary = 'Ты берешь бутылку себе.'
+          output.narrative_text = 'Ты заворачиваешь бутылку в газету и оставляешь у себя.'
+          return {
+            requestId: 'request:bottle-turn',
+            model: request.model,
+            output,
+            usage: { total_tokens: 10, cost: 0.001 },
+          }
+        }
+        return {
+          requestId: 'request:bottle-fallback',
+          model: request.model,
+          output: {
+            outcome: 'success',
+            summary: 'Ты берешь бутылку себе.',
+            event_kind: 'bottle_taken',
+            suggested_actions: modelSuggestedActions(),
+          },
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+
+    let thrown: unknown
+    try {
+      await createPipelineEngine(client).execute(bottleCommand, bottleSnapshot)
+    }
+    catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(AiExecutionError)
+    expect((thrown as AiExecutionError).code).toBe('MODEL_FALLBACK_EXHAUSTED')
+    expect((thrown as AiExecutionError).modelRuns.slice(-2)).toMatchObject([
+      {
+        role: 'primary',
+        status: 'discarded',
+        error_code: 'MODEL_INVENTORY_MISMATCH',
+      },
+      {
+        role: 'fallback',
+        status: 'discarded',
+        error_code: 'MODEL_INVENTORY_MISMATCH',
+      },
+    ])
+  })
+
   test('rejects a narrator who makes the player withdraw from taking an object', async () => {
     const takeCommand: TurnCommand = {
       ...command,
       mode: 'action',
       text: 'Пойти взять бутылку',
+    }
+    const takeSnapshot: EngineSessionSnapshot = {
+      ...snapshot,
+      reservedIds: {
+        ...snapshot.reservedIds,
+        itemInstances: ['item:reserved:bottle'],
+      },
+      allowedOperationTypes: ['event.create', 'inventory.create_instance'],
     }
     const requests: ChatJsonRequest[] = []
     const client = {
@@ -832,7 +917,7 @@ describe('turn engine model telemetry', () => {
       },
     } as unknown as OpenRouterClient
 
-    const result = await createEngine(client).execute(takeCommand, snapshot)
+    const result = await createEngine(client).execute(takeCommand, takeSnapshot)
 
     expect(requests).toHaveLength(2)
     expect(result.output.resolution).toMatchObject({
