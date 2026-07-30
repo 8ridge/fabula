@@ -215,7 +215,7 @@ function closeOnBackdrop(event: MouseEvent) {
 
           <div v-if="devMode" class="mt-6 border-t border-white/10 pt-5">
             <p class="font-display text-[17px] text-fabula-100">Модель создания сюжета</p>
-            <p class="mt-1 text-[13px] leading-relaxed text-[#9b9ba6]">Только dev-режим. У Aion нет ZDR-маршрута: OpenRouter получает запрет на сбор данных, но тестовые истории все равно не должны содержать личные сведения. Инвентарь и журнал продолжают обрабатываться своими Nemotron-моделями.</p>
+            <p class="mt-1 text-[13px] leading-relaxed text-[#9b9ba6]">Только dev-режим. У Aion нет ZDR-маршрута: OpenRouter получает запрет на сбор данных, но тестовые истории все равно не должны содержать личные сведения. Инвентарь продолжает обрабатываться Nemotron, журнал и персонажи — Mistral.</p>
             <div class="mt-3 grid grid-cols-2 overflow-hidden rounded-xl border border-white/10">
               <button
                 v-for="option in ([
