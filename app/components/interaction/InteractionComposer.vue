@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import type { InventoryItemProjection, SuggestedAction } from '#shared/game'
 import type { InteractionMode, InteractionToolName } from '~/types/interaction-ui'
+import { projectInventoryItem } from '~/composables/useInventoryStore'
+import { inventoryConditionMeta } from '~/types/inventory'
 
 const input = defineModel<string>({ required: true })
 
-defineProps<{
+const props = defineProps<{
   mode: InteractionMode
   turnPending: boolean
   suggestions: SuggestedAction[]
   selectedSuggestionId: string | null
   selectedItems: InventoryItemProjection[]
 }>()
+
+const selectedItemViews = computed(() => props.selectedItems.map(projectInventoryItem))
 
 const emit = defineEmits<{
   setMode: [mode: InteractionMode]
@@ -68,17 +72,6 @@ defineExpose({ resize, focus, selectEnd })
       </button>
     </div>
 
-    <div v-if="selectedItems.length" class="mb-2 flex flex-wrap gap-1.5" aria-label="Предметы в ходе">
-      <span
-        v-for="item in selectedItems"
-        :key="item.id"
-        class="inline-flex items-center gap-2 rounded-full border border-[rgb(var(--accent-rgb)/.4)] bg-[rgb(var(--accent-rgb)/.08)] px-3 py-1 text-[11px] text-[var(--accent-light)]"
-      >
-        {{ item.name }}
-        <button type="button" class="text-[14px]" :aria-label="`Убрать ${item.name} из хода`" @click="emit('removeItem', item.id)">×</button>
-      </span>
-    </div>
-
     <form class="rounded-2xl border border-white/12 bg-[#15171d] p-2.5 transition focus-within:border-[rgb(var(--accent-rgb)/.65)]" @submit.prevent="emit('submit')">
       <div class="mb-1.5 flex items-center gap-1 overflow-x-auto [scrollbar-width:none]" role="tablist" aria-label="Режим хода">
         <button
@@ -93,6 +86,33 @@ defineExpose({ resize, focus, selectEnd })
         >
           <span class="mr-1" aria-hidden="true">{{ entry.icon }}</span>{{ entry.label }}
         </button>
+      </div>
+
+      <div v-if="selectedItemViews.length" class="mb-2 flex flex-wrap gap-2" aria-label="Предметы в ходе">
+        <span
+          v-for="item in selectedItemViews"
+          :key="item.id"
+          class="inline-flex min-w-0 max-w-full items-center gap-2 rounded-xl border border-[rgb(var(--accent-rgb)/.42)] bg-[rgb(var(--accent-rgb)/.09)] p-1 pr-1.5 text-[var(--accent-light)]"
+        >
+          <InventoryItemIcon :item="item" size="slot" class="ring-1 ring-white/10" />
+          <span class="min-w-0">
+            <strong class="block truncate text-[12px] font-semibold leading-tight">{{ item.name }}</strong>
+            <span class="mt-0.5 flex items-center gap-1.5 text-[9px] leading-none text-fabula-300">
+              <span class="rounded-md border px-1.5 py-0.5" :class="inventoryConditionMeta[item.condition].className">
+                {{ item.conditionLabel }}
+              </span>
+              <span>{{ item.amountLabel }}</span>
+            </span>
+          </span>
+          <button
+            type="button"
+            class="grid size-7 shrink-0 place-items-center rounded-lg text-[16px] text-fabula-300 transition hover:bg-white/8 hover:text-fabula-100"
+            :aria-label="`Убрать ${item.name} из хода`"
+            @click="emit('removeItem', item.id)"
+          >
+            ×
+          </button>
+        </span>
       </div>
 
       <label class="sr-only" for="playerInput">Опиши действие, исследование или реплику</label>

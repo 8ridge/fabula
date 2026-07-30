@@ -89,6 +89,14 @@ const emit = defineEmits<{
           </dt>
           <dd class="mt-1 text-[13px] text-fabula-100">{{ item.charges }}</dd>
         </div>
+        <div class="col-span-2 min-w-0">
+          <dt class="font-interface text-[9px] uppercase tracking-[.09em] text-[#77747a]">
+            Происхождение
+          </dt>
+          <dd class="mt-1 text-[13px] leading-relaxed text-fabula-100">
+            {{ item.provenance.summary }}
+          </dd>
+        </div>
       </dl>
 
       <div class="mt-auto pt-5">

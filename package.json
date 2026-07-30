@@ -7,7 +7,7 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "test": "bun test server/ai server/game",
+    "test": "bun test server/ai server/game server/memory",
     "live:ai:text": "bun scripts/ai-live-smoke.ts",
     "typecheck": "nuxt typecheck",
     "postinstall": "nuxt prepare"

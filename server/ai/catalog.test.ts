@@ -36,6 +36,8 @@ describe('AI registry', () => {
 
   test('marks authoritative prompt fragments as internal-only', () => {
     expect(AI_MODULES.inventory.standalone).toBe(false)
+    expect(AI_MODULES.inventory.contract).toBe('inventory-advisory@1.0')
+    expect(AI_MODULES.inventory.fallbackModelId).toBe('mistral')
     expect(AI_MODULES['action-tracker'].standalone).toBe(false)
     expect('standalone' in AI_MODULES['turn-qa']).toBe(false)
     expect(AI_MODULES['world-compiler'].disabledReason).toBe('FIXED_STORYPACK_SCHEMA_REQUIRED')

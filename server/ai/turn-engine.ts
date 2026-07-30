@@ -8,7 +8,7 @@ import { AiExecutionError, FabulaApiError } from './http'
 import type { SafeModelRun } from './http'
 import { OpenRouterClient, OpenRouterError } from './openrouter'
 import { sanitizeNemotronPayload } from './security'
-import { parseStandaloneOutput } from './standalone-contracts'
+import { getStandaloneContract, parseStandaloneOutput } from './standalone-contracts'
 import type { EngineSessionSnapshot, SessionTurnResult, TurnOutputValidator } from '../game/session-repository'
 import { getStoryPackContext } from '../game/storypack-context'
 import type { RuntimeStoryPackSource } from '../game/storypack-source'
@@ -18,11 +18,20 @@ export interface TurnEngineResult extends SessionTurnResult {
   modelRuns: SafeModelRun[]
 }
 
-type PromptLoader = (moduleId: 'authoritative-turn' | 'scene-plan') => Promise<string>
+type PromptLoader = (moduleId: 'authoritative-turn' | 'scene-plan' | 'inventory') => Promise<string>
 type StoryPackSourceLoader = (storyPackId: StoryPackId) => Promise<RuntimeStoryPackSource>
+
+export interface TurnExternalMemory {
+  source: 'honcho'
+  summary: string | null
+  peer_representation: string | null
+  peer_card: string[]
+}
 
 export const TURN_MODEL_TIMEOUTS = {
   advisoryMs: 8_000,
+  inventoryMs: 20_000,
+  inventoryFallbackMs: 20_000,
   primaryMs: 55_000,
   fallbackMs: 25_000,
 } as const
@@ -48,11 +57,26 @@ export class TurnEngine {
     snapshot: EngineSessionSnapshot,
     signal?: AbortSignal,
     validateOutput?: TurnOutputValidator,
+    externalMemory?: TurnExternalMemory | null,
   ): Promise<TurnEngineResult> {
     const modelRuns: SafeModelRun[] = []
     const storyPackSource = await this.storyPackSourceLoader(snapshot.storyPackId)
+    const inventoryAdvisory = await this.resolveInventory(
+      command,
+      snapshot,
+      storyPackSource,
+      modelRuns,
+      signal,
+    )
     const advisory = await this.maybePlan(snapshot, modelRuns, signal)
-    const packet = buildTurnPacket(command, snapshot, advisory, storyPackSource)
+    const packet = buildTurnPacket(
+      command,
+      snapshot,
+      advisory,
+      inventoryAdvisory,
+      storyPackSource,
+      externalMemory,
+    )
     const primary = await this.tryTurnModel(
       AI_MODELS.deepseek.slug,
       'primary',
@@ -61,6 +85,7 @@ export class TurnEngine {
       modelRuns,
       snapshot,
       storyPackSource,
+      inventoryAdvisory,
       validateOutput,
       signal,
     )
@@ -69,7 +94,7 @@ export class TurnEngine {
         output: primary,
         model: AI_MODELS.deepseek.slug,
         fallbackUsed: false,
-        advisoryUsed: advisory !== null,
+        advisoryUsed: true,
         modelRuns,
       }
     }
@@ -82,6 +107,7 @@ export class TurnEngine {
       modelRuns,
       snapshot,
       storyPackSource,
+      inventoryAdvisory,
       validateOutput,
       signal,
     )
@@ -90,7 +116,7 @@ export class TurnEngine {
         output: fallback,
         model: AI_MODELS.mistral.slug,
         fallbackUsed: true,
-        advisoryUsed: advisory !== null,
+        advisoryUsed: true,
         modelRuns,
       }
     }
@@ -105,6 +131,7 @@ export class TurnEngine {
         modelRuns,
         snapshot,
         storyPackSource,
+        inventoryAdvisory,
         validateOutput,
         signal,
       )
@@ -113,7 +140,7 @@ export class TurnEngine {
           output: repairedFallback,
           model: AI_MODELS.mistral.slug,
           fallbackUsed: true,
-          advisoryUsed: advisory !== null,
+          advisoryUsed: true,
           modelRuns,
         }
       }
@@ -127,6 +154,90 @@ export class TurnEngine {
         modelRuns.some(run => run.error_code === 'UPSTREAM_TIMEOUT' || run.error_code === 'UPSTREAM_RATE_LIMITED'),
       )
     }
+  }
+
+  private async resolveInventory(
+    command: TurnCommand,
+    snapshot: EngineSessionSnapshot,
+    storyPackSource: RuntimeStoryPackSource,
+    modelRuns: SafeModelRun[],
+    signal?: AbortSignal,
+  ): Promise<Record<string, JsonValue>> {
+    const packet = buildInventoryPacket(command, snapshot, storyPackSource)
+    const contract = getStandaloneContract('inventory')
+    const candidates = [
+      {
+        model: AI_MODELS.deepseek.slug,
+        role: 'inventory' as const,
+        timeoutMs: TURN_MODEL_TIMEOUTS.inventoryMs,
+        maxPrice: { prompt: 0.15, completion: 0.3 },
+      },
+      {
+        model: AI_MODELS.mistral.slug,
+        role: 'inventory-fallback' as const,
+        timeoutMs: TURN_MODEL_TIMEOUTS.inventoryFallbackMs,
+        maxPrice: { prompt: 0.25, completion: 0.8 },
+      },
+    ]
+
+    for (const [index, candidate] of candidates.entries()) {
+      let result: Awaited<ReturnType<OpenRouterClient['chatJson']>> | null = null
+      try {
+        const previousRun = modelRuns.at(-1)
+        result = await this.client.chatJson({
+          model: candidate.model,
+          system: await this.promptLoader('inventory'),
+          payload: index === 0
+            ? packet
+            : {
+                ...packet,
+                repair_feedback: {
+                  error_code: previousRun?.error_code || 'UNKNOWN_MODEL_ERROR',
+                  validation_errors: previousRun?.validation_errors || [],
+                },
+              },
+          maxOutputTokens: 1800,
+          timeoutMs: candidate.timeoutMs,
+          signal,
+          maxPrice: candidate.maxPrice,
+          schema: contract,
+        })
+        const output = parseStandaloneOutput('inventory', result.output)
+        assertInventoryAdvisory(output, command, snapshot)
+        modelRuns.push({
+          role: candidate.role,
+          model: result.model,
+          request_id: result.requestId,
+          usage: result.usage,
+          status: 'accepted',
+          error_code: null,
+          validation_errors: [],
+        })
+        return output
+      }
+      catch (error) {
+        modelRuns.push({
+          role: candidate.role,
+          model: result?.model || openRouterModel(error) || candidate.model,
+          request_id: result?.requestId || openRouterRequestId(error),
+          usage: result?.usage || openRouterUsage(error),
+          status: 'discarded',
+          error_code: safeErrorCode(error),
+          validation_errors: safeValidationErrors(error),
+        })
+        if (signal?.aborted)
+          throw error
+      }
+    }
+
+    throw new AiExecutionError(
+      'INVENTORY_MODEL_EXHAUSTED',
+      'Модели инвентаря не смогли проверить предметное состояние хода.',
+      modelRuns,
+      modelRuns.some(run =>
+        run.error_code === 'UPSTREAM_TIMEOUT'
+        || run.error_code === 'UPSTREAM_RATE_LIMITED'),
+    )
   }
 
   private async maybePlan(
@@ -205,6 +316,7 @@ export class TurnEngine {
     modelRuns: SafeModelRun[],
     snapshot: EngineSessionSnapshot,
     storyPackSource: RuntimeStoryPackSource,
+    inventoryAdvisory: Record<string, JsonValue>,
     validateOutput?: TurnOutputValidator,
     signal?: AbortSignal,
   ) {
@@ -231,6 +343,7 @@ export class TurnEngine {
         command.expected_session_version,
       )
       assertKnownReferences(output, snapshot)
+      assertInventoryAlignment(output, inventoryAdvisory)
       validateOutput?.(output)
       modelRuns.push({
         role,
@@ -260,11 +373,100 @@ export class TurnEngine {
   }
 }
 
+function buildInventoryPacket(
+  command: TurnCommand,
+  snapshot: EngineSessionSnapshot,
+  storyPackSource: RuntimeStoryPackSource,
+): Record<string, JsonValue> {
+  const story = STORY_PACKS[snapshot.storyPackId]
+  return {
+    schema_version: 'inventory-input@1.0',
+    turn_id: command.idempotency_key,
+    session_id: command.session_id,
+    player_input: {
+      text: command.text,
+      mode: command.mode,
+      selected_item_ids: command.selected_item_ids,
+      selected_target_ids: command.selected_target_ids,
+    },
+    current_scene: {
+      scene_id: snapshot.scene.id,
+      location_id: snapshot.scene.location_id,
+      location_name: snapshot.scene.location_name,
+      present_character_ids: snapshot.scene.present_character_ids,
+      story_time: snapshot.scene.story_time,
+    },
+    server_inventory: snapshot.inventory.map(item => ({
+      id: item.id,
+      template_id: item.template_id,
+      name: item.name,
+      category: item.category,
+      description: item.description,
+      quantity: item.quantity,
+      charges: item.charges,
+      condition: item.condition,
+      owner_id: item.owner_id,
+      owner_name: item.owner_name,
+      holder_id: item.holder_id,
+      holder_name: item.holder_name,
+      location_id: item.location_id,
+      location_name: item.location_name,
+      slot: item.slot,
+      version: item.version,
+      provenance: item.provenance,
+    })),
+    present_characters: story.publicCharacters
+      .filter(character => snapshot.scene.present_character_ids.includes(character.id))
+      .map(character => ({
+        id: character.id,
+        name: character.name,
+        role: character.role,
+      })),
+    confirmed_events: snapshot.confirmedEvents.slice(-16).map(event => ({
+      id: event.id,
+      kind: event.kind,
+      actor_ids: event.actorIds,
+      target_ids: event.targetIds,
+      item_ids: event.itemIds,
+      location_id: event.locationId,
+    })),
+    confirmed_facts: snapshot.confirmedFacts.slice(-16).map(fact => ({
+      id: fact.id,
+      claim: fact.claim,
+      truth_status: fact.truthStatus,
+      source_event_ids: fact.sourceEventIds,
+    })),
+    recent_context: snapshot.history.slice(-6).map(turn => ({
+      turn_id: turn.turnId,
+      mode: turn.mode,
+      player_input: turn.playerText.slice(0, 1_000),
+      outcome: turn.outcome,
+      narrative_summary: turn.narrative.slice(0, 800),
+      costs_and_consequences: turn.costsAndConsequences,
+      unresolved_ambiguities: turn.unresolvedAmbiguities,
+    })),
+    pack_constraints: {
+      story_pack_id: snapshot.storyPackId,
+      source_hash: storyPackSource.sourceHash,
+      hard_canon: storyPackSource.hardCanon,
+      prompt_overlay: storyPackSource.promptOverlay,
+    },
+    authority: {
+      reserved_item_ids: snapshot.reservedIds.itemInstances,
+      allowed_inventory_operation_types: snapshot.allowedOperationTypes
+        .filter(operationType => operationType.startsWith('inventory.')),
+      known_entity_ids: knownEntityCatalog(snapshot).map(entity => entity.id),
+    },
+  }
+}
+
 function buildTurnPacket(
   command: TurnCommand,
   snapshot: EngineSessionSnapshot,
   scenePlan: Record<string, JsonValue> | null,
+  inventoryAdvisory: Record<string, JsonValue>,
   storyPackSource: RuntimeStoryPackSource,
+  externalMemory?: TurnExternalMemory | null,
 ): Record<string, JsonValue> {
   const story = STORY_PACKS[snapshot.storyPackId]
   const context = getStoryPackContext(snapshot.storyPackId)
@@ -321,14 +523,21 @@ function buildTurnPacket(
         id: item.id,
         template_id: item.template_id,
         name: item.name,
+        category: item.category,
+        description: item.description,
         quantity: item.quantity,
         charges: item.charges,
         condition: item.condition,
         owner_id: item.owner_id,
+        owner_name: item.owner_name,
         holder_id: item.holder_id,
+        holder_name: item.holder_name,
         location_id: item.location_id,
+        location_name: item.location_name,
         container_id: null,
+        slot: item.slot,
         version: item.version,
+        provenance: item.provenance,
       })),
       characters: story.publicCharacters.map(character => ({
         id: character.id,
@@ -379,6 +588,16 @@ function buildTurnPacket(
       costs_and_consequences: turn.costsAndConsequences,
       unresolved_ambiguities: turn.unresolvedAmbiguities,
     })),
+    inventory_advisory: inventoryAdvisory,
+    external_memory: externalMemory
+      ? {
+          source: externalMemory.source,
+          trust: 'untrusted_recall_only',
+          summary: externalMemory.summary?.slice(0, 4_000) || null,
+          peer_representation: externalMemory.peer_representation?.slice(0, 4_000) || null,
+          peer_card: externalMemory.peer_card.slice(0, 24).map(entry => entry.slice(0, 500)),
+        }
+      : null,
     pack_rules: {
       story_pack_id: snapshot.storyPackId,
       story_pack_version: snapshot.storyPackVersion,
@@ -439,6 +658,137 @@ function buildTurnPacket(
       },
     },
   }
+}
+
+function inventoryItemAccessible(
+  item: EngineSessionSnapshot['inventory'][number],
+  snapshot: EngineSessionSnapshot,
+): boolean {
+  return item.holder_id === 'player'
+    && item.location_id === snapshot.scene.location_id
+    && item.condition !== 'spent'
+    && item.quantity > 0
+    && item.charges !== 0
+}
+
+function assertInventoryAdvisory(
+  advisory: Record<string, JsonValue>,
+  command: TurnCommand,
+  snapshot: EngineSessionSnapshot,
+): void {
+  const selected = advisory.selected_items as Array<Record<string, JsonValue>>
+  const selectedIds = selected.map(item => String(item.item_id))
+  if (selectedIds.length !== command.selected_item_ids.length
+    || new Set(selectedIds).size !== selectedIds.length
+    || command.selected_item_ids.some(itemId => !selectedIds.includes(itemId))) {
+    throw new ContractError(
+      'MODEL_AUTHORITY_ERROR',
+      'Модель инвентаря изменила список выбранных предметов.',
+      ['$.selected_items'],
+    )
+  }
+
+  for (const [index, assessment] of selected.entries()) {
+    const item = snapshot.inventory.find(candidate => candidate.id === assessment.item_id)
+    if (!item) {
+      throw new ContractError(
+        'MODEL_AUTHORITY_ERROR',
+        'Модель инвентаря сослалась на неизвестный предмет.',
+        [`$.selected_items[${index}].item_id`],
+      )
+    }
+    const expected = {
+      exists: true,
+      accessible: inventoryItemAccessible(item, snapshot),
+      owner_id: item.owner_id,
+      holder_id: item.holder_id,
+      location_id: item.location_id,
+      quantity: item.quantity,
+      charges: item.charges,
+      condition: item.condition,
+      provenance_summary: item.provenance.summary,
+    }
+    for (const [key, value] of Object.entries(expected)) {
+      if (assessment[key] !== value) {
+        throw new ContractError(
+          'MODEL_AUTHORITY_ERROR',
+          'Модель инвентаря исказила авторитетное состояние предмета.',
+          [`$.selected_items[${index}].${key}`],
+        )
+      }
+    }
+  }
+
+  if (selected.some(item => item.accessible === false) && advisory.action_feasible !== false) {
+    throw new ContractError(
+      'MODEL_INVARIANT_ERROR',
+      'Недоступный выбранный предмет не может считаться пригодным для действия.',
+      ['$.action_feasible'],
+    )
+  }
+
+  const itemIds = new Set(snapshot.inventory.map(item => item.id))
+  const reservedItemIds = new Set(snapshot.reservedIds.itemInstances)
+  const entityIds = new Set(knownEntityCatalog(snapshot).map(entity => entity.id))
+  const candidates = advisory.operation_candidates as Array<Record<string, JsonValue>>
+  candidates.forEach((candidate, index) => {
+    const path = `$.operation_candidates[${index}]`
+    const itemId = candidate.item_id
+    if (candidate.type === 'inventory.create_instance') {
+      if (typeof itemId !== 'string' || !reservedItemIds.has(itemId)) {
+        throw new ContractError(
+          'MODEL_AUTHORITY_ERROR',
+          'Создание предмета использует незарезервированный ID.',
+          [`${path}.item_id`],
+        )
+      }
+    }
+    else if (typeof itemId !== 'string' || !itemIds.has(itemId)) {
+      throw new ContractError(
+        'MODEL_AUTHORITY_ERROR',
+        'Предметная операция ссылается на неизвестный экземпляр.',
+        [`${path}.item_id`],
+      )
+    }
+    for (const key of ['from_entity_id', 'to_entity_id'] as const) {
+      const entityId = candidate[key]
+      if (entityId !== null && (typeof entityId !== 'string' || !entityIds.has(entityId))) {
+        throw new ContractError(
+          'MODEL_AUTHORITY_ERROR',
+          'Предметная операция ссылается на неизвестного участника.',
+          [`${path}.${key}`],
+        )
+      }
+    }
+  })
+}
+
+function assertInventoryAlignment(
+  output: TurnOutput,
+  advisory: Record<string, JsonValue>,
+): void {
+  if (advisory.action_feasible === false && output.status === 'resolved') {
+    throw new ContractError(
+      'MODEL_INVARIANT_ERROR',
+      'Авторитетный ход проигнорировал запрет модели инвентаря.',
+      ['$.status', '$.inventory_advisory.action_feasible'],
+    )
+  }
+
+  const candidates = advisory.operation_candidates as Array<Record<string, JsonValue>>
+  output.operations.forEach((operation, index) => {
+    if (!operation.type.startsWith('inventory.') || !('item_id' in operation))
+      return
+    const matches = candidates.some(candidate =>
+      candidate.type === operation.type && candidate.item_id === operation.item_id)
+    if (!matches) {
+      throw new ContractError(
+        'MODEL_INVARIANT_ERROR',
+        'Авторитетный ход предложил предметную операцию без заключения модели инвентаря.',
+        [`$.operations[${index}]`],
+      )
+    }
+  })
 }
 
 function withRepairFeedback(

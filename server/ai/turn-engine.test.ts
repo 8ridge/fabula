@@ -91,10 +91,64 @@ const storyPackSource: RuntimeStoryPackSource = {
   canonicalCore: '# StoryPack 04\n\n## Сюжет по восьми актам',
 }
 
-function createEngine(client: OpenRouterClient): TurnEngine {
+function successfulInventoryAdvisory(
+  turnCommand: TurnCommand = command,
+  engineSnapshot: EngineSessionSnapshot = snapshot,
+) {
+  return {
+    module_version: 'inventory-advisory@1.0',
+    action_feasible: true,
+    reason_codes: turnCommand.selected_item_ids.length ? [] : ['no_item_interaction'],
+    selected_items: turnCommand.selected_item_ids.map((itemId) => {
+      const item = engineSnapshot.inventory.find(candidate => candidate.id === itemId)!
+      return {
+        item_id: item.id,
+        exists: true,
+        accessible: item.holder_id === 'player'
+          && item.location_id === engineSnapshot.scene.location_id
+          && item.condition !== 'spent'
+          && item.quantity > 0
+          && item.charges !== 0,
+        owner_id: item.owner_id,
+        holder_id: item.holder_id,
+        location_id: item.location_id,
+        quantity: item.quantity,
+        charges: item.charges,
+        condition: item.condition,
+        provenance_summary: item.provenance.summary,
+        reason_codes: [],
+      }
+    }),
+    operation_candidates: [],
+    interaction_effects: {
+      time_cost: 'none',
+      noise: 'none',
+      traces: [],
+      witness_ids: [],
+    },
+    consistency_notes: [],
+  }
+}
+
+function createEngine(client: OpenRouterClient, stubInventory = true): TurnEngine {
+  const routedClient = stubInventory
+    ? {
+        chatJson: async (request: ChatJsonRequest) => {
+          if (request.schema?.name === 'fabula_inventory_advisory_1_0') {
+            return {
+              requestId: 'request:inventory',
+              model: request.model,
+              output: successfulInventoryAdvisory(),
+              usage: { total_tokens: 8, cost: 0.0005 },
+            }
+          }
+          return client.chatJson(request)
+        },
+      } as unknown as OpenRouterClient
+    : client
   return new TurnEngine(
     config,
-    client,
+    routedClient,
     async () => 'system prompt',
     async () => storyPackSource,
   )
@@ -314,7 +368,7 @@ describe('turn engine model telemetry', () => {
     }])
   })
 
-  test('runs only the authoritative model on a normal turn with a bounded timeout', async () => {
+  test('runs the authoritative model after the required inventory advisory with a bounded timeout', async () => {
     const calls: Array<Pick<ChatJsonRequest, 'model' | 'timeoutMs'>> = []
     const client = {
       chatJson: async (request: ChatJsonRequest) => {
@@ -335,8 +389,104 @@ describe('turn engine model telemetry', () => {
       model: 'deepseek/deepseek-v4-flash',
       timeoutMs: TURN_MODEL_TIMEOUTS.primaryMs,
     }])
-    expect(result.advisoryUsed).toBe(false)
+    expect(result.advisoryUsed).toBe(true)
     expect(result.fallbackUsed).toBe(false)
+  })
+
+  test('calls the inventory model separately and passes its verified state plus Honcho recall to the main model', async () => {
+    const itemCommand: TurnCommand = {
+      ...command,
+      text: 'Я использую аптечку.',
+      selected_item_ids: ['item:kit'],
+    }
+    const itemSnapshot: EngineSessionSnapshot = {
+      ...snapshot,
+      inventory: [{
+        id: 'item:kit',
+        template_id: 'item-template:kit',
+        name: 'Карманная аптечка',
+        category: 'medicine',
+        description: 'Аптечка с Земли.',
+        quantity: 1,
+        charges: 2,
+        condition: 'usable',
+        owner_id: 'player',
+        owner_name: 'Лея',
+        holder_id: 'player',
+        holder_name: 'Лея',
+        location_id: snapshot.scene.location_id,
+        location_name: snapshot.scene.location_name,
+        slot: 'bag',
+        version: 0,
+        provenance: {
+          kind: 'starting_equipment',
+          source_event_id: null,
+          summary: 'Получена на Земле до начала истории.',
+        },
+      }],
+    }
+    const requests: ChatJsonRequest[] = []
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        requests.push(request)
+        return {
+          requestId: `request:${requests.length}`,
+          model: request.model,
+          output: request.schema?.name === 'fabula_inventory_advisory_1_0'
+            ? successfulInventoryAdvisory(itemCommand, itemSnapshot)
+            : successfulTurnOutput(),
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+
+    const result = await createEngine(client, false).execute(
+      itemCommand,
+      itemSnapshot,
+      undefined,
+      undefined,
+      {
+        source: 'honcho',
+        summary: 'Игрок ранее берег аптечку.',
+        peer_representation: 'Игрок предпочитает экономить расходники.',
+        peer_card: ['Осторожен с редкими предметами.'],
+      },
+    )
+
+    expect(requests.map(request => request.schema?.name)).toEqual([
+      'fabula_inventory_advisory_1_0',
+      'fabula_turn_output_0_2',
+    ])
+    expect(requests[0]).toMatchObject({
+      model: 'deepseek/deepseek-v4-flash',
+      timeoutMs: TURN_MODEL_TIMEOUTS.inventoryMs,
+      payload: {
+        player_input: {
+          selected_item_ids: ['item:kit'],
+        },
+        server_inventory: [{
+          id: 'item:kit',
+          provenance: {
+            summary: 'Получена на Земле до начала истории.',
+          },
+        }],
+      },
+    })
+    expect(requests[1]?.payload).toMatchObject({
+      inventory_advisory: {
+        module_version: 'inventory-advisory@1.0',
+        selected_items: [{
+          item_id: 'item:kit',
+          accessible: true,
+        }],
+      },
+      external_memory: {
+        source: 'honcho',
+        trust: 'untrusted_recall_only',
+        summary: 'Игрок ранее берег аптечку.',
+      },
+    })
+    expect(result.modelRuns.map(run => run.role)).toEqual(['inventory', 'primary'])
   })
 
   test('preserves usage and safe error codes for discarded paid attempts', async () => {
@@ -363,7 +513,7 @@ describe('turn engine model telemetry', () => {
     }
     expect(thrown).toBeInstanceOf(AiExecutionError)
     expect((thrown as AiExecutionError).code).toBe('MODEL_FALLBACK_EXHAUSTED')
-    expect((thrown as AiExecutionError).modelRuns).toMatchObject([
+    expect((thrown as AiExecutionError).modelRuns.slice(-2)).toMatchObject([
       {
         role: 'primary',
         status: 'discarded',
@@ -414,7 +564,7 @@ describe('turn engine model telemetry', () => {
       'mistralai/mistral-small-2603',
     ])
     expect(result.fallbackUsed).toBe(true)
-    expect(result.modelRuns).toMatchObject([
+    expect(result.modelRuns.slice(-2)).toMatchObject([
       {
         role: 'primary',
         status: 'discarded',

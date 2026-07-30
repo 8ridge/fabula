@@ -20,7 +20,7 @@ export class FabulaApiError extends Error {
 }
 
 export interface SafeModelRun {
-  role: 'advisory' | 'primary' | 'fallback'
+  role: 'advisory' | 'inventory' | 'inventory-fallback' | 'primary' | 'fallback'
   model: string
   request_id: string | null
   usage: {

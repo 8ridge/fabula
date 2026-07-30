@@ -6,14 +6,20 @@ import { parseTurnCommand } from '../ai/contracts'
 import { AiExecutionError, FabulaApiError } from '../ai/http'
 import { acquireRateLimit, assertAiConfigured, assertRequestSize, assertSameOrigin } from '../ai/security'
 import { TurnEngine } from '../ai/turn-engine'
+import {
+  getHonchoMemoryClient,
+  HonchoMemoryError,
+} from '../memory/honcho'
 import { getOrCreatePlayerId } from './player'
 import { getGameSessionRepository } from './session-runtime'
 
 export async function handleGameTurn(event: H3Event, pathSessionId?: string) {
   assertSameOrigin(event)
   assertRequestSize(event, 16_000)
-  const config = resolveAiConfig(useRuntimeConfig(event) as unknown as Record<string, unknown>)
+  const runtimeConfig = useRuntimeConfig(event) as unknown as Record<string, unknown>
+  const config = resolveAiConfig(runtimeConfig)
   assertAiConfigured(config)
+  const honcho = getHonchoMemoryClient(runtimeConfig)
   const release = acquireRateLimit(event)
   const controller = new AbortController()
   const requestId = globalThis.crypto.randomUUID()
@@ -32,7 +38,30 @@ export async function handleGameTurn(event: H3Event, pathSessionId?: string) {
       response = await getGameSessionRepository().executeTurn(
         ownerId,
         command,
-        (snapshot, validateOutput) => engine.execute(command, snapshot, controller.signal, validateOutput),
+        async (snapshot, validateOutput) => {
+          let externalMemory = null
+          if (honcho) {
+            try {
+              externalMemory = await honcho.recall(ownerId, command.session_id, controller.signal)
+            }
+            catch (error) {
+              if (controller.signal.aborted)
+                throw new FabulaApiError('UPSTREAM_ABORTED', 'Запрос хода отменен.', 499, true)
+              console.warn('fabula.memory.recall_failed', {
+                request_id: requestId,
+                turn_id: command.idempotency_key,
+                code: error instanceof HonchoMemoryError ? error.code : 'HONCHO_UNKNOWN_ERROR',
+              })
+            }
+          }
+          return engine.execute(
+            command,
+            snapshot,
+            controller.signal,
+            validateOutput,
+            externalMemory,
+          )
+        },
         requestId,
       )
     }
@@ -52,6 +81,18 @@ export async function handleGameTurn(event: H3Event, pathSessionId?: string) {
         })),
       })
       throw error
+    }
+    if (honcho && !response.replayed) {
+      try {
+        await honcho.recordTurn(ownerId, command, response, controller.signal)
+      }
+      catch (error) {
+        console.warn('fabula.memory.record_failed', {
+          request_id: requestId,
+          turn_id: command.idempotency_key,
+          code: error instanceof HonchoMemoryError ? error.code : 'HONCHO_UNKNOWN_ERROR',
+        })
+      }
     }
     setHeader(event, 'Cache-Control', 'no-store')
     return response

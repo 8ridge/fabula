@@ -9,6 +9,8 @@ export default defineNuxtConfig({
     openrouterApiKey: '',
     openrouterBaseUrl: 'https://openrouter.ai/api/v1',
     openrouterSiteUrl: '',
+    honchoApiKey: '',
+    honchoBaseUrl: 'https://api.honcho.dev',
   },
   nitro: {
     storage: {

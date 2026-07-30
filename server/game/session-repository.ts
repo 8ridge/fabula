@@ -147,9 +147,13 @@ function clone<T>(value: T): T {
   return structuredClone(value)
 }
 
-function makeMessage(input: Omit<GameMessage, 'id' | 'created_at'>): GameMessage {
+function makeMessage(
+  input: Omit<GameMessage, 'id' | 'created_at' | 'selected_items'>
+    & { selected_items?: InventoryItemProjection[] },
+): GameMessage {
   return {
     ...input,
+    selected_items: clone(input.selected_items || []),
     id: `message:${globalThis.crypto.randomUUID()}`,
     created_at: nowIso(),
   }
@@ -226,6 +230,11 @@ function makeStartingInventory(request: CreateGameSessionRequest, persona: Playe
     location_name: pack.opening.location,
     slot: item.slot,
     version: 0,
+    provenance: {
+      kind: 'starting_equipment',
+      source_event_id: null,
+      summary: `Начальный предмет роли «${persona.role_label}» в истории «${pack.title}».`,
+    },
   }]
 }
 
@@ -256,6 +265,11 @@ function makeLocations(storyPackId: StoryPackId): LocationProjection[] {
 function normalizeStoredSession(value: StoredGameSession): StoredGameSession {
   const session = clone(value)
   const pack = STORY_PACKS[session.snapshot.story_pack_id]
+  session.snapshot.messages.forEach((message) => {
+    if (!Array.isArray(message.selected_items))
+      message.selected_items = []
+    message.selected_items.forEach(item => normalizeItemProvenance(item))
+  })
   if (!Array.isArray(session.snapshot.scene.present_character_ids))
     session.snapshot.scene.present_character_ids = [...pack.opening.presentCharacterIds]
   if (session.snapshot.version === 0) {
@@ -263,10 +277,21 @@ function normalizeStoredSession(value: StoredGameSession): StoredGameSession {
     session.snapshot.locations = makeLocations(pack.id)
   }
   session.snapshot.inventory.forEach((item) => {
+    normalizeItemProvenance(item)
     if (item.location_name === pack.opening.location && item.location_id !== session.snapshot.scene.location_id)
       item.location_id = session.snapshot.scene.location_id
   })
   return session
+}
+
+function normalizeItemProvenance(item: InventoryItemProjection): void {
+  if (item.provenance)
+    return
+  item.provenance = {
+    kind: 'legacy_snapshot',
+    source_event_id: null,
+    summary: 'Предмет уже находился в инвентаре до включения учета происхождения.',
+  }
 }
 
 function makeReservedIds(sessionId: string, nextVersion: number) {
@@ -362,9 +387,22 @@ function assertCommandReferences(session: StoredGameSession, command: GameTurnCo
   if (command.selected_target_ids.some(targetId => !knownTargets.has(targetId)))
     throw new FabulaApiError('INVALID_COMMAND_REFERENCE', 'Ход ссылается на неизвестную цель.', 400)
 
-  const knownItems = new Set(session.snapshot.inventory.map(item => item.id))
-  if (command.selected_item_ids.some(itemId => !knownItems.has(itemId)))
+  const selectedItems = command.selected_item_ids.map(itemId =>
+    session.snapshot.inventory.find(item => item.id === itemId))
+  if (selectedItems.some(item => !item))
     throw new FabulaApiError('INVALID_COMMAND_REFERENCE', 'Ход ссылается на неизвестный предмет.', 400)
+  if (selectedItems.some(item =>
+    item!.holder_id !== 'player'
+    || item!.location_id !== session.snapshot.scene.location_id
+    || item!.condition === 'spent'
+    || item!.quantity <= 0
+    || item!.charges === 0)) {
+    throw new FabulaApiError(
+      'ITEM_NOT_ACCESSIBLE',
+      'Выбранный предмет сейчас не находится у игрока или уже исчерпан.',
+      409,
+    )
+  }
 
   if (command.selected_suggestion_id !== null) {
     const suggestion = session.snapshot.suggestions.find(candidate => candidate.id === command.selected_suggestion_id)
@@ -599,6 +637,11 @@ function applyOperations(
         location_name: entityName(session, operation.location_id),
         slot: operation.slot,
         version: 0,
+        provenance: {
+          kind: 'world_event',
+          source_event_id: operation.source_event_id,
+          summary: `Появление предмета подтверждено событием в локации «${entityName(session, operation.location_id)}».`,
+        },
       })
       createdItemIds.add(operation.item_id)
       continue
@@ -851,6 +894,9 @@ export class GameSessionRepository {
     if (session.snapshot.version !== command.expected_session_version)
       throw new FabulaApiError('SESSION_VERSION_CONFLICT', 'История изменилась во время хода.', 409)
 
+    const selectedItems = session.snapshot.inventory
+      .filter(item => command.selected_item_ids.includes(item.id))
+      .map(item => clone(item))
     const nextSession = clone(session)
     let sourceEventIds: string[]
     try {
@@ -875,6 +921,7 @@ export class GameSessionRepository {
         text: command.text,
         mode: command.mode,
         outcome: null,
+        selected_items: selectedItems,
       }),
       makeMessage({
         role: 'narrator',

@@ -23,7 +23,7 @@ const templateArt = [
   { fragments: ['ash', 'пепел', 'зола'], assetUrl: '/assets/items/ash.png', symbol: '◆' },
 ] as const
 
-function visualFor(item: InventoryItemProjection): InventoryItemVisual {
+export function inventoryVisualFor(item: InventoryItemProjection): InventoryItemVisual {
   const category = inventoryCategoryMeta[item.category]
   const visualIdentity = `${item.template_id} ${item.name}`.toLocaleLowerCase('ru')
   const exactArt = templateArt.find(rule =>
@@ -40,7 +40,7 @@ function visualFor(item: InventoryItemProjection): InventoryItemVisual {
   }
 }
 
-function unavailableReason(item: InventoryItemProjection): string | null {
+export function inventoryUnavailableReason(item: InventoryItemProjection): string | null {
   if (item.holder_id !== 'player')
     return `Сейчас предмет у персонажа «${item.holder_name}»`
   if (item.condition === 'spent' || item.quantity <= 0 || item.charges === 0)
@@ -48,15 +48,15 @@ function unavailableReason(item: InventoryItemProjection): string | null {
   return null
 }
 
-function projectItem(item: InventoryItemProjection): InventoryItemView {
-  const reason = unavailableReason(item)
+export function projectInventoryItem(item: InventoryItemProjection): InventoryItemView {
+  const reason = inventoryUnavailableReason(item)
   return {
     ...item,
     categoryLabel: inventoryCategoryMeta[item.category].label,
     conditionLabel: inventoryConditionMeta[item.condition].label,
     slotLabel: item.slot ? inventorySlotMeta[item.slot].label : 'Не размещено',
     amountLabel: item.charges === null ? `×${item.quantity}` : `${item.charges} зар.`,
-    visual: visualFor(item),
+    visual: inventoryVisualFor(item),
     canUse: reason === null,
     unavailableReason: reason,
   }
@@ -73,7 +73,7 @@ export function useInventoryStore(session: Ref<GameSessionSnapshot>) {
   const items = computed(() =>
     session.value.inventory
       .filter(item => item.owner_id === 'player' || item.holder_id === 'player')
-      .map(projectItem),
+      .map(projectInventoryItem),
   )
 
   const equipmentSlots = computed<InventoryEquipmentSlot[]>(() =>

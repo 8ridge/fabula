@@ -34,6 +34,7 @@ export interface GameMessage {
   created_at: string
   mode: StoryMode | null
   outcome: 'success' | 'partial_success' | 'failure' | 'impossible' | null
+  selected_items: InventoryItemProjection[]
 }
 
 export interface InventoryItemProjection {
@@ -53,6 +54,11 @@ export interface InventoryItemProjection {
   location_name: string
   slot: 'hand' | 'body' | 'bag' | null
   version: number
+  provenance: {
+    kind: 'starting_equipment' | 'world_event' | 'legacy_snapshot'
+    source_event_id: string | null
+    summary: string
+  }
 }
 
 export interface JournalEntryProjection {

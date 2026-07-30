@@ -1,14 +1,20 @@
 <script setup lang="ts">
 import type { InteractionMessageData } from '~/types/interaction-ui'
+import { inventoryConditionMeta } from '~/types/inventory'
+import { projectInventoryItem } from '~/composables/useInventoryStore'
 
-defineProps<{
+const props = defineProps<{
   message: InteractionMessageData
 }>()
 
 const emit = defineEmits<{
   copy: [text: string]
-  edit: [text: string]
+  edit: [payload: { text: string, itemIds: string[] }]
 }>()
+
+const selectedItemViews = computed(() =>
+  (props.message.selected_items || []).map(projectInventoryItem),
+)
 
 const modeLabels = {
   action: 'Действие',
@@ -52,12 +58,34 @@ const outcomeLabels = {
       {{ message.text }}
     </p>
 
+    <div v-if="selectedItemViews.length" class="mt-2 flex flex-wrap gap-2" aria-label="Предметы этого хода">
+      <span
+        v-for="item in selectedItemViews"
+        :key="item.id"
+        class="inline-flex min-w-0 max-w-full items-center gap-2 rounded-xl border border-[rgb(var(--accent-rgb)/.38)] bg-[#111319] p-1 pr-2"
+      >
+        <InventoryItemIcon :item="item" size="slot" class="ring-1 ring-white/10" />
+        <span class="min-w-0">
+          <strong class="block truncate text-[11px] font-semibold leading-tight text-fabula-100">{{ item.name }}</strong>
+          <span class="mt-0.5 flex items-center gap-1.5 text-[9px] leading-none text-fabula-300">
+            <span class="rounded-md border px-1.5 py-0.5" :class="inventoryConditionMeta[item.condition].className">
+              {{ item.conditionLabel }}
+            </span>
+            <span>{{ item.amountLabel }}</span>
+          </span>
+        </span>
+      </span>
+    </div>
+
     <footer class="mt-1.5 flex justify-end">
       <button
         v-if="message.role === 'player'"
         type="button"
         class="rounded-lg px-2 py-1 font-interface text-[10px] text-[#9b9ba6] transition hover:bg-white/5 hover:text-fabula-100"
-        @click="emit('edit', message.text)"
+        @click="emit('edit', {
+          text: message.text,
+          itemIds: (message.selected_items || []).map(item => item.id),
+        })"
       >
         Изменить
       </button>

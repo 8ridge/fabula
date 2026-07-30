@@ -48,4 +48,39 @@ describe('standalone AI contracts', () => {
       pass: true,
     })).toThrow()
   })
+
+  test('accepts the strict inventory advisory and rejects invented fields', () => {
+    const advisory = {
+      module_version: 'inventory-advisory@1.0',
+      action_feasible: true,
+      reason_codes: ['item_accessible'],
+      selected_items: [{
+        item_id: 'item:kit',
+        exists: true,
+        accessible: true,
+        owner_id: 'player',
+        holder_id: 'player',
+        location_id: 'location:hall',
+        quantity: 1,
+        charges: 2,
+        condition: 'usable',
+        provenance_summary: 'Получена до начала истории.',
+        reason_codes: [],
+      }],
+      operation_candidates: [],
+      interaction_effects: {
+        time_cost: 'brief',
+        noise: 'none',
+        traces: [],
+        witness_ids: [],
+      },
+      consistency_notes: [],
+    }
+
+    expect(parseStandaloneOutput('inventory', advisory)).toEqual(advisory)
+    expect(() => parseStandaloneOutput('inventory', {
+      ...advisory,
+      authoritative_operation: true,
+    })).toThrow()
+  })
 })

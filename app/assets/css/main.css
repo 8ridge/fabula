@@ -15,9 +15,9 @@
   --color-fabula-history: #c9a865;
   --color-fabula-post: #9bbf3a;
   --color-fabula-epic: #9a6fd0;
-  --font-display: "Forum", Georgia, serif;
-  --font-story: "Cormorant Garamond", Georgia, serif;
-  --font-interface: "Tektur", ui-monospace, monospace;
+  --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-story: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-interface: "Inter", ui-sans-serif, system-ui, sans-serif;
   --ease-fabula: cubic-bezier(.22, .61, .36, 1);
 }
 
@@ -39,6 +39,13 @@
     background: var(--color-fabula-950);
     color: var(--color-fabula-100);
     font-family: var(--font-story);
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
   }
 
   button {

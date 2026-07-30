@@ -21,6 +21,9 @@ const objectList = (item: JsonSchema, maxItems = 32): JsonSchema => ({
   maxItems,
   items: item,
 })
+const nullable = (schema: JsonSchema): JsonSchema => ({
+  anyOf: [schema, { type: 'null' }],
+})
 
 const scenePlanSchema = strictObject({
   plan_version: { type: 'string', const: 'scene-plan@0.2' },
@@ -136,6 +139,51 @@ const difficultySchema = strictObject({
   expires_after_turns: { type: 'integer', minimum: 1, maximum: 20 },
 })
 
+const inventoryAdvisorySchema = strictObject({
+  module_version: { type: 'string', const: 'inventory-advisory@1.0' },
+  action_feasible: { type: 'boolean' },
+  reason_codes: stringList(24, 160),
+  selected_items: objectList(strictObject({
+    item_id: text(160),
+    exists: { type: 'boolean' },
+    accessible: { type: 'boolean' },
+    owner_id: nullable(text(160)),
+    holder_id: nullable(text(160)),
+    location_id: nullable(text(160)),
+    quantity: nullable({ type: 'integer', minimum: 0, maximum: 1_000_000 }),
+    charges: nullable({ type: 'integer', minimum: 0, maximum: 1_000_000 }),
+    condition: nullable({
+      type: 'string',
+      enum: ['pristine', 'usable', 'worn', 'damaged', 'spent'],
+    }),
+    provenance_summary: nullable(text(1_000)),
+    reason_codes: stringList(16, 160),
+  }), 16),
+  operation_candidates: objectList(strictObject({
+    type: {
+      type: 'string',
+      enum: [
+        'inventory.create_instance',
+        'inventory.transfer_custody',
+        'inventory.transfer_ownership',
+        'inventory.consume',
+      ],
+    },
+    item_id: nullable(text(160)),
+    amount: nullable({ type: 'integer', minimum: 1, maximum: 1_000_000 }),
+    from_entity_id: nullable(text(160)),
+    to_entity_id: nullable(text(160)),
+    reason: text(1_000),
+  }), 16),
+  interaction_effects: strictObject({
+    time_cost: { type: 'string', enum: ['none', 'brief', 'meaningful', 'extended'] },
+    noise: { type: 'string', enum: ['none', 'low', 'medium', 'high'] },
+    traces: stringList(16, 500),
+    witness_ids: stringList(16, 160),
+  }),
+  consistency_notes: stringList(24, 1_000),
+})
+
 const CONTRACTS: Partial<Record<AiModuleId, { name: string, schema: JsonSchema }>> = {
   'scene-plan': { name: 'fabula_scene_plan_0_2', schema: scenePlanSchema },
   'scene-plan-paid': { name: 'fabula_scene_plan_0_2', schema: scenePlanSchema },
@@ -143,6 +191,7 @@ const CONTRACTS: Partial<Record<AiModuleId, { name: string, schema: JsonSchema }
   'turn-qa': { name: 'fabula_canon_audit_0_2', schema: canonAuditSchema },
   journal: { name: 'fabula_journal_compiler_0_2', schema: journalSchema },
   difficulty: { name: 'fabula_difficulty_advisory_0_2', schema: difficultySchema },
+  inventory: { name: 'fabula_inventory_advisory_1_0', schema: inventoryAdvisorySchema },
 }
 
 export function getStandaloneContract(moduleId: AiModuleId): { name: string, schema: JsonSchema } {

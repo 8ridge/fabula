@@ -8,6 +8,7 @@ import type {
   InteractionFontScale,
   InteractionToolName,
 } from '~/types/interaction-ui'
+import { inventoryUnavailableReason } from '~/composables/useInventoryStore'
 
 type ComposerHandle = {
   resize: () => void
@@ -100,10 +101,15 @@ function removeItem(itemId: string) {
   selectedItemIds.value = selectedItemIds.value.filter(id => id !== itemId)
 }
 
-function editMessage(text: string) {
-  input.value = text
+function editMessage(payload: { text: string, itemIds: string[] }) {
+  input.value = payload.text
   selectedSuggestionId.value = null
-  selectedItemIds.value = []
+  const currentItemIds = new Set(
+    game.session.value?.inventory
+      .filter(item => inventoryUnavailableReason(item) === null)
+      .map(item => item.id) || [],
+  )
+  selectedItemIds.value = payload.itemIds.filter(itemId => currentItemIds.has(itemId))
   nextTick(() => composer.value?.selectEnd())
 }
 

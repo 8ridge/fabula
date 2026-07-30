@@ -85,6 +85,10 @@ describe('game session repository', () => {
     expect(session.persona.role_label).toBe('Инженерное мышление')
     expect(session.inventory[0]?.name).toBe('Механический карандаш')
     expect(session.inventory[0]?.location_id).toBe(session.scene.location_id)
+    expect(session.inventory[0]?.provenance).toMatchObject({
+      kind: 'starting_equipment',
+      source_event_id: null,
+    })
     expect(session.journal[0]?.title).toBe('Восьмой круг')
     expect(session.suggestions).toHaveLength(3)
     expect(session.characters.map(character => character.id)).toEqual([
@@ -264,7 +268,72 @@ describe('game session repository', () => {
 
     expect(response.session.inventory[0]?.charges).toBe(4)
     expect(response.session.inventory[0]?.version).toBe(1)
+    const playerMessage = response.session.messages.findLast(message => message.role === 'player')
+    expect(playerMessage?.selected_items[0]).toMatchObject({
+      id: session.inventory[0]?.id,
+      charges: session.inventory[0]?.charges,
+      version: 0,
+    })
     expect(response.session.journal[0]?.source_event_ids).toHaveLength(1)
+  })
+
+  test('rejects selecting an item the player no longer holds before calling a model', async () => {
+    const repository = new GameSessionRepository(new MemoryGameSessionStorage())
+    const session = await repository.create(ownerId, createRequest)
+    const item = session.inventory[0]!
+    const transferCommand = makeCommand(session.id, {
+      mode: 'action',
+      text: 'Я передаю карандаш Илве.',
+    })
+    await repository.executeTurn(ownerId, transferCommand, async (snapshot) => {
+      const eventId = snapshot.reservedIds.events[0]!
+      return workerResult(snapshot, transferCommand, [
+        {
+          type: 'event.create',
+          operation_index: 0,
+          event_id: eventId,
+          event_kind: 'item_transferred',
+          actor_ids: ['player'],
+          target_ids: ['character:ilva-rein'],
+          item_ids: [item.id],
+          location_id: snapshot.scene.location_id,
+          source_turn_id: transferCommand.idempotency_key,
+        },
+        {
+          type: 'inventory.transfer_custody',
+          operation_index: 1,
+          source_event_id: eventId,
+          item_id: item.id,
+          from_holder_id: 'player',
+          to_holder_id: 'character:ilva-rein',
+          quantity: item.quantity,
+          expected: {
+            owner_id: item.owner_id,
+            holder_id: item.holder_id,
+            location_id: item.location_id,
+            container_id: null,
+            quantity: item.quantity,
+            charges: item.charges,
+            condition: item.condition,
+            version: item.version,
+          },
+        },
+      ])
+    }, 'request:transfer-item')
+
+    let called = false
+    const inaccessibleCommand = makeCommand(session.id, {
+      idempotency_key: 'turn:22222222-2222-4222-8222-222222222222',
+      expected_session_version: 1,
+      mode: 'action',
+      text: 'Я снова использую карандаш.',
+      selected_item_ids: [item.id],
+    })
+    await expect(repository.executeTurn(ownerId, inaccessibleCommand, async (snapshot) => {
+      called = true
+      return workerResult(snapshot, inaccessibleCommand)
+    }, 'request:inaccessible-item')).rejects.toMatchObject({ code: 'ITEM_NOT_ACCESSIBLE' })
+    expect(called).toBe(false)
   })
 
   test('creates a discovered item only from a reserved id and confirmed event', async () => {
@@ -315,6 +384,10 @@ describe('game session repository', () => {
       owner_id: 'player',
       holder_id: 'player',
       version: 0,
+      provenance: {
+        kind: 'world_event',
+        source_event_id: response.session.journal[0]?.source_event_ids[0],
+      },
     })
   })
 
