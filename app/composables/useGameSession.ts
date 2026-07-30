@@ -13,6 +13,14 @@ interface PendingTurn {
   created_at: string
 }
 
+interface StoredTurnDraft {
+  schema_version: 'turn-draft@1.0'
+  session_id: string
+  session_version: number
+  text: string
+  updated_at: string
+}
+
 interface SubmitTurnInput {
   text: string
   mode: StoryMode
@@ -69,7 +77,7 @@ export function useGameSession(sessionId: Ref<string | null>) {
   const draftKey = computed(() => sessionId.value ? `fabula:draft:${sessionId.value}` : '')
   const pendingKey = computed(() => sessionId.value ? `fabula:pending:${sessionId.value}` : '')
 
-  function readPending(): PendingTurn | null {
+  function readPending(expectedSessionVersion?: number): PendingTurn | null {
     if (!import.meta.client || !pendingKey.value)
       return null
     try {
@@ -77,9 +85,16 @@ export function useGameSession(sessionId: Ref<string | null>) {
       if (!raw)
         return null
       const value = JSON.parse(raw) as PendingTurn
-      return value?.command?.session_id === sessionId.value ? value : null
+      const valid = value?.command?.session_id === sessionId.value
+        && (expectedSessionVersion === undefined
+          || value.command.expected_session_version === expectedSessionVersion)
+      if (valid)
+        return value
+      localStorage.removeItem(pendingKey.value)
+      return null
     }
     catch {
+      localStorage.removeItem(pendingKey.value)
       return null
     }
   }
@@ -130,7 +145,7 @@ export function useGameSession(sessionId: Ref<string | null>) {
       )
       session.value = response.session
       startedSessions.value = response.started_sessions
-      pendingTurn.value = readPending()
+      pendingTurn.value = readPending(response.session.version)
     }
     catch (error) {
       session.value = null
@@ -144,7 +159,7 @@ export function useGameSession(sessionId: Ref<string | null>) {
   function buildCommand(input: SubmitTurnInput): GameTurnCommand {
     if (!session.value)
       throw new Error('Session is not loaded')
-    const prior = readPending()
+    const prior = readPending(session.value.version)
     const samePayload = prior
       && prior.command.session_id === session.value.id
       && prior.command.mode === input.mode
@@ -231,16 +246,48 @@ export function useGameSession(sessionId: Ref<string | null>) {
   }
 
   function readDraft(): string {
-    if (!import.meta.client || !draftKey.value)
+    if (!import.meta.client || !draftKey.value || !session.value)
       return ''
-    return localStorage.getItem(draftKey.value) || readPending()?.command.text || ''
+    const raw = localStorage.getItem(draftKey.value)
+    if (raw) {
+      try {
+        const draft = JSON.parse(raw) as StoredTurnDraft
+        if (
+          draft?.schema_version === 'turn-draft@1.0'
+          && draft.session_id === session.value.id
+          && draft.session_version === session.value.version
+          && typeof draft.text === 'string'
+        ) {
+          return draft.text
+        }
+      }
+      catch {
+        // Старые строковые черновики не имеют версии истории и небезопасны для восстановления.
+      }
+      localStorage.removeItem(draftKey.value)
+    }
+    return readPending(session.value.version)?.command.text || ''
   }
 
   function saveDraft(value: string) {
-    if (!import.meta.client || !draftKey.value)
+    if (
+      !import.meta.client
+      || !draftKey.value
+      || !session.value
+      || session.value.id !== sessionId.value
+    ) {
       return
-    if (value)
-      localStorage.setItem(draftKey.value, value)
+    }
+    if (value) {
+      const draft: StoredTurnDraft = {
+        schema_version: 'turn-draft@1.0',
+        session_id: session.value.id,
+        session_version: session.value.version,
+        text: value,
+        updated_at: new Date().toISOString(),
+      }
+      localStorage.setItem(draftKey.value, JSON.stringify(draft))
+    }
     else
       localStorage.removeItem(draftKey.value)
   }

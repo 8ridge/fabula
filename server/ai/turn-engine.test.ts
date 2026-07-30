@@ -508,6 +508,122 @@ describe('turn engine model telemetry', () => {
     ])
   })
 
+  test('does not let either model turn locking the door into opening it', async () => {
+    const lockCommand: TurnCommand = {
+      ...command,
+      mode: 'action',
+      text: 'Запереть дверь изнутри',
+    }
+    const requests: ChatJsonRequest[] = []
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        requests.push(request)
+        if (requests.length === 1) {
+          const output = successfulTurnOutput()
+          output.resolution.summary = 'Дверь распахивается шире.'
+          output.narrative_text = 'Ты толкаешь дверь плечом, и она распахивается шире.'
+          return {
+            requestId: 'request:opposite-primary',
+            model: request.model,
+            output,
+            usage: { total_tokens: 10, cost: 0.001 },
+          }
+        }
+        return {
+          requestId: 'request:opposite-fallback',
+          model: request.model,
+          output: {
+            outcome: 'success',
+            summary: 'Ты нажимаешь на ручку, и дверь открывается.',
+            event_kind: 'door_opened',
+          },
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+
+    const result = await createEngine(client).execute(lockCommand, snapshot)
+
+    expect(requests).toHaveLength(2)
+    expect(result.fallbackUsed).toBe(true)
+    expect(result.output.resolution).toMatchObject({
+      outcome: 'failure',
+      summary: 'Ты пробуешь запереть дверь, но замок не фиксируется. Дверь остается в прежнем положении.',
+      reason_codes: ['quick_fallback', 'server_action_guard'],
+    })
+    expect(result.output.narrative_text).not.toMatch(/откры|распах/iu)
+    expect(result.modelRuns).toMatchObject([
+      {
+        role: 'primary',
+        status: 'discarded',
+        error_code: 'MODEL_ACTION_MISMATCH',
+      },
+      {
+        role: 'fallback',
+        status: 'accepted',
+        error_code: null,
+      },
+    ])
+  })
+
+  test('does not mistake checking a lock for a command to lock the door', async () => {
+    const inspectLockCommand: TurnCommand = {
+      ...command,
+      mode: 'action',
+      text: 'Проверить, заперта ли дверь',
+    }
+    let calls = 0
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        calls += 1
+        const output = successfulTurnOutput()
+        output.resolution.summary = 'Дверь не заперта.'
+        output.narrative_text = 'Ты проверяешь ручку. Дверь не заперта.'
+        return {
+          requestId: 'request:inspect-lock',
+          model: request.model,
+          output,
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+
+    const result = await createEngine(client).execute(inspectLockCommand, snapshot)
+
+    expect(calls).toBe(1)
+    expect(result.fallbackUsed).toBe(false)
+    expect(result.output.narrative_text).toBe('Ты проверяешь ручку. Дверь не заперта.')
+  })
+
+  test('accepts a locked door that can no longer be opened', async () => {
+    const lockCommand: TurnCommand = {
+      ...command,
+      mode: 'action',
+      text: 'Запереть дверь изнутри',
+    }
+    let calls = 0
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        calls += 1
+        const output = successfulTurnOutput()
+        output.resolution.summary = 'Замок фиксируется.'
+        output.narrative_text = 'Ты запираешь дверь. Теперь она больше не открывается от нажатия на ручку.'
+        return {
+          requestId: 'request:aligned-lock',
+          model: request.model,
+          output,
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+
+    const result = await createEngine(client).execute(lockCommand, snapshot)
+
+    expect(calls).toBe(1)
+    expect(result.fallbackUsed).toBe(false)
+    expect(result.output.narrative_text).toContain('Ты запираешь дверь.')
+  })
+
   test('allows a confirmed fact as an intent reference without making it a target entity', async () => {
     const client = {
       chatJson: async (request: ChatJsonRequest) => {

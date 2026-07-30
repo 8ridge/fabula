@@ -75,6 +75,7 @@ interface QuickTurnProposal {
   outcome: TurnOutput['resolution']['outcome']
   summary: string
   event_kind: string
+  serverGuarded?: boolean
 }
 
 export class TurnEngine {
@@ -184,7 +185,7 @@ export class TurnEngine {
           schema: QUICK_TURN_JSON_SCHEMA,
         },
       })
-      const proposal = parseQuickTurnProposal(result.output)
+      const proposal = guardQuickActionAlignment(parseQuickTurnProposal(result.output), command)
       const output = quickProposalToTurnOutput(proposal, command, snapshot)
       validateOutput?.(output)
       modelRuns.push({
@@ -286,6 +287,7 @@ export class TurnEngine {
       )
       assertKnownReferences(output, snapshot)
       assertInventoryAlignment(output, inventoryAdvisory)
+      assertCommandOutcomeAlignment(output, command)
       validateOutput?.(output)
       modelRuns.push({
         role,
@@ -539,6 +541,89 @@ function assertInventoryAlignment(
   }
 }
 
+type DoorActionIntent = 'lock' | 'unlock' | 'close' | 'open'
+
+function requestedDoorAction(command: TurnCommand): DoorActionIntent | null {
+  if (command.mode !== 'action' || !/двер(?:ь|и|ью|ей)/iu.test(command.text))
+    return null
+  if (/(?:запереть|запри|запираю|закрыть.{0,32}на\s+(?:ключ|замок))/iu.test(command.text))
+    return 'lock'
+  if (/(?:отпереть|отпираю|откры(?:ть|й).{0,24}замок|разблокировать)/iu.test(command.text))
+    return 'unlock'
+  if (/(?:закрыть|закрой|закрываю|прикрыть|прикрой)/iu.test(command.text))
+    return 'close'
+  if (/(?:открыть|открой|открываю|распахнуть|распахни|приоткрыть|приоткрой)/iu.test(command.text))
+    return 'open'
+  return null
+}
+
+function contradictsDoorAction(intent: DoorActionIntent, text: string): boolean {
+  const normalized = text
+    .replaceAll('ё', 'е')
+    .replace(
+      /(?:больше\s+не|уже\s+не|нельзя|не)\s+(?:распах|открыва|приоткры|запира|заперт|закрыва|закрыт)[\p{L}-]*/giu,
+      '',
+    )
+  if (intent === 'lock') {
+    return /(?:распах|открыва|приоткры|(?:дверь|она)\s+(?:остается\s+)?открыта|замок\s+(?:остается\s+)?в\s+открытом)/iu.test(normalized)
+  }
+  if (intent === 'unlock') {
+    return /(?:запира|заперт|закрыва\S*\s+на\s+(?:ключ|замок))/iu.test(normalized)
+  }
+  if (intent === 'close')
+    return /(?:распах|открыва|остается\s+открыт)/iu.test(normalized)
+  return /(?:захлоп|закрыва|остается\s+закрыт|заперт)/iu.test(normalized)
+}
+
+function assertCommandOutcomeAlignment(
+  output: TurnOutput,
+  command: TurnCommand,
+): void {
+  const intent = requestedDoorAction(command)
+  if (!intent)
+    return
+  const visibleText = `${output.resolution.summary} ${output.narrative_text}`
+  if (!contradictsDoorAction(intent, visibleText))
+    return
+  throw new ContractError(
+    'MODEL_ACTION_MISMATCH',
+    'Ответ модели заменил выбранное действие противоположным.',
+    ['$.resolution.summary', '$.narrative_text'],
+  )
+}
+
+function guardQuickActionAlignment(
+  proposal: QuickTurnProposal,
+  command: TurnCommand,
+): QuickTurnProposal {
+  const intent = requestedDoorAction(command)
+  if (!intent || !contradictsDoorAction(intent, proposal.summary))
+    return proposal
+  const guarded: Record<DoorActionIntent, Omit<QuickTurnProposal, 'serverGuarded'>> = {
+    lock: {
+      outcome: 'failure',
+      summary: 'Ты пробуешь запереть дверь, но замок не фиксируется. Дверь остается в прежнем положении.',
+      event_kind: 'door_lock_attempt_failed',
+    },
+    unlock: {
+      outcome: 'failure',
+      summary: 'Ты пробуешь отпереть дверь, но замок не поддается. Дверь остается запертой.',
+      event_kind: 'door_unlock_attempt_failed',
+    },
+    close: {
+      outcome: 'failure',
+      summary: 'Ты пробуешь закрыть дверь, но она не встает на место. Дверь остается в прежнем положении.',
+      event_kind: 'door_close_attempt_failed',
+    },
+    open: {
+      outcome: 'failure',
+      summary: 'Ты пробуешь открыть дверь, но она не поддается. Дверь остается закрытой.',
+      event_kind: 'door_open_attempt_failed',
+    },
+  }
+  return { ...guarded[intent], serverGuarded: true }
+}
+
 function withRepairFeedback(
   packet: Record<string, JsonValue>,
   previousRun: SafeModelRun | undefined,
@@ -683,7 +768,9 @@ function quickProposalToTurnOutput(
     resolution: {
       summary: visibleSummary,
       outcome: proposal.outcome,
-      reason_codes: ['quick_fallback'],
+      reason_codes: proposal.serverGuarded
+        ? ['quick_fallback', 'server_action_guard']
+        : ['quick_fallback'],
       costs_and_consequences: [],
     },
     operations,
@@ -701,7 +788,12 @@ function quickProposalToTurnOutput(
     audit: {
       canon_fact_ids_used: [],
       memory_event_ids_used: [],
-      assumptions: ['Резервный ход не меняет сцену, присутствие или инвентарь.'],
+      assumptions: [
+        'Резервный ход не меняет сцену, присутствие или инвентарь.',
+        ...(proposal.serverGuarded
+          ? ['Сервер отклонил противоположный результат резервной модели.']
+          : []),
+      ],
       unresolved_ambiguities: proposal.outcome === 'partial_success'
         ? [proposal.summary]
         : [],
