@@ -93,6 +93,26 @@ const storyPackSource: RuntimeStoryPackSource = {
   canonicalCore: '# StoryPack 04\n\n## Сюжет по восьми актам',
 }
 
+function modelSuggestedActions(): TurnOutput['suggested_actions'] {
+  return [
+    {
+      label: 'Проверить след на двери',
+      mode: 'exploration',
+      intent_hint: 'inspect_door_trace',
+    },
+    {
+      label: 'Отойти от двери',
+      mode: 'action',
+      intent_hint: 'step_back_from_door',
+    },
+    {
+      label: 'Тихо спросить, кто там',
+      mode: 'speech',
+      intent_hint: 'ask_who_is_there',
+    },
+  ]
+}
+
 function inventoryAdvisoryFor(request: ChatJsonRequest) {
   const playerInput = request.payload.player_input as Record<string, unknown>
   const selectedItemIds = playerInput.selected_item_ids as string[]
@@ -219,7 +239,7 @@ function successfulTurnOutput(): TurnOutput {
       sensory_scope: ['visible'],
     },
     narrative_text: 'Ты внимательно осматриваешь закрытую дверь.',
-    suggested_actions: [],
+    suggested_actions: modelSuggestedActions(),
     media_candidate: null,
     safety_flags: [],
     audit: {
@@ -237,6 +257,7 @@ function quickTurnProposal() {
     outcome: 'success',
     summary: 'Тишина отвечает на слова игрока. Время замерло.',
     event_kind: 'player_spoke',
+    suggested_actions: modelSuggestedActions(),
   }
 }
 
@@ -804,6 +825,7 @@ describe('turn engine model telemetry', () => {
             outcome: 'failure',
             summary: 'Ты тянешься к бутылке, но не касаешься ее.',
             event_kind: 'bottle_left_untouched',
+            suggested_actions: modelSuggestedActions(),
           },
           usage: { total_tokens: 10, cost: 0.001 },
         }
@@ -929,10 +951,7 @@ describe('turn engine model telemetry', () => {
     ])
     expect(result.fallbackUsed).toBe(true)
     expect(result.output.narrative_text).toBe('Тишина отвечает на слова игрока.')
-    expect(result.output.suggested_actions).toHaveLength(6)
-    expect(new Set(result.output.suggested_actions.map(action => action.mode))).toEqual(
-      new Set(['action', 'speech', 'exploration']),
-    )
+    expect(result.output.suggested_actions).toEqual(modelSuggestedActions())
     expect(result.modelRuns.slice(-2)).toMatchObject([
       {
         role: 'primary',
@@ -976,6 +995,7 @@ describe('turn engine model telemetry', () => {
             outcome: 'success',
             summary: 'Ты нажимаешь на ручку, и дверь открывается.',
             event_kind: 'door_opened',
+            suggested_actions: modelSuggestedActions(),
           },
           usage: { total_tokens: 10, cost: 0.001 },
         }

@@ -182,6 +182,37 @@ describe('game session repository', () => {
     expect(firstResponse.session.messages).toHaveLength(3)
   })
 
+  test('uses only the next actions returned with the generated story', async () => {
+    const repository = new GameSessionRepository(new MemoryGameSessionStorage())
+    const session = await repository.create(ownerId, createRequest)
+    const command = makeCommand(session.id)
+    const modelActions: TurnOutput['suggested_actions'] = [
+      {
+        label: 'Сопоставить скол с линиями круга',
+        mode: 'exploration',
+        intent_hint: 'compare_chip_with_circle',
+      },
+      {
+        label: 'Проверить пыль внутри разрыва',
+        mode: 'exploration',
+        intent_hint: 'inspect_dust_in_gap',
+      },
+    ]
+
+    const response = await repository.executeTurn(ownerId, command, async (snapshot) => {
+      const result = workerResult(snapshot, command)
+      result.output.suggested_actions = modelActions
+      return result
+    }, 'request:model-suggestions')
+
+    expect(response.session.suggestions.map(suggestion => ({
+      label: suggestion.label,
+      mode: suggestion.mode,
+      intent_hint: suggestion.intent_hint,
+    }))).toEqual(modelActions)
+    expect(response.session.suggestions.map(suggestion => suggestion.label)).not.toContain('Сменить позицию')
+  })
+
   test('does not let another player join an in-flight turn', async () => {
     const repository = new GameSessionRepository(new MemoryGameSessionStorage())
     const session = await repository.create(ownerId, createRequest)

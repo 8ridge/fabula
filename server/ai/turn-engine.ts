@@ -69,7 +69,8 @@ const QUICK_TURN_PROMPT = `Ты создаешь короткое безопас
   что найден, получен, потрачен или передан новый предмет, и не добавляй в сцену
   объект, которого нет в текущем контексте;
 - outcome=impossible используй только для действительно невозможной попытки;
-- не добавляй отдельные следующие действия: их безопасно сформирует сервер.`
+- вместе с результатом верни 3-6 коротких suggested_actions, доступных именно
+  после этого результата. Не заполняй список универсальными вариантами ради количества.`
 
 const QUICK_TURN_JSON_SCHEMA = {
   type: 'object',
@@ -80,8 +81,23 @@ const QUICK_TURN_JSON_SCHEMA = {
     },
     summary: { type: 'string', minLength: 1, maxLength: 800 },
     event_kind: { type: 'string', minLength: 1, maxLength: 120 },
+    suggested_actions: {
+      type: 'array',
+      minItems: 3,
+      maxItems: 6,
+      items: {
+        type: 'object',
+        properties: {
+          label: { type: 'string', minLength: 1, maxLength: 160 },
+          mode: { type: 'string', enum: ['action', 'speech', 'exploration'] },
+          intent_hint: { type: 'string', minLength: 1, maxLength: 160 },
+        },
+        required: ['label', 'mode', 'intent_hint'],
+        additionalProperties: false,
+      },
+    },
   },
-  required: ['outcome', 'summary', 'event_kind'],
+  required: ['outcome', 'summary', 'event_kind', 'suggested_actions'],
   additionalProperties: false,
 } as const
 
@@ -89,6 +105,7 @@ interface QuickTurnProposal {
   outcome: TurnOutput['resolution']['outcome']
   summary: string
   event_kind: string
+  suggested_actions: TurnOutput['suggested_actions']
   serverGuarded?: boolean
 }
 
@@ -1104,7 +1121,7 @@ function guardQuickActionAlignment(
 ): QuickTurnProposal {
   const intent = requestedDoorAction(command)
   if (intent && contradictsDoorAction(intent, proposal.summary)) {
-    const guarded: Record<DoorActionIntent, Omit<QuickTurnProposal, 'serverGuarded'>> = {
+    const guarded: Record<DoorActionIntent, Pick<QuickTurnProposal, 'outcome' | 'summary' | 'event_kind'>> = {
       lock: {
         outcome: 'failure',
         summary: 'Ты пробуешь запереть дверь, но замок не фиксируется. Дверь остается в прежнем положении.',
@@ -1126,13 +1143,18 @@ function guardQuickActionAlignment(
         event_kind: 'door_open_attempt_failed',
       },
     }
-    return { ...guarded[intent], serverGuarded: true }
+    return {
+      ...guarded[intent],
+      suggested_actions: proposal.suggested_actions,
+      serverGuarded: true,
+    }
   }
   if (requestsPortableObjectAcquisition(command) && voluntarilyAbandonsAcquisition(proposal.summary)) {
     return {
       outcome: 'failure',
       summary: 'Ты тянешься к предмету, но внешнее препятствие не дает закрепить хват. Предмет остается на прежнем месте.',
       event_kind: 'item_acquisition_interrupted',
+      suggested_actions: proposal.suggested_actions,
       serverGuarded: true,
     }
   }
@@ -1200,17 +1222,43 @@ function parseQuickTurnProposal(value: unknown): QuickTurnProposal {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new ContractError('MODEL_CONTRACT_ERROR', 'Резервная модель вернула неверный формат.')
   const record = value as Record<string, unknown>
-  const keys = ['outcome', 'summary', 'event_kind']
+  const keys = ['outcome', 'summary', 'event_kind', 'suggested_actions']
   if (Object.keys(record).some(key => !keys.includes(key)) || keys.some(key => !(key in record)))
     throw new ContractError('MODEL_CONTRACT_ERROR', 'Резервная модель изменила контракт.')
   if (!['success', 'partial_success', 'failure', 'impossible'].includes(String(record.outcome)))
     throw new ContractError('MODEL_CONTRACT_ERROR', 'Резервная модель вернула неверный исход.')
   const summary = boundedQuickString(record.summary, 800)
   const eventKind = boundedQuickString(record.event_kind, 120)
+  if (!Array.isArray(record.suggested_actions)
+    || record.suggested_actions.length < 3
+    || record.suggested_actions.length > 6) {
+    throw new ContractError('MODEL_CONTRACT_ERROR', 'Резервная модель вернула неверные следующие действия.')
+  }
+  const suggestedActions = record.suggested_actions.map((action, index) => {
+    if (!action || typeof action !== 'object' || Array.isArray(action))
+      throw new ContractError('MODEL_CONTRACT_ERROR', 'Резервная модель вернула неверное следующее действие.')
+    const candidate = action as Record<string, unknown>
+    const actionKeys = ['label', 'mode', 'intent_hint']
+    if (Object.keys(candidate).some(key => !actionKeys.includes(key))
+      || actionKeys.some(key => !(key in candidate))
+      || !['action', 'speech', 'exploration'].includes(String(candidate.mode))) {
+      throw new ContractError(
+        'MODEL_CONTRACT_ERROR',
+        'Резервная модель изменила контракт следующего действия.',
+        [`$.suggested_actions[${index}]`],
+      )
+    }
+    return {
+      label: boundedQuickString(candidate.label, 160),
+      mode: candidate.mode as TurnOutput['suggested_actions'][number]['mode'],
+      intent_hint: boundedQuickString(candidate.intent_hint, 160),
+    }
+  })
   return {
     outcome: record.outcome as QuickTurnProposal['outcome'],
     summary,
     event_kind: eventKind,
+    suggested_actions: suggestedActions,
   }
 }
 
@@ -1298,7 +1346,7 @@ function quickProposalToTurnOutput(
       sensory_scope: ['current_scene'],
     },
     narrative_text: visibleSummary,
-    suggested_actions: quickFallbackSuggestions(command.mode),
+    suggested_actions: proposal.suggested_actions,
     media_candidate: null,
     safety_flags: [],
     audit: {
@@ -1323,37 +1371,6 @@ function cleanQuickSummary(value: string): string {
   const cleaned = sentences.filter(sentence =>
     !/(время (?:замерло|остановилось)|воздух (?:сгустился|наэлектризован)|комната сжимается)/iu.test(sentence))
   return (cleaned.join(' ').trim() || value).trim()
-}
-
-function quickFallbackSuggestions(mode: TurnCommand['mode']): TurnOutput['suggested_actions'] {
-  if (mode === 'speech') {
-    return [
-      { label: 'Прислушаться к ответу', mode: 'exploration', intent_hint: 'прислушаться после своих слов' },
-      { label: 'Проследить за реакцией собеседника', mode: 'exploration', intent_hint: 'наблюдать непосредственную реакцию на слова' },
-      { label: 'Сменить позицию', mode: 'action', intent_hint: 'перейти на более безопасную позицию' },
-      { label: 'Показать пустые руки', mode: 'action', intent_hint: 'демонстративно показать отсутствие угрозы' },
-      { label: 'Уточнить свой вопрос', mode: 'speech', intent_hint: 'сформулировать вопрос точнее' },
-      { label: 'Сказать прямо, чего ты хочешь', mode: 'speech', intent_hint: 'открыто назвать свое намерение' },
-    ]
-  }
-  if (mode === 'exploration') {
-    return [
-      { label: 'Проверить еще раз', mode: 'exploration', intent_hint: 'повторить осмотр внимательнее' },
-      { label: 'Сравнить с окружающими деталями', mode: 'exploration', intent_hint: 'сопоставить находку с текущей сценой' },
-      { label: 'Отойти на шаг', mode: 'action', intent_hint: 'увеличить дистанцию и оценить обстановку' },
-      { label: 'Изменить точку обзора', mode: 'action', intent_hint: 'переместиться ради другого угла наблюдения' },
-      { label: 'Позвать тех, кто может это видеть', mode: 'speech', intent_hint: 'обратить внимание присутствующих на находку' },
-      { label: 'Сказать вслух, что именно заметил', mode: 'speech', intent_hint: 'озвучить конкретное наблюдение' },
-    ]
-  }
-  return [
-    { label: 'Проверить результат', mode: 'exploration', intent_hint: 'осмотреть результат действия' },
-    { label: 'Осмотреть ближайшее пространство', mode: 'exploration', intent_hint: 'проверить реакцию окружения' },
-    { label: 'Выждать несколько секунд', mode: 'action', intent_hint: 'остаться на месте и наблюдать' },
-    { label: 'Повторить движение осторожнее', mode: 'action', intent_hint: 'повторить действие с меньшим риском' },
-    { label: 'Спросить, все ли это заметили', mode: 'speech', intent_hint: 'проверить реакцию присутствующих' },
-    { label: 'Объяснить свое намерение', mode: 'speech', intent_hint: 'коротко сообщить цель действия' },
-  ]
 }
 
 function withServerEnvelope(

@@ -731,8 +731,11 @@ function validateTurnOutputShape(value: Record<string, unknown>, expectedTurnId:
   stringArray(value.narrative_brief.sensory_scope, '$.narrative_brief.sensory_scope')
   boundedString(value.narrative_text, '$.narrative_text', value.status === 'resolved' ? 1 : 0, 6000)
 
-  if (!Array.isArray(value.suggested_actions) || value.suggested_actions.length > 6)
+  if (!Array.isArray(value.suggested_actions)
+    || value.suggested_actions.length < 2
+    || value.suggested_actions.length > 6) {
     throw new ContractError('MODEL_CONTRACT_ERROR', 'Некорректные suggested_actions.', ['$.suggested_actions'])
+  }
   value.suggested_actions.forEach((action, index) => {
     const path = `$.suggested_actions[${index}]`
     if (!isRecord(action))
@@ -744,6 +747,15 @@ function validateTurnOutputShape(value: Record<string, unknown>, expectedTurnId:
       throw new ContractError('MODEL_CONTRACT_ERROR', 'Некорректный mode.', [`${path}.mode`])
     boundedString(action.intent_hint, `${path}.intent_hint`, 1, 160)
   })
+  const suggestionKeys = value.suggested_actions.map(action =>
+    `${String((action as Record<string, unknown>).mode)}:${String((action as Record<string, unknown>).label).trim().toLocaleLowerCase()}`)
+  if (new Set(suggestionKeys).size !== suggestionKeys.length) {
+    throw new ContractError(
+      'MODEL_INVARIANT_ERROR',
+      'suggested_actions не должны дублировать одну кнопку.',
+      ['$.suggested_actions'],
+    )
+  }
 
   if (value.media_candidate !== null) {
     if (!isRecord(value.media_candidate))
@@ -1011,6 +1023,7 @@ export const TURN_OUTPUT_JSON_SCHEMA = strictObject({
   narrative_text: { type: 'string', maxLength: 6000 },
   suggested_actions: {
     type: 'array',
+    minItems: 2,
     maxItems: 6,
     items: strictObject({
       label: stringSchema,

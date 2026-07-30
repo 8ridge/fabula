@@ -72,11 +72,18 @@ export function validTurnOutput(overrides: Record<string, unknown> = {}) {
       sensory_scope: ['visible'],
     },
     narrative_text: 'Ты проводишь пальцами по холодному камню и замечаешь свежую пыль.',
-    suggested_actions: [{
-      label: 'Проверить следы',
-      mode: 'exploration',
-      intent_hint: 'inspect_tracks',
-    }],
+    suggested_actions: [
+      {
+        label: 'Проверить следы',
+        mode: 'exploration',
+        intent_hint: 'inspect_tracks',
+      },
+      {
+        label: 'Сопоставить пыль с камнем арки',
+        mode: 'exploration',
+        intent_hint: 'compare_dust_with_arch',
+      },
+    ],
     media_candidate: null,
     safety_flags: [],
     audit: {
@@ -135,6 +142,26 @@ describe('turn output contract', () => {
     const parsed = parseTurnOutput(validTurnOutput(), 'turn:12345678', 0)
     expect(parsed.schema_version).toBe('turn-output@0.2')
     expect(parsed.operations).toEqual([])
+  })
+
+  test('rejects duplicate suggested actions from the model', () => {
+    const duplicate = {
+      label: 'Проверить следы',
+      mode: 'exploration',
+      intent_hint: 'inspect_tracks_again',
+    }
+    const output = validTurnOutput({
+      suggested_actions: [
+        {
+          label: 'Проверить следы',
+          mode: 'exploration',
+          intent_hint: 'inspect_tracks',
+        },
+        duplicate,
+      ],
+    })
+
+    expect(() => parseTurnOutput(output, 'turn:12345678', 0)).toThrow(ContractError)
   })
 
   test('rejects legacy Prompt 01 fields instead of translating them', () => {
