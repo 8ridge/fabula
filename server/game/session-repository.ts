@@ -200,9 +200,10 @@ function defaultJournalProjection(
   output: TurnOutput,
   sourceEventIds: string[],
   storyTime: string,
+  entryId = `journal:${globalThis.crypto.randomUUID()}`,
 ): JournalProjectionDraft {
   return {
-    id: `journal:${globalThis.crypto.randomUUID()}`,
+    id: entryId,
     entry_type: command.mode === 'exploration' ? 'clue' : 'event',
     title: output.resolution.summary.slice(0, 80),
     summary: output.resolution.summary,
@@ -1073,40 +1074,22 @@ export class GameSessionRepository {
     if (nextSession.snapshot.messages.length > 80)
       nextSession.snapshot.messages.splice(0, nextSession.snapshot.messages.length - 80)
 
-    let journalProjection: JournalProjectionResult | null = null
-    if (sourceEventIds.length && journalProjector) {
-      const reservedJournalIds = [`journal:${globalThis.crypto.randomUUID()}`]
-      journalProjection = await journalProjector({
-        snapshot: {
-          ...engineSnapshot,
-          scene: clone(nextSession.snapshot.scene),
-          inventory: clone(nextSession.snapshot.inventory),
-          journal: clone(nextSession.snapshot.journal),
-          characters: clone(nextSession.snapshot.characters),
-          locations: clone(nextSession.snapshot.locations),
-          confirmedEvents: clone(nextSession.events.slice(-24)),
-          confirmedFacts: clone(nextSession.facts.slice(-32)),
-          knowledge: clone(nextSession.knowledge),
-        },
-        output: result.output,
-        sourceEventIds: [...sourceEventIds],
-        reservedJournalIds,
-      })
-      assertJournalProjection(
-        journalProjection.entries,
-        reservedJournalIds,
-        sourceEventIds,
-      )
-    }
-
+    const reservedJournalIds = sourceEventIds.length
+      ? [`journal:${globalThis.crypto.randomUUID()}`]
+      : []
+    const journalBeforeTurn = clone(nextSession.snapshot.journal)
     if (sourceEventIds.length) {
-      const projectedEntries = journalProjection?.entries.length
-        ? journalProjection.entries
-        : [defaultJournalProjection(command, result.output, sourceEventIds, nextSession.snapshot.scene.story_time)]
-      nextSession.snapshot.journal.unshift(...projectedEntries.map(entry => ({
-        ...entry,
+      const fallbackEntry = defaultJournalProjection(
+        command,
+        result.output,
+        sourceEventIds,
+        nextSession.snapshot.scene.story_time,
+        reservedJournalIds[0],
+      )
+      nextSession.snapshot.journal.unshift({
+        ...fallbackEntry,
         created_at: createdAt,
-      })))
+      })
       if (nextSession.snapshot.journal.length > 80)
         nextSession.snapshot.journal.splice(80)
     }
@@ -1135,7 +1118,7 @@ export class GameSessionRepository {
       session_version: nextSession.snapshot.version,
       replayed: false,
       model: result.model,
-      fallback_used: result.fallbackUsed || journalProjection?.fallbackUsed === true,
+      fallback_used: result.fallbackUsed,
       advisory_used: result.advisoryUsed,
       session: clone(nextSession.snapshot),
     }
@@ -1147,6 +1130,59 @@ export class GameSessionRepository {
     if (nextSession.idempotency.length > 48)
       nextSession.idempotency.splice(0, nextSession.idempotency.length - 48)
     await this.storage.setItem(sessionKey(nextSession.snapshot.id), nextSession)
+
+    if (sourceEventIds.length && journalProjector) {
+      let journalProjection: JournalProjectionResult
+      try {
+        journalProjection = await journalProjector({
+          snapshot: {
+            ...engineSnapshot,
+            version: nextSession.snapshot.version,
+            scene: clone(nextSession.snapshot.scene),
+            inventory: clone(nextSession.snapshot.inventory),
+            journal: journalBeforeTurn,
+            characters: clone(nextSession.snapshot.characters),
+            locations: clone(nextSession.snapshot.locations),
+            confirmedEvents: clone(nextSession.events.slice(-24)),
+            confirmedFacts: clone(nextSession.facts.slice(-32)),
+            knowledge: clone(nextSession.knowledge),
+          },
+          output: result.output,
+          sourceEventIds: [...sourceEventIds],
+          reservedJournalIds,
+        })
+        assertJournalProjection(
+          journalProjection.entries,
+          reservedJournalIds,
+          sourceEventIds,
+        )
+      }
+      catch {
+        journalProjection = {
+          entries: [],
+          fallbackUsed: true,
+          modelRuns: [],
+        }
+      }
+
+      if (journalProjection.entries.length) {
+        const reservedIds = new Set(reservedJournalIds)
+        nextSession.snapshot.journal = [
+          ...journalProjection.entries.map(entry => ({
+            ...entry,
+            created_at: createdAt,
+          })),
+          ...nextSession.snapshot.journal.filter(entry => !reservedIds.has(entry.id)),
+        ].slice(0, 80)
+      }
+      response.fallback_used = result.fallbackUsed || journalProjection.fallbackUsed
+      response.session = clone(nextSession.snapshot)
+      const idempotencyRecord = nextSession.idempotency.find(record => record.key === command.idempotency_key)
+      if (idempotencyRecord)
+        idempotencyRecord.response = clone(response)
+      await this.storage.setItem(sessionKey(nextSession.snapshot.id), nextSession)
+    }
+
     return response
   }
 

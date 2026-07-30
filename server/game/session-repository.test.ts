@@ -361,7 +361,7 @@ describe('game session repository', () => {
     expect(response.session.journal[0]?.source_event_ids).toHaveLength(1)
   })
 
-  test('builds the journal projection only from the post-operation snapshot', async () => {
+  test('builds the journal projection only from the committed snapshot', async () => {
     const repository = new GameSessionRepository(new MemoryGameSessionStorage())
     const session = await repository.create(ownerId, createRequest)
     const command = makeCommand(session.id)
@@ -374,7 +374,10 @@ describe('game session repository', () => {
       'request:journal-projection',
       async (context) => {
         const eventId = context.sourceEventIds[0]!
-        projectedAfterCommit = context.snapshot.confirmedEvents.some(event => event.id === eventId)
+        const committed = await repository.get(ownerId, session.id)
+        projectedAfterCommit = committed.version === 1
+          && committed.journal[0]?.id === context.reservedJournalIds[0]
+          && context.snapshot.confirmedEvents.some(event => event.id === eventId)
         return {
           entries: [{
             id: context.reservedJournalIds[0]!,
@@ -406,6 +409,36 @@ describe('game session repository', () => {
     })
     expect(response.session.journal[0]?.source_event_ids[0]?.startsWith('event:')).toBe(true)
     expect(response.fallback_used).toBe(false)
+  })
+
+  test('keeps the committed turn when the journal projector fails', async () => {
+    const repository = new GameSessionRepository(new MemoryGameSessionStorage())
+    const session = await repository.create(ownerId, createRequest)
+    const command = makeCommand(session.id)
+
+    const response = await repository.executeTurn(
+      ownerId,
+      command,
+      async snapshot => workerResult(snapshot, command),
+      'request:journal-fallback',
+      async () => {
+        throw new Error('journal unavailable')
+      },
+    )
+
+    expect(response.session.version).toBe(1)
+    expect(response.fallback_used).toBe(true)
+    expect(response.session.journal[0]?.source_event_ids).toHaveLength(1)
+    const replay = await repository.executeTurn(
+      ownerId,
+      command,
+      async () => {
+        throw new Error('worker must not run for replay')
+      },
+      'request:journal-fallback-replay',
+    )
+    expect(replay.replayed).toBe(true)
+    expect(replay.fallback_used).toBe(true)
   })
 
   test('rejects selecting an item the player no longer holds before calling a model', async () => {
