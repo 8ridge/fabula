@@ -23,6 +23,8 @@ const props = defineProps<{
   selectedSuggestionId: string | null
   selectedItems: InventoryItemProjection[]
   selectedJournalEntries: JournalEntryProjection[]
+  inventoryCount: number
+  journalCount: number
 }>()
 
 const selectedItemViews = computed(() => props.selectedItems.map(projectInventoryItem))
@@ -49,6 +51,27 @@ const modeLabels: Record<InteractionMode, string> = {
   action: 'Действие',
   speech: 'Речь',
   exploration: 'Исследование',
+}
+const suggestionModeMeta: Record<InteractionMode, {
+  label: string
+  icon: string
+  className: string
+}> = {
+  action: {
+    label: 'Действие',
+    icon: '↗',
+    className: 'border-amber-200/25 bg-amber-200/[.055] text-amber-100 hover:border-amber-200/45',
+  },
+  speech: {
+    label: 'Речь',
+    icon: '❝',
+    className: 'border-violet-200/25 bg-violet-200/[.055] text-violet-100 hover:border-violet-200/45',
+  },
+  exploration: {
+    label: 'Исследование',
+    icon: '⌕',
+    className: 'border-sky-200/25 bg-sky-200/[.055] text-sky-100 hover:border-sky-200/45',
+  },
 }
 const journalEntryTypeLabels: Record<JournalEntryProjection['entry_type'], string> = {
   event: 'Событие',
@@ -87,6 +110,19 @@ function selectEnd() {
     textarea.value?.focus()
     textarea.value?.setSelectionRange(input.value.length, input.value.length)
   })
+}
+
+function countLabel(value: number, one: string, few: string, many: string): string {
+  const remainder100 = value % 100
+  const remainder10 = value % 10
+  const form = remainder100 >= 11 && remainder100 <= 14
+    ? many
+    : remainder10 === 1
+      ? one
+      : remainder10 >= 2 && remainder10 <= 4
+        ? few
+        : many
+  return `${value} ${form}`
 }
 
 defineExpose({ resize, focus, selectEnd })
@@ -137,22 +173,46 @@ defineExpose({ resize, focus, selectEnd })
       </div>
     </div>
 
-    <div v-if="suggestions.length" class="mb-2 flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none]" aria-label="Предложенные действия">
+    <div
+      v-if="suggestions.length"
+      class="mb-2 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] min-[900px]:flex-wrap min-[900px]:overflow-x-visible"
+      aria-label="Предложенные действия"
+    >
       <button
         v-for="suggestion in suggestions"
         :key="suggestion.id"
         type="button"
-        class="shrink-0 rounded-full border px-3 py-1.5 text-left text-[12px] leading-snug transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+        class="group inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl border px-3.5 py-2 text-left text-[13px] leading-snug transition hover:-translate-y-px focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
         :class="selectedSuggestionId === suggestion.id
-          ? 'border-[var(--accent)] bg-[rgb(var(--accent-rgb)/.12)] text-[var(--accent-light)]'
-          : 'border-white/10 bg-white/[.025] text-fabula-300 hover:border-white/20'"
+          ? 'border-[var(--accent)] bg-[rgb(var(--accent-rgb)/.14)] text-[var(--accent-light)]'
+          : suggestionModeMeta[suggestion.mode].className"
+        :aria-label="`Отправить сразу — ${suggestionModeMeta[suggestion.mode].label}: ${suggestion.label}`"
+        title="Отправить сразу"
         @click="emit('chooseSuggestion', suggestion)"
       >
-        {{ suggestion.label }}
+        <span class="font-interface text-[9px] uppercase tracking-[.08em] opacity-70">
+          {{ suggestionModeMeta[suggestion.mode].icon }} {{ suggestionModeMeta[suggestion.mode].label }}
+        </span>
+        <span class="font-story">{{ suggestion.label }}</span>
+        <span class="text-[14px] opacity-45 transition group-hover:translate-x-0.5 group-hover:opacity-90" aria-hidden="true">→</span>
       </button>
     </div>
 
-    <form class="rounded-2xl border border-white/12 bg-[#15171d] p-2.5 transition focus-within:border-[rgb(var(--accent-rgb)/.65)]" @submit.prevent="emit('submit')">
+    <div class="grid items-stretch gap-3 min-[1180px]:grid-cols-[112px_minmax(0,1fr)_112px]">
+      <button
+        type="button"
+        class="group relative hidden min-h-[150px] overflow-hidden rounded-2xl border border-white/10 bg-[#14151a] text-left transition hover:-translate-y-0.5 hover:border-[rgb(var(--accent-rgb)/.45)] hover:shadow-[0_16px_40px_-24px_rgb(var(--accent-rgb)/.65)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] min-[1180px]:block"
+        aria-label="Открыть журнал"
+        @click="emit('openTool', 'journal')"
+      >
+        <img src="/assets/journal-with-pen-low-poly-640.png" alt="" class="absolute inset-x-0 top-0 mx-auto h-[112px] w-[112px] object-contain p-1 transition duration-300 group-hover:scale-105" />
+        <span class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#0c0d11] via-[#0c0d11e8] to-transparent px-3 pb-2.5 pt-8">
+          <strong class="block font-display text-[15px] font-normal text-fabula-100">Журнал</strong>
+          <span class="font-interface text-[9px] text-[#9b9ba6]">{{ countLabel(journalCount, 'запись', 'записи', 'записей') }}</span>
+        </span>
+      </button>
+
+      <form class="min-w-0 rounded-2xl border border-white/12 bg-[#15171d] p-2.5 transition focus-within:border-[rgb(var(--accent-rgb)/.65)]" @submit.prevent="emit('submit')">
       <div class="mb-1.5 flex items-center gap-1 overflow-x-auto [scrollbar-width:none]" role="tablist" aria-label="Режим хода">
         <button
           v-for="entry in modes"
@@ -238,17 +298,17 @@ defineExpose({ resize, focus, selectEnd })
         <div class="flex items-center gap-1">
           <button
             v-for="tool in [
-              { id: 'inventory', icon: '◫', label: 'Добавить предмет из инвентаря' },
-              { id: 'journal', icon: '✒', label: 'Открыть журнал' },
+              { id: 'inventory', label: 'Добавить предмет из инвентаря' },
+              { id: 'journal', label: 'Открыть журнал' },
             ]"
             :key="tool.id"
             type="button"
-            class="grid size-9 place-items-center rounded-lg text-[17px] text-[#9b9ba6] transition hover:bg-white/5 hover:text-fabula-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+            class="grid size-9 place-items-center rounded-lg text-[#9b9ba6] transition hover:bg-white/5 hover:text-fabula-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
             :aria-label="tool.label"
             :title="tool.label"
             @click="emit('openTool', tool.id as InteractionToolName)"
           >
-            {{ tool.icon }}
+            <InteractionToolIcon :tool="tool.id as InteractionToolName" class="size-[21px]" />
           </button>
         </div>
         <div class="flex items-center gap-2">
@@ -274,6 +334,20 @@ defineExpose({ resize, focus, selectEnd })
           </button>
         </div>
       </div>
-    </form>
+      </form>
+
+      <button
+        type="button"
+        class="group relative hidden min-h-[150px] overflow-hidden rounded-2xl border border-white/10 bg-[#14151a] text-left transition hover:-translate-y-0.5 hover:border-[rgb(var(--accent-rgb)/.45)] hover:shadow-[0_16px_40px_-24px_rgb(var(--accent-rgb)/.65)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] min-[1180px]:block"
+        aria-label="Открыть инвентарь"
+        @click="emit('openTool', 'inventory')"
+      >
+        <img src="/assets/backpack-urban-low-poly-640.png" alt="" class="absolute inset-x-0 top-0 mx-auto h-[116px] w-[112px] object-contain p-0.5 transition duration-300 group-hover:scale-105" />
+        <span class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#0c0d11] via-[#0c0d11e8] to-transparent px-3 pb-2.5 pt-8">
+          <strong class="block font-display text-[15px] font-normal text-fabula-100">Инвентарь</strong>
+          <span class="font-interface text-[9px] text-[#9b9ba6]">{{ countLabel(inventoryCount, 'предмет', 'предмета', 'предметов') }}</span>
+        </span>
+      </button>
+    </div>
   </section>
 </template>

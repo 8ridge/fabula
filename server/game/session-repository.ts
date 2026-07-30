@@ -171,7 +171,33 @@ function makeSuggestions(
   suggestions: Array<{ id?: string, label: string, mode: SuggestedAction['mode'], intent_hint?: string, intentHint?: string }>,
   turnId?: string,
 ): SuggestedAction[] {
-  return suggestions.slice(0, 4).map((suggestion, index) => ({
+  const fillers: Array<{ label: string, mode: SuggestedAction['mode'], intentHint: string }> = [
+    { label: 'Осмотреть ближайшее пространство', mode: 'exploration', intentHint: 'inspect_immediate_surroundings' },
+    { label: 'Сменить позицию', mode: 'action', intentHint: 'change_position_in_current_scene' },
+    { label: 'Спросить, что происходит', mode: 'speech', intentHint: 'ask_what_is_happening' },
+    { label: 'Проверить путь назад', mode: 'exploration', intentHint: 'inspect_route_back' },
+    { label: 'Выждать несколько секунд', mode: 'action', intentHint: 'wait_and_observe_briefly' },
+    { label: 'Позвать тех, кто рядом', mode: 'speech', intentHint: 'call_out_to_anyone_nearby' },
+  ]
+  const candidates = suggestions
+    .filter((suggestion, index, source) =>
+      source.findIndex(candidate =>
+        candidate.label === suggestion.label && candidate.mode === suggestion.mode) === index)
+    .slice(0, 6)
+
+  for (const mode of ['action', 'speech', 'exploration'] as const) {
+    if (candidates.some(candidate => candidate.mode === mode))
+      continue
+    if (candidates.length === 6)
+      candidates.pop()
+    candidates.push(fillers.find(candidate => candidate.mode === mode)!)
+  }
+  fillers.forEach((filler) => {
+    if (candidates.length < 6 && !candidates.some(candidate => candidate.label === filler.label))
+      candidates.push(filler)
+  })
+
+  return candidates.map((suggestion, index) => ({
     id: suggestion.id || `suggestion:${turnId || 'opening'}:${index}`,
     label: suggestion.label,
     mode: suggestion.mode,
@@ -280,6 +306,10 @@ function normalizeStoredSession(value: StoredGameSession): StoredGameSession {
     if (!Array.isArray(message.selected_journal_entries))
       message.selected_journal_entries = []
   })
+  session.snapshot.suggestions = makeSuggestions(
+    session.snapshot.suggestions,
+    `${session.snapshot.id}:${session.snapshot.version}`,
+  )
   if (!Array.isArray(session.snapshot.scene.present_character_ids))
     session.snapshot.scene.present_character_ids = [...pack.opening.presentCharacterIds]
   if (pack.id === 'zero-line' && session.stateRevisions?.zeroLineOpeningPresence !== 1) {

@@ -91,7 +91,10 @@ describe('game session repository', () => {
       source_event_id: null,
     })
     expect(session.journal[0]?.title).toBe('Восьмой круг')
-    expect(session.suggestions).toHaveLength(3)
+    expect(session.suggestions).toHaveLength(6)
+    expect(new Set(session.suggestions.map(suggestion => suggestion.mode))).toEqual(
+      new Set(['action', 'speech', 'exploration']),
+    )
     expect(session.characters.map(character => character.id)).toEqual([
       'character:ilva-rein',
       'character:kassar-vel',

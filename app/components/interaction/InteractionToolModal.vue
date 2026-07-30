@@ -56,6 +56,18 @@ watch(() => props.activeTool, async (tool) => {
     dialog.value.close()
   }
 })
+
+function closeOnBackdrop(event: MouseEvent) {
+  if (!dialog.value || event.target !== dialog.value)
+    return
+  const bounds = dialog.value.getBoundingClientRect()
+  const outside = event.clientX < bounds.left
+    || event.clientX > bounds.right
+    || event.clientY < bounds.top
+    || event.clientY > bounds.bottom
+  if (outside)
+    emit('close')
+}
 </script>
 
 <template>
@@ -65,6 +77,7 @@ watch(() => props.activeTool, async (tool) => {
     aria-labelledby="interactionToolTitle"
     @cancel.prevent="emit('close')"
     @close="emit('close')"
+    @click="closeOnBackdrop"
   >
     <header class="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3.5 sm:px-6">
       <div>

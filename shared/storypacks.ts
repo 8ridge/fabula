@@ -212,6 +212,9 @@ export const STORY_PACKS: Record<StoryPackId, StoryPack> = {
         { id: 'zero-line:check-door', label: 'Тихо проверить глазок и дверь', mode: 'exploration', intentHint: 'inspect_apartment_door' },
         { id: 'zero-line:prepare', label: 'Собрать самое необходимое', mode: 'action', intentHint: 'prepare_to_leave' },
         { id: 'zero-line:call-neighbor', label: 'Позвать соседку через дверь', mode: 'speech', intentHint: 'speak_to_neighbor_through_door' },
+        { id: 'zero-line:check-phone', label: 'Сверить время сообщений и состояние сети', mode: 'exploration', intentHint: 'inspect_phone_timeline_and_network' },
+        { id: 'zero-line:barricade', label: 'Подпереть дверь тяжелой мебелью', mode: 'action', intentHint: 'barricade_apartment_door' },
+        { id: 'zero-line:challenge-stairs', label: 'Громко спросить, кто идет по лестнице', mode: 'speech', intentHint: 'challenge_unknown_person_in_stairwell' },
       ],
     },
     publicCharacters: [
@@ -338,6 +341,9 @@ export const STORY_PACKS: Record<StoryPackId, StoryPack> = {
         { id: 'capua:help-wounded', label: 'Поднять раненого и идти к воротам', mode: 'action', intentHint: 'help_wounded_escape' },
         { id: 'capua:check-tablets', label: 'Проверить восковые таблички', mode: 'exploration', intentHint: 'inspect_sale_tablets' },
         { id: 'capua:warn-others', label: 'Предупредить беглецов у кухни', mode: 'speech', intentHint: 'warn_escapees' },
+        { id: 'capua:check-kitchen-route', label: 'Оценить путь к воротам через кухню', mode: 'exploration', intentHint: 'inspect_escape_route_through_kitchen' },
+        { id: 'capua:take-list', label: 'Схватить список с именами и бежать', mode: 'action', intentHint: 'take_sale_list_and_escape' },
+        { id: 'capua:deceive-overseer', label: 'Крикнуть надсмотрщику, что на кухне пожар', mode: 'speech', intentHint: 'deceive_overseer_with_fire_warning' },
       ],
     },
     publicCharacters: [
@@ -464,6 +470,9 @@ export const STORY_PACKS: Record<StoryPackId, StoryPack> = {
         { id: 'zeroed:inspect-note', label: 'Проверить бумагу и почерк записки', mode: 'exploration', intentHint: 'inspect_printed_note' },
         { id: 'zeroed:shut-network', label: 'Отключить квартиру от сети', mode: 'action', intentHint: 'disconnect_apartment_network' },
         { id: 'zeroed:address-drone', label: 'Попросить дрон назвать основание ордера', mode: 'speech', intentHint: 'question_service_drone' },
+        { id: 'zeroed:inspect-printer', label: 'Проверить принтер на физические следы', mode: 'exploration', intentHint: 'inspect_offline_printer_for_traces' },
+        { id: 'zeroed:hide-note', label: 'Спрятать записку и открыть дверь дрону', mode: 'action', intentHint: 'hide_note_and_open_door_to_drone' },
+        { id: 'zeroed:claim-heir', label: 'Назваться наследником умершей версии себя', mode: 'speech', intentHint: 'claim_to_be_legal_heir_of_previous_self' },
       ],
     },
     publicCharacters: [
@@ -590,6 +599,9 @@ export const STORY_PACKS: Record<StoryPackId, StoryPack> = {
         { id: 'seal:inspect-circle', label: 'Изучить разрыв в восьмом круге', mode: 'exploration', intentHint: 'inspect_broken_summoning_circle' },
         { id: 'seal:take-seal', label: 'Поднять пустую медную печать', mode: 'action', intentHint: 'take_empty_copper_seal' },
         { id: 'seal:ask-archivist', label: 'Тихо спросить архивистку об имени', mode: 'speech', intentHint: 'question_archivist_about_name' },
+        { id: 'seal:compare-seal', label: 'Сравнить печать с линиями круга', mode: 'exploration', intentHint: 'compare_copper_seal_to_circle_lines' },
+        { id: 'seal:break-line', label: 'Стереть каблуком часть восьмого круга', mode: 'action', intentHint: 'break_eighth_circle_line_with_boot' },
+        { id: 'seal:demand-name', label: 'Громко потребовать назвать восьмого героя', mode: 'speech', intentHint: 'demand_identity_of_eighth_summoned_hero' },
       ],
     },
     publicCharacters: [

@@ -816,18 +816,10 @@ describe('turn engine model telemetry', () => {
     ])
     expect(result.fallbackUsed).toBe(true)
     expect(result.output.narrative_text).toBe('Тишина отвечает на слова игрока.')
-    expect(result.output.suggested_actions).toEqual([
-      {
-        label: 'Проверить еще раз',
-        mode: 'exploration',
-        intent_hint: 'повторить осмотр внимательнее',
-      },
-      {
-        label: 'Отойти на шаг',
-        mode: 'action',
-        intent_hint: 'увеличить дистанцию и оценить обстановку',
-      },
-    ])
+    expect(result.output.suggested_actions).toHaveLength(6)
+    expect(new Set(result.output.suggested_actions.map(action => action.mode))).toEqual(
+      new Set(['action', 'speech', 'exploration']),
+    )
     expect(result.modelRuns.slice(-2)).toMatchObject([
       {
         role: 'primary',

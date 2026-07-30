@@ -471,7 +471,7 @@ function buildTurnPacket(
     }))
   return {
     schema_version: 'turn-input@0.2',
-    prompt_version: 'turn-engine@0.3.0',
+    prompt_version: 'turn-engine@0.3.1',
     trace_id: `trace:${command.idempotency_key}`,
     turn_id: command.idempotency_key,
     session_id: command.session_id,
@@ -1123,18 +1123,30 @@ function quickFallbackSuggestions(mode: TurnCommand['mode']): TurnOutput['sugges
   if (mode === 'speech') {
     return [
       { label: 'Прислушаться к ответу', mode: 'exploration', intent_hint: 'прислушаться после своих слов' },
-      { label: 'Осмотреться', mode: 'exploration', intent_hint: 'проверить ближайшее пространство' },
+      { label: 'Проследить за реакцией собеседника', mode: 'exploration', intent_hint: 'наблюдать непосредственную реакцию на слова' },
+      { label: 'Сменить позицию', mode: 'action', intent_hint: 'перейти на более безопасную позицию' },
+      { label: 'Показать пустые руки', mode: 'action', intent_hint: 'демонстративно показать отсутствие угрозы' },
+      { label: 'Уточнить свой вопрос', mode: 'speech', intent_hint: 'сформулировать вопрос точнее' },
+      { label: 'Сказать прямо, чего ты хочешь', mode: 'speech', intent_hint: 'открыто назвать свое намерение' },
     ]
   }
   if (mode === 'exploration') {
     return [
       { label: 'Проверить еще раз', mode: 'exploration', intent_hint: 'повторить осмотр внимательнее' },
+      { label: 'Сравнить с окружающими деталями', mode: 'exploration', intent_hint: 'сопоставить находку с текущей сценой' },
       { label: 'Отойти на шаг', mode: 'action', intent_hint: 'увеличить дистанцию и оценить обстановку' },
+      { label: 'Изменить точку обзора', mode: 'action', intent_hint: 'переместиться ради другого угла наблюдения' },
+      { label: 'Позвать тех, кто может это видеть', mode: 'speech', intent_hint: 'обратить внимание присутствующих на находку' },
+      { label: 'Сказать вслух, что именно заметил', mode: 'speech', intent_hint: 'озвучить конкретное наблюдение' },
     ]
   }
   return [
     { label: 'Проверить результат', mode: 'exploration', intent_hint: 'осмотреть результат действия' },
+    { label: 'Осмотреть ближайшее пространство', mode: 'exploration', intent_hint: 'проверить реакцию окружения' },
     { label: 'Выждать несколько секунд', mode: 'action', intent_hint: 'остаться на месте и наблюдать' },
+    { label: 'Повторить движение осторожнее', mode: 'action', intent_hint: 'повторить действие с меньшим риском' },
+    { label: 'Спросить, все ли это заметили', mode: 'speech', intent_hint: 'проверить реакцию присутствующих' },
+    { label: 'Объяснить свое намерение', mode: 'speech', intent_hint: 'коротко сообщить цель действия' },
   ]
 }
 

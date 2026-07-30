@@ -95,11 +95,12 @@ function setFontScale(nextScale: InteractionFontScale) {
   showToast(nextScale === 'normal' ? 'Размер текста: 17 px' : nextScale === 'xlarge' ? 'Размер текста: 21 px' : 'Размер текста: 19 px')
 }
 
-function chooseSuggestion(suggestion: SuggestedAction) {
+async function chooseSuggestion(suggestion: SuggestedAction) {
   input.value = suggestion.label
   setMode(suggestion.mode)
   selectedSuggestionId.value = suggestion.id
-  nextTick(() => composer.value?.selectEnd())
+  await nextTick()
+  await submitTurn()
 }
 
 function composeFromTool(payload: InteractionToolComposePayload) {
@@ -473,18 +474,18 @@ onBeforeUnmount(() => {
       <div class="flex items-center gap-1 min-[1180px]:hidden">
         <button
           v-for="tool in [
-            { id: 'inventory', icon: '◫', label: 'Инвентарь' },
-            { id: 'journal', icon: '✒', label: 'Журнал' },
-            { id: 'world', icon: '⌖', label: 'Мир' },
+            { id: 'inventory', label: 'Инвентарь' },
+            { id: 'journal', label: 'Журнал' },
+            { id: 'world', label: 'Мир' },
           ]"
           :key="tool.id"
           type="button"
-          class="grid size-9 place-items-center rounded-xl text-[17px] text-[#9b9ba6] transition hover:bg-white/5 hover:text-fabula-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+          class="grid size-10 place-items-center rounded-xl text-[#9b9ba6] transition hover:bg-white/5 hover:text-fabula-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
           :aria-label="tool.label"
           :title="tool.label"
           @click="openTool(tool.id as InteractionToolName)"
         >
-          {{ tool.icon }}
+          <InteractionToolIcon :tool="tool.id as InteractionToolName" class="size-[23px]" />
         </button>
       </div>
     </header>
@@ -509,7 +510,7 @@ onBeforeUnmount(() => {
     </div>
 
     <template v-else>
-      <div class="grid h-[calc(100dvh-64px)] min-h-0 grid-cols-1 min-[900px]:grid-cols-[240px_minmax(0,1fr)] min-[1180px]:grid-cols-[240px_minmax(0,1fr)_64px]">
+      <div class="grid h-[calc(100dvh-64px)] min-h-0 grid-cols-1 min-[900px]:grid-cols-[240px_minmax(0,1fr)] min-[1180px]:grid-cols-[240px_minmax(0,1fr)_84px]">
         <InteractionThreadRail
           :sessions="game.startedSessions.value"
           :current-session-id="game.session.value.id"
@@ -578,6 +579,8 @@ onBeforeUnmount(() => {
             :selected-suggestion-id="selectedSuggestionId"
             :selected-items="selectedItems"
             :selected-journal-entries="selectedJournalEntries"
+            :inventory-count="playerInventoryCount"
+            :journal-count="game.session.value.journal.length"
             @set-mode="setMode"
             @choose-suggestion="chooseSuggestion"
             @remove-item="removeItem"

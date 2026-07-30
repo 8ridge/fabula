@@ -116,6 +116,18 @@ describe('turn command contract', () => {
       authority: { allowed_operation_types: ['inventory.spawn'] },
     }))).toThrow(ContractError)
   })
+
+  test('accepts six varied suggested actions', () => {
+    const modes = ['action', 'speech', 'exploration', 'action', 'speech', 'exploration'] as const
+    const output = validTurnOutput({
+      suggested_actions: modes.map((mode, index) => ({
+        label: `Вариант ${index + 1}`,
+        mode,
+        intent_hint: `intent_${index + 1}`,
+      })),
+    })
+    expect(parseTurnOutput(output, 'turn:12345678', 0).suggested_actions).toHaveLength(6)
+  })
 })
 
 describe('turn output contract', () => {

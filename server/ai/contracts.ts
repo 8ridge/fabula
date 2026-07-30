@@ -731,7 +731,7 @@ function validateTurnOutputShape(value: Record<string, unknown>, expectedTurnId:
   stringArray(value.narrative_brief.sensory_scope, '$.narrative_brief.sensory_scope')
   boundedString(value.narrative_text, '$.narrative_text', value.status === 'resolved' ? 1 : 0, 6000)
 
-  if (!Array.isArray(value.suggested_actions) || value.suggested_actions.length > 4)
+  if (!Array.isArray(value.suggested_actions) || value.suggested_actions.length > 6)
     throw new ContractError('MODEL_CONTRACT_ERROR', 'Некорректные suggested_actions.', ['$.suggested_actions'])
   value.suggested_actions.forEach((action, index) => {
     const path = `$.suggested_actions[${index}]`
@@ -1011,7 +1011,7 @@ export const TURN_OUTPUT_JSON_SCHEMA = strictObject({
   narrative_text: { type: 'string', maxLength: 6000 },
   suggested_actions: {
     type: 'array',
-    maxItems: 4,
+    maxItems: 6,
     items: strictObject({
       label: stringSchema,
       mode: { type: 'string', enum: ['action', 'speech', 'exploration'] },
