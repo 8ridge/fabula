@@ -13,6 +13,24 @@ import {
 import { getOrCreatePlayerId } from './player'
 import { getGameSessionRepository } from './session-runtime'
 
+const MEMORY_RECALL_BUDGET_MS = 1_200
+
+async function withinBudget<T>(promise: Promise<T>, fallback: T, budgetMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(fallback), budgetMs)
+      }),
+    ])
+  }
+  finally {
+    if (timer)
+      clearTimeout(timer)
+  }
+}
+
 export async function handleGameTurn(event: H3Event, pathSessionId?: string) {
   assertSameOrigin(event)
   assertRequestSize(event, 16_000)
@@ -41,18 +59,20 @@ export async function handleGameTurn(event: H3Event, pathSessionId?: string) {
         async (snapshot, validateOutput) => {
           let externalMemory = null
           if (honcho) {
-            try {
-              externalMemory = await honcho.recall(ownerId, command.session_id, controller.signal)
-            }
-            catch (error) {
-              if (controller.signal.aborted)
-                throw new FabulaApiError('UPSTREAM_ABORTED', 'Запрос хода отменен.', 499, true)
-              console.warn('fabula.memory.recall_failed', {
-                request_id: requestId,
-                turn_id: command.idempotency_key,
-                code: error instanceof HonchoMemoryError ? error.code : 'HONCHO_UNKNOWN_ERROR',
+            const recall = honcho.recall(ownerId, command.session_id, controller.signal)
+              .catch((error) => {
+                if (controller.signal.aborted)
+                  return null
+                console.warn('fabula.memory.recall_failed', {
+                  request_id: requestId,
+                  turn_id: command.idempotency_key,
+                  code: error instanceof HonchoMemoryError ? error.code : 'HONCHO_UNKNOWN_ERROR',
+                })
+                return null
               })
-            }
+            externalMemory = await withinBudget(recall, null, MEMORY_RECALL_BUDGET_MS)
+            if (controller.signal.aborted)
+              throw new FabulaApiError('UPSTREAM_ABORTED', 'Запрос хода отменен.', 499, true)
           }
           return engine.execute(
             command,
@@ -83,16 +103,13 @@ export async function handleGameTurn(event: H3Event, pathSessionId?: string) {
       throw error
     }
     if (honcho && !response.replayed) {
-      try {
-        await honcho.recordTurn(ownerId, command, response, controller.signal)
-      }
-      catch (error) {
+      void honcho.recordTurn(ownerId, command, response).catch((error) => {
         console.warn('fabula.memory.record_failed', {
           request_id: requestId,
           turn_id: command.idempotency_key,
           code: error instanceof HonchoMemoryError ? error.code : 'HONCHO_UNKNOWN_ERROR',
         })
-      }
+      })
     }
     setHeader(event, 'Cache-Control', 'no-store')
     return response

@@ -95,7 +95,7 @@ const featured = STORY_PACKS['eighth-seal']
           <div class="mt-6 border-t border-white/8 pt-5">
             <p class="font-interface text-[10px] uppercase tracking-[.16em] text-fabula-500">Как устроена игра</p>
             <p class="mt-2 text-[14px] leading-relaxed text-fabula-300">
-              Свободный ход, предложенные варианты ответа и подтвержденные последствия работают в одной сохраненной ветке.
+              Пиши своими словами или выбирай предложенный ход. История запомнит последствия.
             </p>
           </div>
         </aside>

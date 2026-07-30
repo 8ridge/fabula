@@ -22,7 +22,7 @@ interface SubmitTurnInput {
 }
 
 const SESSION_ID = /^session:[0-9a-f-]{36}$/i
-const TURN_CLIENT_TIMEOUT_MS = 170_000
+const TURN_CLIENT_TIMEOUT_MS = 65_000
 
 type TurnAbortReason = 'user' | 'deadline' | 'unmount' | null
 
@@ -39,16 +39,18 @@ function isAbortError(error: unknown): boolean {
 function apiMessage(error: unknown): string {
   const data = (error as { data?: { code?: string, message?: string } })?.data
   if (data?.code === 'AI_NOT_CONFIGURED')
-    return 'Нейросетевой контур еще не подключен на этом сервере. История сохранена, но новый ход пока недоступен.'
+    return 'Рассказчик сейчас недоступен на этом сервере.'
   if (data?.code === 'SESSION_VERSION_CONFLICT')
-    return 'История уже изменилась в другой вкладке. Свежая версия загружена; проверь текст и отправь его снова.'
+    return 'История изменилась в другой вкладке. Проверь реплику и отправь ее снова.'
   if (data?.code === 'UPSTREAM_TIMEOUT')
-    return 'Нейросети не завершили ход вовремя. Текст сохранен — можно повторить без создания дубликата.'
+    return 'Рассказчик не ответил вовремя. Реплика осталась здесь — попробуй снова.'
   if (data?.code === 'MODEL_FALLBACK_EXHAUSTED')
-    return 'Модели не смогли подтвердить безопасное продолжение. Текст сохранен — повтор отправит тот же ход без дубликата.'
+    return 'Продолжение не сложилось. Реплика осталась здесь — попробуй снова.'
   if (data?.code === 'UPSTREAM_RATE_LIMITED')
-    return 'OpenRouter временно ограничил запросы. Текст сохранен — повтори ход немного позже.'
-  return data?.message || 'Не удалось получить продолжение. Текст сохранен — можно повторить отправку.'
+    return 'Рассказчик перегружен. Подожди немного и повтори ход.'
+  return data?.message && !data.code?.startsWith('MODEL_')
+    ? data.message
+    : 'История не ответила. Реплика осталась здесь — попробуй снова.'
 }
 
 export function useGameSession(sessionId: Ref<string | null>) {
@@ -205,9 +207,9 @@ export function useGameSession(sessionId: Ref<string | null>) {
     catch (error) {
       if (isAbortError(error)) {
         if (turnAbortReason === 'user')
-          errorMessage.value = 'Ход остановлен. Текст сохранен — повторная отправка продолжит тот же запрос без дубликата.'
+          errorMessage.value = 'Ход остановлен. Реплика осталась здесь.'
         else if (turnAbortReason === 'deadline')
-          errorMessage.value = 'Ход не завершился за 170 секунд и был остановлен. Текст сохранен для повтора.'
+          errorMessage.value = 'Рассказчик не ответил вовремя. Реплика осталась здесь.'
         return false
       }
       const message = apiMessage(error)
@@ -231,7 +233,7 @@ export function useGameSession(sessionId: Ref<string | null>) {
   function readDraft(): string {
     if (!import.meta.client || !draftKey.value)
       return ''
-    return localStorage.getItem(draftKey.value) || ''
+    return localStorage.getItem(draftKey.value) || readPending()?.command.text || ''
   }
 
   function saveDraft(value: string) {

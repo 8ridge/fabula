@@ -99,6 +99,51 @@ describe('game session repository', () => {
     expect(session.scene.present_character_ids).toEqual(['character:ilva-rein', 'character:kassar-vel'])
   })
 
+  test('knows the neighbor without placing her inside the player apartment', async () => {
+    const repository = new GameSessionRepository(new MemoryGameSessionStorage())
+    const session = await repository.create(ownerId, {
+      schema_version: 'session-create@1.0',
+      story_pack_id: 'zero-line',
+      persona: {
+        name: 'Грег',
+        role_id: 'zero-line:courier',
+        motivation: 'Добыть лекарство',
+        embodiment_note: '',
+        narration_density: 'balanced',
+      },
+    })
+
+    expect(session.characters.map(character => character.id)).toEqual(['character:nina-gromova'])
+    expect(session.scene.location_id).toBe('location:player-apartment')
+    expect(session.scene.present_character_ids).toEqual([])
+  })
+
+  test('repairs the legacy opening that placed the neighbor inside the apartment', async () => {
+    const storage = new ReferenceGameSessionStorage()
+    const repository = new GameSessionRepository(storage)
+    const session = await repository.create(ownerId, {
+      schema_version: 'session-create@1.0',
+      story_pack_id: 'zero-line',
+      persona: {
+        name: 'Грег',
+        role_id: 'zero-line:courier',
+        motivation: 'Добыть лекарство',
+        embodiment_note: '',
+        narration_density: 'balanced',
+      },
+    })
+    const key = `sessions:${session.id}`
+    const stored = await storage.getItem<Record<string, any>>(key)
+    stored!.snapshot.scene.present_character_ids = ['character:nina-gromova']
+    delete stored!.stateRevisions
+    await storage.setItem(key, stored)
+
+    const restored = await repository.get(ownerId, session.id)
+
+    expect(restored.scene.present_character_ids).toEqual([])
+    expect(restored.characters.map(character => character.id)).toEqual(['character:nina-gromova'])
+  })
+
   test('isolates started stories by the server-owned player id', async () => {
     const repository = new GameSessionRepository(new MemoryGameSessionStorage())
     await repository.create(ownerId, createRequest)

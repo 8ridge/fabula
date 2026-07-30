@@ -22,12 +22,30 @@ const modeLabels = {
   exploration: 'Исследование',
 }
 
-const outcomeLabels = {
-  success: 'Успех',
-  partial_success: 'Успех с ценой',
-  failure: 'Неудача',
-  impossible: 'Невозможно',
-}
+const paragraphs = computed(() => {
+  const blocks = props.message.text.split(/\n+/u).map(block => block.trim()).filter(Boolean)
+  if (props.message.role === 'player')
+    return blocks
+  return blocks.flatMap((block) => {
+    if (block.length <= 280)
+      return [block]
+    const sentences = block.split(/(?<=[.!?…»])\s+(?=[А-ЯЁ«])/u)
+    const result: string[] = []
+    let current = ''
+    sentences.forEach((sentence) => {
+      if (current && `${current} ${sentence}`.length > 280) {
+        result.push(current)
+        current = sentence
+      }
+      else {
+        current = current ? `${current} ${sentence}` : sentence
+      }
+    })
+    if (current)
+      result.push(current)
+    return result
+  })
+})
 </script>
 
 <template>
@@ -49,14 +67,20 @@ const outcomeLabels = {
         {{ message.role === 'player' ? 'Ты' : message.role === 'character' ? '◌' : '✦' }}
       </span>
       <strong class="font-display text-[16px] font-normal text-fabula-100">{{ message.speaker }}</strong>
-      <span class="font-interface text-[10px] text-[#9b9ba6]">
-        {{ message.mode ? modeLabels[message.mode] : message.outcome ? outcomeLabels[message.outcome] : '' }}
+      <span v-if="message.mode" class="font-interface text-[10px] text-[#9b9ba6]">
+        {{ modeLabels[message.mode] }}
       </span>
     </header>
 
-    <p class="whitespace-pre-line font-story text-[var(--story-font)] leading-[1.55] text-fabula-100">
-      {{ message.text }}
-    </p>
+    <div class="max-w-[68ch] space-y-3">
+      <p
+        v-for="(paragraph, index) in paragraphs"
+        :key="index"
+        class="font-story text-[var(--story-font)] leading-[1.65] text-fabula-100"
+      >
+        {{ paragraph }}
+      </p>
+    </div>
 
     <div v-if="selectedItemViews.length" class="mt-2 flex flex-wrap gap-2" aria-label="Предметы этого хода">
       <span

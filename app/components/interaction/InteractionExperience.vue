@@ -6,6 +6,8 @@ import type { StoryMode } from '#shared/storypacks'
 import type {
   InteractionDrawer,
   InteractionFontScale,
+  InteractionQueuedTurn,
+  InteractionTurnDraft,
   InteractionToolName,
 } from '~/types/interaction-ui'
 import { inventoryUnavailableReason } from '~/composables/useInventoryStore'
@@ -32,8 +34,11 @@ const selectedItemIds = ref<string[]>([])
 const activeTool = ref<InteractionToolName | null>(null)
 const openDrawer = ref<InteractionDrawer>(null)
 const toast = ref('')
+const queuedTurns = ref<InteractionQueuedTurn[]>([])
+const activeTurn = ref<InteractionQueuedTurn | null>(null)
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 let motionContext: gsap.Context | null = null
+let drainingQueue = false
 
 const story = computed(() => game.session.value
   ? STORY_PACKS[game.session.value.story_pack_id]
@@ -53,6 +58,7 @@ const selectedItems = computed(() => {
 })
 const playerInventoryCount = computed(() =>
   game.session.value?.inventory.filter(item => item.owner_id === 'player' || item.holder_id === 'player').length || 0)
+const queueKey = computed(() => sessionId.value ? `fabula:turn-queue:${sessionId.value}` : '')
 
 useHead({
   title: computed(() => game.session.value
@@ -113,6 +119,84 @@ function editMessage(payload: { text: string, itemIds: string[] }) {
   nextTick(() => composer.value?.selectEnd())
 }
 
+function writeQueue() {
+  if (!import.meta.client || !queueKey.value)
+    return
+  if (queuedTurns.value.length)
+    localStorage.setItem(queueKey.value, JSON.stringify(queuedTurns.value))
+  else
+    localStorage.removeItem(queueKey.value)
+}
+
+function readQueue() {
+  queuedTurns.value = []
+  if (!import.meta.client || !queueKey.value)
+    return
+  try {
+    const value = JSON.parse(localStorage.getItem(queueKey.value) || '[]') as unknown
+    if (!Array.isArray(value))
+      return
+    queuedTurns.value = value
+      .filter((entry): entry is InteractionQueuedTurn =>
+        Boolean(entry)
+        && typeof entry === 'object'
+        && typeof (entry as InteractionQueuedTurn).id === 'string'
+        && typeof (entry as InteractionQueuedTurn).text === 'string'
+        && ['action', 'speech', 'exploration'].includes((entry as InteractionQueuedTurn).mode)
+        && Array.isArray((entry as InteractionQueuedTurn).selectedItemIds))
+      .slice(0, 8)
+  }
+  catch {
+    queuedTurns.value = []
+  }
+}
+
+function clearComposer() {
+  input.value = ''
+  selectedSuggestionId.value = null
+  selectedItemIds.value = []
+}
+
+function restoreTurn(turn: InteractionTurnDraft) {
+  input.value = turn.text
+  mode.value = turn.mode
+  selectedSuggestionId.value = turn.selectedSuggestionId
+  const availableItemIds = new Set(
+    game.session.value?.inventory
+      .filter(item => inventoryUnavailableReason(item) === null)
+      .map(item => item.id) || [],
+  )
+  selectedItemIds.value = turn.selectedItemIds.filter(itemId => availableItemIds.has(itemId))
+  nextTick(() => composer.value?.selectEnd())
+}
+
+function removeQueuedTurn(turnId: string) {
+  queuedTurns.value = queuedTurns.value.filter(turn => turn.id !== turnId)
+  writeQueue()
+}
+
+function editQueuedTurn(turnId: string) {
+  const turn = queuedTurns.value.find(candidate => candidate.id === turnId)
+  if (!turn)
+    return
+  const currentText = input.value.trim()
+  if (currentText) {
+    queuedTurns.value = queuedTurns.value.map(candidate => candidate.id === turnId
+      ? {
+          id: candidate.id,
+          text: currentText,
+          mode: mode.value,
+          selectedSuggestionId: null,
+          selectedItemIds: [...selectedItemIds.value],
+        }
+      : candidate)
+    writeQueue()
+  }
+  else
+    removeQueuedTurn(turnId)
+  restoreTurn(turn)
+}
+
 async function copyMessage(text: string) {
   try {
     await navigator.clipboard.writeText(text)
@@ -128,30 +212,81 @@ function openTool(tool: InteractionToolName) {
   activeTool.value = tool
 }
 
+async function executeTurn(turn: InteractionQueuedTurn): Promise<boolean> {
+  activeTurn.value = turn
+  const succeeded = await game.submit({
+    text: turn.text,
+    mode: turn.mode,
+    selectedSuggestionId: turn.selectedSuggestionId,
+    selectedItemIds: turn.selectedItemIds,
+  })
+  activeTurn.value = null
+  if (!succeeded) {
+    if (!input.value.trim())
+      restoreTurn(turn)
+    else {
+      queuedTurns.value.unshift({ ...turn, selectedSuggestionId: null })
+      writeQueue()
+    }
+  }
+  return succeeded
+}
+
+async function drainTurnQueue() {
+  if (drainingQueue || game.sending.value || !queuedTurns.value.length)
+    return
+  drainingQueue = true
+  try {
+    while (queuedTurns.value.length && !game.sending.value) {
+      const nextTurn = queuedTurns.value.shift()!
+      writeQueue()
+      const succeeded = await executeTurn(nextTurn)
+      if (!succeeded)
+        break
+      showToast('Следующий ход начался')
+    }
+  }
+  finally {
+    drainingQueue = false
+  }
+}
+
 async function submitTurn() {
-  if (!game.session.value || game.sending.value)
+  if (!game.session.value)
     return
   const text = input.value.trim()
   if (!text) {
     composer.value?.focus()
     return
   }
-  const succeeded = await game.submit({
+  const turn: InteractionQueuedTurn = {
+    id: `queued:${globalThis.crypto.randomUUID()}`,
     text,
     mode: mode.value,
     selectedSuggestionId: selectedSuggestionId.value,
     selectedItemIds: selectedItemIds.value,
-  })
+  }
+  clearComposer()
+  if (game.sending.value || activeTurn.value) {
+    if (queuedTurns.value.length >= 8) {
+      restoreTurn(turn)
+      showToast('В очереди уже восемь ходов')
+      return
+    }
+    queuedTurns.value.push({ ...turn, selectedSuggestionId: null })
+    writeQueue()
+    showToast('Ход добавлен следующим')
+    nextTick(() => composer.value?.focus())
+    return
+  }
+  const succeeded = await executeTurn(turn)
   if (succeeded) {
-    input.value = ''
-    selectedSuggestionId.value = null
-    selectedItemIds.value = []
-    showToast('Ход подтвержден')
+    showToast(queuedTurns.value.length ? 'Продолжаем по очереди' : 'История продолжилась')
+    await drainTurnQueue()
     nextTick(() => composer.value?.focus())
   }
-  else {
+  else
     composer.value?.focus()
-  }
 }
 
 function openSession(nextSessionId: string) {
@@ -224,6 +359,7 @@ watch(() => game.session.value?.id, (nextId, previousId) => {
   if (!nextId || nextId === previousId)
     return
   input.value = game.readDraft()
+  readQueue()
   selectedSuggestionId.value = null
   selectedItemIds.value = []
   activeTool.value = null
@@ -253,6 +389,7 @@ onMounted(async () => {
   await resolveInitialRoute()
   if (game.session.value) {
     input.value = game.readDraft()
+    readQueue()
     scrollToLatest()
   }
 })
@@ -380,10 +517,8 @@ onBeforeUnmount(() => {
 
               <InteractionGenerationStatus
                 v-if="game.sending.value"
-                :elapsed-seconds="game.turnElapsedSeconds.value"
                 :intent="game.pendingTurn.value?.command.text || input"
                 @cancel="game.cancelTurn()"
-                @open-tool="openTool"
               />
             </div>
           </div>
@@ -393,6 +528,8 @@ onBeforeUnmount(() => {
             v-model="input"
             :mode="mode"
             :turn-pending="game.sending.value"
+            :pending-intent="activeTurn?.text || game.pendingTurn.value?.command.text || ''"
+            :queued-turns="queuedTurns"
             :suggestions="game.session.value.suggestions"
             :selected-suggestion-id="selectedSuggestionId"
             :selected-items="selectedItems"
@@ -401,6 +538,8 @@ onBeforeUnmount(() => {
             @remove-item="removeItem"
             @submit="submitTurn"
             @cancel="game.cancelTurn()"
+            @edit-queued="editQueuedTurn"
+            @remove-queued="removeQueuedTurn"
             @open-tool="openTool"
           />
         </section>

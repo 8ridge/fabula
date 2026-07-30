@@ -1,61 +1,20 @@
 <script setup lang="ts">
 import { gsap } from 'gsap'
-import type { InteractionToolName } from '~/types/interaction-ui'
 
 const props = defineProps<{
-  elapsedSeconds: number
   intent: string
 }>()
 
 const emit = defineEmits<{
   cancel: []
-  openTool: [tool: InteractionToolName]
 }>()
 
 const root = ref<HTMLElement | null>(null)
-const phaseLabel = ref<HTMLElement | null>(null)
 let animationContext: gsap.Context | null = null
 
-const phases = [
-  {
-    until: 8,
-    title: 'Собираем канон сцены',
-    detail: 'Пак, текущее место и границы мира остаются источником истины.',
-  },
-  {
-    until: 24,
-    title: 'Сверяем память',
-    detail: 'Учитываем прежние действия, предметы, свидетелей и незакрытые вопросы.',
-  },
-  {
-    until: 48,
-    title: 'Проверяем последствия',
-    detail: 'Отделяем намерение от результата и не разрешаем модели менять мир напрямую.',
-  },
-  {
-    until: Number.POSITIVE_INFINITY,
-    title: 'Собираем продолжение',
-    detail: 'Ответ занимает больше обычного, но ход сохранен и не будет записан дважды.',
-  },
-] as const
-
-const phaseIndex = computed(() =>
-  phases.findIndex(phase => props.elapsedSeconds < phase.until))
-const phase = computed(() => phases[phaseIndex.value] || phases.at(-1)!)
 const intentExcerpt = computed(() => props.intent.length > 110
   ? `${props.intent.slice(0, 107)}…`
   : props.intent)
-
-watch(phaseIndex, async () => {
-  await nextTick()
-  if (!phaseLabel.value || globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
-    return
-  gsap.fromTo(
-    phaseLabel.value,
-    { autoAlpha: 0, y: 5 },
-    { autoAlpha: 1, y: 0, duration: 0.42, ease: 'power2.out', overwrite: true },
-  )
-})
 
 onMounted(() => {
   if (!root.value || globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
@@ -110,26 +69,16 @@ onBeforeUnmount(() => animationContext?.revert())
 
       <div class="min-w-0 flex-1">
         <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <strong ref="phaseLabel" class="font-display text-[15px] font-normal text-fabula-100">{{ phase.title }}</strong>
-          <span class="font-interface text-[11px] tabular-nums text-[#9b9ba6]">{{ elapsedSeconds }} с</span>
+          <strong class="font-display text-[15px] font-normal text-fabula-100">Рассказчик продолжает историю</strong>
           <span class="inline-flex gap-1 text-[10px] text-[var(--accent)]" aria-hidden="true">
             <i v-for="dot in 3" :key="dot" data-generation-dot class="size-1 rounded-full bg-current" />
           </span>
         </div>
-        <p class="mt-0.5 text-[13px] leading-snug text-fabula-300">{{ phase.detail }}</p>
         <p class="mt-1 truncate font-story text-[13px] italic text-[#9b9ba6]" :title="intent">«{{ intentExcerpt }}»</p>
 
-        <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-interface text-[11px]">
-          <button type="button" class="text-fabula-300 transition hover:text-[var(--accent-light)]" @click="emit('openTool', 'journal')">
-            Открыть журнал
-          </button>
-          <button type="button" class="text-fabula-300 transition hover:text-[var(--accent-light)]" @click="emit('openTool', 'inventory')">
-            Проверить инвентарь
-          </button>
-          <button type="button" class="text-[#9b9ba6] transition hover:text-red-100" @click="emit('cancel')">
-            Остановить ход
-          </button>
-        </div>
+        <button type="button" class="mt-2 font-interface text-[11px] text-[#9b9ba6] transition hover:text-red-100" @click="emit('cancel')">
+          Остановить
+        </button>
       </div>
     </div>
   </section>

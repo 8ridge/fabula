@@ -18,8 +18,8 @@ const emit = defineEmits<{
 const dialog = ref<HTMLDialogElement | null>(null)
 
 const toolCopy: Record<InteractionToolName, { eyebrow: string, title: string }> = {
-  inventory: { eyebrow: 'Состояние сессии', title: 'Инвентарь' },
-  journal: { eyebrow: 'Подтвержденные события', title: 'Журнал' },
+  inventory: { eyebrow: 'При себе', title: 'Инвентарь' },
+  journal: { eyebrow: 'Следы истории', title: 'Журнал' },
   character: { eyebrow: 'Воплощение и связи', title: 'Персонажи' },
   world: { eyebrow: 'Сцена и известные места', title: 'Мир' },
   settings: { eyebrow: 'Чтение и ввод', title: 'Настройки' },
@@ -105,9 +105,6 @@ watch(() => props.activeTool, async (tool) => {
       </template>
 
       <template v-else-if="activeTool === 'journal'">
-        <p class="mb-4 max-w-[68ch] text-[15px] leading-relaxed text-fabula-300">
-          Запись появляется только после подтвержденного события. Предположения и сведения со слов отмечены отдельно.
-        </p>
         <div class="divide-y divide-white/8 border-y border-white/8">
           <article v-for="entry in session.journal" :key="entry.id" class="py-4">
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -180,7 +177,7 @@ watch(() => props.activeTool, async (tool) => {
       <template v-else-if="activeTool === 'settings'">
         <section class="max-w-[620px]">
           <label class="font-display text-[17px] text-fabula-100">Размер текста истории</label>
-          <p class="mt-1 text-[13px] leading-relaxed text-[#9b9ba6]">Меняется только чтение на этом устройстве и не влияет на канон.</p>
+          <p class="mt-1 text-[13px] leading-relaxed text-[#9b9ba6]">Размер сохраняется на этом устройстве.</p>
           <div class="mt-3 grid grid-cols-3 overflow-hidden rounded-xl border border-white/10">
             <button
               v-for="option in (['normal', 'large', 'xlarge'] as InteractionFontScale[])"

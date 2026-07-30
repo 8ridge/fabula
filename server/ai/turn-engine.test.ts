@@ -91,64 +91,10 @@ const storyPackSource: RuntimeStoryPackSource = {
   canonicalCore: '# StoryPack 04\n\n## Сюжет по восьми актам',
 }
 
-function successfulInventoryAdvisory(
-  turnCommand: TurnCommand = command,
-  engineSnapshot: EngineSessionSnapshot = snapshot,
-) {
-  return {
-    module_version: 'inventory-advisory@1.0',
-    action_feasible: true,
-    reason_codes: turnCommand.selected_item_ids.length ? [] : ['no_item_interaction'],
-    selected_items: turnCommand.selected_item_ids.map((itemId) => {
-      const item = engineSnapshot.inventory.find(candidate => candidate.id === itemId)!
-      return {
-        item_id: item.id,
-        exists: true,
-        accessible: item.holder_id === 'player'
-          && item.location_id === engineSnapshot.scene.location_id
-          && item.condition !== 'spent'
-          && item.quantity > 0
-          && item.charges !== 0,
-        owner_id: item.owner_id,
-        holder_id: item.holder_id,
-        location_id: item.location_id,
-        quantity: item.quantity,
-        charges: item.charges,
-        condition: item.condition,
-        provenance_summary: item.provenance.summary,
-        reason_codes: [],
-      }
-    }),
-    operation_candidates: [],
-    interaction_effects: {
-      time_cost: 'none',
-      noise: 'none',
-      traces: [],
-      witness_ids: [],
-    },
-    consistency_notes: [],
-  }
-}
-
-function createEngine(client: OpenRouterClient, stubInventory = true): TurnEngine {
-  const routedClient = stubInventory
-    ? {
-        chatJson: async (request: ChatJsonRequest) => {
-          if (request.schema?.name === 'fabula_inventory_advisory_1_0') {
-            return {
-              requestId: 'request:inventory',
-              model: request.model,
-              output: successfulInventoryAdvisory(),
-              usage: { total_tokens: 8, cost: 0.0005 },
-            }
-          }
-          return client.chatJson(request)
-        },
-      } as unknown as OpenRouterClient
-    : client
+function createEngine(client: OpenRouterClient): TurnEngine {
   return new TurnEngine(
     config,
-    routedClient,
+    client,
     async () => 'system prompt',
     async () => storyPackSource,
   )
@@ -222,42 +168,20 @@ function successfulTurnOutput(): TurnOutput {
   }
 }
 
+function quickTurnProposal() {
+  return {
+    outcome: 'success',
+    summary: 'Тишина отвечает на слова игрока. Время замерло.',
+    event_kind: 'player_spoke',
+  }
+}
+
 describe('turn engine model telemetry', () => {
-  test('uses sanitized free Nemotron only at a scene boundary before the authoritative turn', async () => {
+  test('starts a scene-boundary turn with one authoritative model call', async () => {
     const requests: ChatJsonRequest[] = []
     const client = {
       chatJson: async (request: ChatJsonRequest) => {
         requests.push(request)
-        if (request.model === 'nvidia/nemotron-3-ultra-550b-a55b:free') {
-          return {
-            requestId: 'request:advisory',
-            model: request.model,
-            output: {
-              plan_version: 'scene-plan@0.2',
-              scene_goal: 'Проверить границы восьмого круга',
-              dramatic_question: 'Почему круг ответил игроку?',
-              active_world_pressures: [],
-              npc_intentions: [],
-              unresolved_consequences: [],
-              allowed_directions: [{
-                direction: 'Осмотреть печать',
-                type: 'safe',
-                required_facts: [],
-                pressure_advanced: [],
-              }],
-              avoid_repetition: [],
-              forbidden_next_moves: ['Не объявлять игрока богом'],
-              climax_conditions: [],
-              potential_media_trigger: {
-                event_ref: null,
-                eligible_only_if: [],
-                visual_uniqueness: 'none',
-              },
-              expires_after_turns: 4,
-            },
-            usage: { total_tokens: 20, cost: 0 },
-          }
-        }
         return {
           requestId: 'request:primary',
           model: request.model,
@@ -272,29 +196,15 @@ describe('turn engine model telemetry', () => {
       history: [],
     })
 
-    expect(requests.map(request => request.model)).toEqual([
-      'nvidia/nemotron-3-ultra-550b-a55b:free',
-      'deepseek/deepseek-v4-flash',
-    ])
+    expect(requests.map(request => request.model)).toEqual(['deepseek/deepseek-v4-flash'])
     expect(requests[0]).toMatchObject({
-      sanitizedFreeEndpoint: true,
-      jsonMode: 'prompt-only',
-      timeoutMs: TURN_MODEL_TIMEOUTS.advisoryMs,
-      payload: {
-        story_pack_id: 'eighth-seal',
-        scene_id: snapshot.scene.id,
-        active_threads: ['current_scene_objective'],
-        pack_constraints: ['no_new_canon', 'no_pii', 'advisory_only'],
-      },
+      timeoutMs: TURN_MODEL_TIMEOUTS.primaryMs,
+      maxOutputTokens: 2000,
     })
-    expect(JSON.stringify(requests[0]?.payload)).not.toContain(command.text)
-    expect(requests[1]?.payload.scene).toMatchObject({
-      scene_plan: {
-        plan_version: 'scene-plan@0.2',
-        expires_after_turns: 4,
-      },
+    expect(requests[0]?.payload.scene).toMatchObject({
+      scene_plan: null,
     })
-    expect(result.advisoryUsed).toBe(true)
+    expect(result.advisoryUsed).toBe(false)
   })
 
   test('builds the model packet from the canonical StoryPack source', async () => {
@@ -368,7 +278,7 @@ describe('turn engine model telemetry', () => {
     }])
   })
 
-  test('runs the authoritative model after the required inventory advisory with a bounded timeout', async () => {
+  test('runs the authoritative model once with a bounded timeout', async () => {
     const calls: Array<Pick<ChatJsonRequest, 'model' | 'timeoutMs'>> = []
     const client = {
       chatJson: async (request: ChatJsonRequest) => {
@@ -389,11 +299,11 @@ describe('turn engine model telemetry', () => {
       model: 'deepseek/deepseek-v4-flash',
       timeoutMs: TURN_MODEL_TIMEOUTS.primaryMs,
     }])
-    expect(result.advisoryUsed).toBe(true)
+    expect(result.advisoryUsed).toBe(false)
     expect(result.fallbackUsed).toBe(false)
   })
 
-  test('calls the inventory model separately and passes its verified state plus Honcho recall to the main model', async () => {
+  test('passes server-verified inventory state and Honcho recall to the only model call', async () => {
     const itemCommand: TurnCommand = {
       ...command,
       text: 'Я использую аптечку.',
@@ -432,15 +342,13 @@ describe('turn engine model telemetry', () => {
         return {
           requestId: `request:${requests.length}`,
           model: request.model,
-          output: request.schema?.name === 'fabula_inventory_advisory_1_0'
-            ? successfulInventoryAdvisory(itemCommand, itemSnapshot)
-            : successfulTurnOutput(),
+          output: successfulTurnOutput(),
           usage: { total_tokens: 10, cost: 0.001 },
         }
       },
     } as unknown as OpenRouterClient
 
-    const result = await createEngine(client, false).execute(
+    const result = await createEngine(client).execute(
       itemCommand,
       itemSnapshot,
       undefined,
@@ -453,47 +361,33 @@ describe('turn engine model telemetry', () => {
       },
     )
 
-    expect(requests.map(request => request.schema?.name)).toEqual([
-      'fabula_inventory_advisory_1_0',
-      'fabula_turn_output_0_2',
-    ])
+    expect(requests.map(request => request.schema?.name)).toEqual(['fabula_turn_output_0_2'])
     expect(requests[0]).toMatchObject({
       model: 'deepseek/deepseek-v4-flash',
-      timeoutMs: TURN_MODEL_TIMEOUTS.inventoryMs,
       payload: {
-        player_input: {
-          selected_item_ids: ['item:kit'],
+        inventory_advisory: {
+          module_version: 'inventory-advisory@1.0',
+          selected_items: [{
+            item_id: 'item:kit',
+            accessible: true,
+            provenance_summary: 'Получена на Земле до начала истории.',
+          }],
         },
-        server_inventory: [{
-          id: 'item:kit',
-          provenance: {
-            summary: 'Получена на Земле до начала истории.',
-          },
-        }],
+        external_memory: {
+          source: 'honcho',
+          trust: 'untrusted_recall_only',
+          summary: 'Игрок ранее берег аптечку.',
+        },
       },
     })
-    expect(requests[1]?.payload).toMatchObject({
-      inventory_advisory: {
-        module_version: 'inventory-advisory@1.0',
-        selected_items: [{
-          item_id: 'item:kit',
-          accessible: true,
-        }],
-      },
-      external_memory: {
-        source: 'honcho',
-        trust: 'untrusted_recall_only',
-        summary: 'Игрок ранее берег аптечку.',
-      },
-    })
-    expect(result.modelRuns.map(run => run.role)).toEqual(['inventory', 'primary'])
+    expect(result.modelRuns.map(run => run.role)).toEqual(['primary'])
   })
 
   test('preserves usage and safe error codes for discarded paid attempts', async () => {
-    const calls: Array<Pick<ChatJsonRequest, 'model' | 'timeoutMs'>> = []
+    const calls: ChatJsonRequest[] = []
     const client = {
       chatJson: async (request: ChatJsonRequest) => {
-        calls.push({ model: request.model, timeoutMs: request.timeoutMs })
+        calls.push(request)
         return {
           requestId: `request:${request.model}`,
           model: request.model,
@@ -523,11 +417,11 @@ describe('turn engine model telemetry', () => {
       {
         role: 'fallback',
         status: 'discarded',
-        error_code: 'INVALID_FIELDS',
+        error_code: 'MODEL_CONTRACT_ERROR',
         usage: { total_tokens: 10, cost: 0.001 },
       },
     ])
-    expect(calls).toEqual([
+    expect(calls.map(({ model, timeoutMs }) => ({ model, timeoutMs }))).toEqual([
       {
         model: 'deepseek/deepseek-v4-flash',
         timeoutMs: TURN_MODEL_TIMEOUTS.primaryMs,
@@ -537,6 +431,26 @@ describe('turn engine model telemetry', () => {
         timeoutMs: TURN_MODEL_TIMEOUTS.fallbackMs,
       },
     ])
+    expect(calls[0]?.payload.pack_rules).toMatchObject({
+      canonical_core_markdown: storyPackSource.canonicalCore,
+    })
+    expect(calls[1]).toMatchObject({
+      maxOutputTokens: 700,
+      schema: {
+        name: 'fabula_quick_turn_1_0',
+      },
+      payload: {
+        schema_version: 'quick-turn-input@1.0',
+      },
+    })
+    expect(Array.isArray(calls[1]?.payload.relevant_memories)).toBe(true)
+    expect(typeof (calls[1]?.payload.canon_snapshot as Record<string, unknown>)?.title).toBe('string')
+    expect(calls[1]?.payload).not.toHaveProperty('external_memory')
+    expect(calls[1]?.payload).toMatchObject({
+      pack_rules: {
+        prompt_overlay: storyPackSource.promptOverlay,
+      },
+    })
   })
 
   test('rejects invented entity ids before persistence and lets the registered fallback repair the turn', async () => {
@@ -544,8 +458,10 @@ describe('turn engine model telemetry', () => {
     const client = {
       chatJson: async (request: ChatJsonRequest) => {
         calls.push(request.model)
-        const output = successfulTurnOutput()
-        if (calls.length === 1)
+        const output = calls.length === 1
+          ? successfulTurnOutput()
+          : quickTurnProposal()
+        if (calls.length === 1 && 'intent' in output)
           output.intent.targets = ['door:invented-by-model']
         return {
           requestId: `request:${calls.length}`,
@@ -564,6 +480,19 @@ describe('turn engine model telemetry', () => {
       'mistralai/mistral-small-2603',
     ])
     expect(result.fallbackUsed).toBe(true)
+    expect(result.output.narrative_text).toBe('Тишина отвечает на слова игрока.')
+    expect(result.output.suggested_actions).toEqual([
+      {
+        label: 'Проверить еще раз',
+        mode: 'exploration',
+        intent_hint: 'повторить осмотр внимательнее',
+      },
+      {
+        label: 'Отойти на шаг',
+        mode: 'action',
+        intent_hint: 'увеличить дистанцию и оценить обстановку',
+      },
+    ])
     expect(result.modelRuns.slice(-2)).toMatchObject([
       {
         role: 'primary',
@@ -636,7 +565,9 @@ describe('turn engine model telemetry', () => {
         return {
           requestId: `request:${requests.length}`,
           model: request.model,
-          output: successfulTurnOutput(),
+          output: requests.length === 1
+            ? successfulTurnOutput()
+            : quickTurnProposal(),
           usage: { total_tokens: 10, cost: 0.001 },
         }
       },
@@ -706,7 +637,7 @@ describe('turn engine model telemetry', () => {
     })
   })
 
-  test('gives Mistral one bounded semantic repair after repository authority rejection', async () => {
+  test('does not keep retrying after the bounded fallback is rejected', async () => {
     const requests: ChatJsonRequest[] = []
     const client = {
       chatJson: async (request: ChatJsonRequest) => {
@@ -716,7 +647,7 @@ describe('turn engine model telemetry', () => {
         return {
           requestId: `request:${requests.length}`,
           model: request.model,
-          output: successfulTurnOutput(),
+          output: quickTurnProposal(),
           usage: { total_tokens: 10, cost: 0.001 },
         }
       },
@@ -724,26 +655,18 @@ describe('turn engine model telemetry', () => {
     const engine = createEngine(client)
     let validations = 0
 
-    const result = await engine.execute(command, snapshot, undefined, () => {
+    const result = engine.execute(command, snapshot, undefined, () => {
       validations += 1
-      if (validations === 1) {
-        throw new FabulaApiError(
-          'MODEL_AUTHORITY_ERROR',
-          'Знание назначено неизвестному персонажу.',
-          502,
-        )
-      }
+      throw new FabulaApiError(
+        'MODEL_AUTHORITY_ERROR',
+        'Знание назначено неизвестному персонажу.',
+        502,
+      )
     })
 
-    expect(result.fallbackUsed).toBe(true)
-    expect(requests).toHaveLength(3)
-    expect(requests[2]?.payload.repair_feedback).toEqual({
-      previous_role: 'fallback',
-      error_code: 'MODEL_AUTHORITY_ERROR',
-      validation_errors: [
-        'repository:MODEL_AUTHORITY_ERROR:Знание назначено неизвестному персонажу.',
-      ],
-    })
+    await expect(result).rejects.toMatchObject({ code: 'MODEL_FALLBACK_EXHAUSTED' })
+    expect(requests).toHaveLength(2)
+    expect(validations).toBe(1)
   })
 
   test('does not start fallback after the caller cancels the turn', async () => {

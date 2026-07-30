@@ -36,7 +36,7 @@ const anchorClasses: Record<InventorySlotId, string> = {
           При себе
         </h3>
         <p class="mt-1 text-[13px] leading-relaxed text-[#9b9ba6]">
-          Размещение из подтвержденного снимка сессии.
+          То, что у тебя сейчас под рукой.
         </p>
       </div>
       <span class="rounded-full border border-white/10 px-2.5 py-1 font-interface text-[10px] text-fabula-300">

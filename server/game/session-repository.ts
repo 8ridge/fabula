@@ -112,6 +112,9 @@ interface StoredGameSession {
   knowledge: StoredKnowledge[]
   turns: StoredTurn[]
   idempotency: StoredIdempotencyRecord[]
+  stateRevisions?: {
+    zeroLineOpeningPresence?: 1
+  }
 }
 
 export interface GameSessionStorage {
@@ -247,7 +250,7 @@ function characterProjection(storyPackId: StoryPackId, characterId: string): Cha
 }
 
 function makeCharacters(storyPackId: StoryPackId): CharacterProjection[] {
-  return STORY_PACKS[storyPackId].opening.presentCharacterIds
+  return STORY_PACKS[storyPackId].opening.knownCharacterIds
     .map(characterId => characterProjection(storyPackId, characterId))
     .filter((character): character is CharacterProjection => character !== null)
 }
@@ -272,6 +275,17 @@ function normalizeStoredSession(value: StoredGameSession): StoredGameSession {
   })
   if (!Array.isArray(session.snapshot.scene.present_character_ids))
     session.snapshot.scene.present_character_ids = [...pack.opening.presentCharacterIds]
+  if (pack.id === 'zero-line' && session.stateRevisions?.zeroLineOpeningPresence !== 1) {
+    const hasLegacyOpeningPresence = session.snapshot.scene.id === pack.opening.sceneId
+      && session.snapshot.scene.present_character_ids.length === 1
+      && session.snapshot.scene.present_character_ids[0] === 'character:nina-gromova'
+    if (hasLegacyOpeningPresence)
+      session.snapshot.scene.present_character_ids = []
+    session.stateRevisions = {
+      ...session.stateRevisions,
+      zeroLineOpeningPresence: 1,
+    }
+  }
   if (session.snapshot.version === 0) {
     session.snapshot.characters = makeCharacters(pack.id)
     session.snapshot.locations = makeLocations(pack.id)
@@ -790,6 +804,9 @@ export class GameSessionRepository {
       knowledge: [],
       turns: [],
       idempotency: [],
+      stateRevisions: pack.id === 'zero-line'
+        ? { zeroLineOpeningPresence: 1 }
+        : undefined,
     }
     await this.storage.setItem(sessionKey(sessionId), session)
     return clone(session.snapshot)
