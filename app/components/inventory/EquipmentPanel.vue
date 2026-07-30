@@ -23,7 +23,7 @@ const equippedCount = computed(() =>
 )
 
 const positionClasses: Record<InventoryEquipmentPositionId, string> = {
-  head_accessory: 'left-1/2 top-2 -translate-x-1/2',
+  head_accessory: 'left-1/2 top-5 -translate-x-1/2',
   head: 'left-1/2 top-[14%] -translate-x-1/2',
   body: 'left-1/2 top-[29%] -translate-x-1/2',
   backpack: 'right-2 top-[29%]',
