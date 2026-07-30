@@ -3,14 +3,27 @@ import type { GameSessionSnapshot, InventoryItemProjection } from '#shared/game'
 import {
   inventoryCategoryMeta,
   inventoryConditionMeta,
+  inventoryEquipmentPositionMeta,
   inventorySlotMeta,
+  type InventoryEquipmentPositionId,
   type InventoryEquipmentSlot,
   type InventoryItemView,
   type InventoryItemVisual,
-  type InventorySlotId,
 } from '~/types/inventory'
 
-const slotOrder: InventorySlotId[] = ['hand', 'body', 'bag']
+const equipmentPositionOrder: InventoryEquipmentPositionId[] = [
+  'head_accessory',
+  'head',
+  'body',
+  'backpack',
+  'left_hand',
+  'right_hand',
+  'left_hand_accessory',
+  'right_hand_accessory',
+  'belt',
+  'legs',
+  'feet',
+]
 
 const templateArt = [
   { fragments: ['knife', 'нож'], assetUrl: '/assets/items/knife.png', symbol: '†' },
@@ -76,19 +89,37 @@ export function useInventoryStore(session: Ref<GameSessionSnapshot>) {
       .map(projectInventoryItem),
   )
 
-  const equipmentSlots = computed<InventoryEquipmentSlot[]>(() =>
-    slotOrder.map((slotId) => {
-      const meta = inventorySlotMeta[slotId]
+  const equipmentSlots = computed<InventoryEquipmentSlot[]>(() => {
+    const handItems = items.value.filter(item =>
+      item.holder_id === 'player' && item.slot === 'hand',
+    )
+    const bodyItems = items.value.filter(item =>
+      item.holder_id === 'player' && item.slot === 'body',
+    )
+    const bagItems = items.value.filter(item =>
+      item.holder_id === 'player' && item.slot === 'bag',
+    )
+
+    return equipmentPositionOrder.map((positionId) => {
+      const meta = inventoryEquipmentPositionMeta[positionId]
+      let positionItems: InventoryItemView[] = []
+      if (positionId === 'body')
+        positionItems = bodyItems
+      else if (positionId === 'backpack')
+        positionItems = bagItems
+      else if (positionId === 'right_hand')
+        positionItems = handItems.filter((_item, index) => index % 2 === 0)
+      else if (positionId === 'left_hand')
+        positionItems = handItems.filter((_item, index) => index % 2 === 1)
+
       return {
-        id: slotId,
+        id: positionId,
         label: meta.label,
         hint: meta.hint,
-        items: items.value.filter(item =>
-          item.holder_id === 'player' && item.slot === slotId,
-        ),
+        items: positionItems,
       }
-    }),
-  )
+    })
+  })
 
   const selectedItem = computed(() =>
     items.value.find(item => item.id === selectedItemId.value) || null,

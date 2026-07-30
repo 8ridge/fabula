@@ -3,6 +3,18 @@ import type { InventoryItemProjection } from '#shared/game'
 export type InventoryCategory = InventoryItemProjection['category']
 export type InventoryCondition = InventoryItemProjection['condition']
 export type InventorySlotId = Exclude<InventoryItemProjection['slot'], null>
+export type InventoryEquipmentPositionId =
+  | 'head'
+  | 'head_accessory'
+  | 'body'
+  | 'legs'
+  | 'feet'
+  | 'left_hand'
+  | 'right_hand'
+  | 'backpack'
+  | 'belt'
+  | 'left_hand_accessory'
+  | 'right_hand_accessory'
 export type ItemArtStatus = 'ready' | 'pending' | 'fallback'
 
 export interface InventoryItemVisual {
@@ -24,11 +36,61 @@ export interface InventoryItemView extends InventoryItemProjection {
 }
 
 export interface InventoryEquipmentSlot {
-  id: InventorySlotId
+  id: InventoryEquipmentPositionId
   label: string
   hint: string
   items: InventoryItemView[]
 }
+
+export const inventoryEquipmentPositionMeta = {
+  head_accessory: {
+    label: 'Аксессуар головы',
+    hint: 'Украшение, маска или другой предмет на голове',
+  },
+  head: {
+    label: 'Голова',
+    hint: 'Шлем или другой головной убор',
+  },
+  body: {
+    label: 'Тело',
+    hint: 'Основная одежда или броня',
+  },
+  backpack: {
+    label: 'Рюкзак',
+    hint: 'Предметы, которые герой несет за спиной',
+  },
+  left_hand: {
+    label: 'Левая рука',
+    hint: 'Предмет в левой руке',
+  },
+  right_hand: {
+    label: 'Правая рука',
+    hint: 'Предмет в правой руке',
+  },
+  left_hand_accessory: {
+    label: 'Аксессуар левой руки',
+    hint: 'Кольцо, браслет или другое украшение левой руки',
+  },
+  right_hand_accessory: {
+    label: 'Аксессуар правой руки',
+    hint: 'Кольцо, браслет или другое украшение правой руки',
+  },
+  belt: {
+    label: 'Пояс',
+    hint: 'Предмет на поясе',
+  },
+  legs: {
+    label: 'Штаны',
+    hint: 'Одежда или броня для ног',
+  },
+  feet: {
+    label: 'Ботинки',
+    hint: 'Обувь героя',
+  },
+} as const satisfies Record<
+  InventoryEquipmentPositionId,
+  { label: string, hint: string }
+>
 
 export const inventoryCategoryMeta = {
   tool: {
