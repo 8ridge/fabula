@@ -5,6 +5,7 @@ import type {
   GameTurnResponse,
 } from '../../shared/game'
 import {
+  deriveHonchoIdentity,
   HonchoMemoryClient,
   resolveHonchoConfig,
 } from './honcho'
@@ -129,6 +130,21 @@ function gameResponse(): GameTurnResponse {
 }
 
 describe('Honcho memory client', () => {
+  test('derives opaque owner-scoped peer and session identities', async () => {
+    const first = await deriveHonchoIdentity(ownerId, sessionId)
+    const otherOwner = await deriveHonchoIdentity(
+      'player:22222222-2222-4222-8222-222222222222',
+      sessionId,
+    )
+
+    expect(first.playerPeerId).toMatch(/^player-[a-f0-9]{64}$/)
+    expect(first.sessionId).toMatch(/^session-[a-f0-9]{64}$/)
+    expect(first.playerPeerId).not.toBe(otherOwner.playerPeerId)
+    expect(first.sessionId).not.toBe(otherOwner.sessionId)
+    expect(JSON.stringify(first)).not.toContain(ownerId)
+    expect(JSON.stringify(first)).not.toContain(sessionId)
+  })
+
   test('accepts managed HTTPS and local self-hosting but rejects unsafe base URLs', () => {
     expect(resolveHonchoConfig({ honchoApiKey: 'secret' })).toEqual({
       apiKey: 'secret',
@@ -173,8 +189,9 @@ describe('Honcho memory client', () => {
     expect(requests.map(request => request.url)).toContain(
       'https://api.honcho.dev/v3/workspaces',
     )
+    const identity = await deriveHonchoIdentity(ownerId, sessionId)
     expect(requests.some(request =>
-      request.url.includes('/sessions/session-session-22222222-2222-4222-8222-222222222222/context?')))
+      request.url.includes(`/sessions/${identity.sessionId}/context?`)))
       .toBe(true)
     expect(requests.every(request =>
       (request.init.headers as Record<string, string>).Authorization === 'Bearer secret-never-log'))
@@ -203,8 +220,9 @@ describe('Honcho memory client', () => {
       messages: Array<{ peer_id: string, content: string, metadata: Record<string, unknown> }>
     }
     expect(body.messages).toHaveLength(2)
+    const identity = await deriveHonchoIdentity(ownerId, sessionId)
     expect(body.messages[0]).toMatchObject({
-      peer_id: 'player-player-11111111-1111-4111-8111-111111111111',
+      peer_id: identity.playerPeerId,
       content: command.text,
       metadata: { turn_id: command.idempotency_key },
     })

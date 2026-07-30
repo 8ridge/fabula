@@ -1,0 +1,159 @@
+[app]
+LOG_LEVEL = "INFO"
+PERFORMANCE_LOG_FORMAT = "compact"
+SESSION_OBSERVERS_LIMIT = 4
+GET_CONTEXT_MAX_TOKENS = 12000
+EMBED_MESSAGES = true
+NAMESPACE = "fabula_honcho"
+
+[auth]
+# Локальный API доступен только серверным процессам через 127.0.0.1:8010.
+# Для production включите JWT-аутентификацию и HTTPS на внутреннем адресе.
+USE_AUTH = false
+
+[embedding]
+VECTOR_DIMENSIONS = 1536
+MAX_INPUT_TOKENS = 8192
+MAX_TOKENS_PER_REQUEST = 300000
+
+[embedding.model_config]
+transport = "openai"
+model = "openai/text-embedding-3-small"
+
+[embedding.model_config.overrides]
+base_url = "https://openrouter.ai/api/v1"
+
+[deriver]
+ENABLED = true
+WORKERS = 1
+FLUSH_ENABLED = true
+DEDUPLICATE = true
+LOG_OBSERVATIONS = false
+WORKING_REPRESENTATION_MAX_OBSERVATIONS = 100
+
+[deriver.model_config]
+transport = "openai"
+model = "deepseek/deepseek-v4-flash"
+
+[deriver.model_config.overrides]
+base_url = "https://openrouter.ai/api/v1"
+
+[peer_card]
+ENABLED = true
+
+[dialectic]
+MAX_OUTPUT_TOKENS = 4096
+MAX_INPUT_TOKENS = 12000
+HISTORY_TOKEN_LIMIT = 4096
+SESSION_HISTORY_MAX_TOKENS = 4096
+
+[dialectic.levels.minimal]
+MAX_TOOL_ITERATIONS = 1
+MAX_OUTPUT_TOKENS = 300
+TOOL_CHOICE = "auto"
+
+[dialectic.levels.minimal.model_config]
+transport = "openai"
+model = "deepseek/deepseek-v4-flash"
+
+[dialectic.levels.minimal.model_config.overrides]
+base_url = "https://openrouter.ai/api/v1"
+
+[dialectic.levels.low]
+MAX_TOOL_ITERATIONS = 3
+TOOL_CHOICE = "auto"
+
+[dialectic.levels.low.model_config]
+transport = "openai"
+model = "deepseek/deepseek-v4-flash"
+
+[dialectic.levels.low.model_config.overrides]
+base_url = "https://openrouter.ai/api/v1"
+
+[dialectic.levels.medium]
+MAX_TOOL_ITERATIONS = 3
+
+[dialectic.levels.medium.model_config]
+transport = "openai"
+model = "deepseek/deepseek-v4-flash"
+
+[dialectic.levels.medium.model_config.overrides]
+base_url = "https://openrouter.ai/api/v1"
+
+[dialectic.levels.high]
+MAX_TOOL_ITERATIONS = 4
+
+[dialectic.levels.high.model_config]
+transport = "openai"
+model = "deepseek/deepseek-v4-flash"
+
+[dialectic.levels.high.model_config.overrides]
+base_url = "https://openrouter.ai/api/v1"
+
+[dialectic.levels.max]
+MAX_TOOL_ITERATIONS = 6
+
+[dialectic.levels.max.model_config]
+transport = "openai"
+model = "deepseek/deepseek-v4-flash"
+
+[dialectic.levels.max.model_config.overrides]
+base_url = "https://openrouter.ai/api/v1"
+
+[summary]
+ENABLED = true
+MESSAGES_PER_SHORT_SUMMARY = 10
+MESSAGES_PER_LONG_SUMMARY = 20
+MAX_TOKENS_SHORT = 1000
+MAX_TOKENS_LONG = 4000
+
+[summary.model_config]
+transport = "openai"
+model = "deepseek/deepseek-v4-flash"
+
+[summary.model_config.overrides]
+base_url = "https://openrouter.ai/api/v1"
+
+[dream]
+ENABLED = true
+DOCUMENT_THRESHOLD = 50
+IDLE_TIMEOUT_MINUTES = 60
+MIN_HOURS_BETWEEN_DREAMS = 8
+ENABLED_TYPES = ["omni"]
+MAX_TOOL_ITERATIONS = 12
+HISTORY_TOKEN_LIMIT = 12000
+
+[dream.deduction_model_config]
+transport = "openai"
+model = "deepseek/deepseek-v4-flash"
+
+[dream.deduction_model_config.overrides]
+base_url = "https://openrouter.ai/api/v1"
+
+[dream.induction_model_config]
+transport = "openai"
+model = "deepseek/deepseek-v4-flash"
+
+[dream.induction_model_config.overrides]
+base_url = "https://openrouter.ai/api/v1"
+
+[cache]
+ENABLED = true
+URL = "redis://redis:6379/0?suppress=true"
+NAMESPACE = "fabula_honcho"
+DEFAULT_TTL_SECONDS = 300
+DEFAULT_LOCK_TTL_SECONDS = 5
+
+[metrics]
+ENABLED = false
+
+[telemetry]
+ENABLED = false
+
+[sentry]
+ENABLED = false
+
+[vector_store]
+TYPE = "pgvector"
+MIGRATED = false
+NAMESPACE = "fabula_honcho"

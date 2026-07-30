@@ -17,7 +17,7 @@ export interface HonchoConfig {
   baseUrl: string
 }
 
-interface HonchoIdentity {
+export interface HonchoIdentity {
   playerPeerId: string
   narratorPeerId: string
   sessionId: string
@@ -61,14 +61,29 @@ export function resolveHonchoConfig(runtimeConfig: Record<string, unknown>): Hon
   }
 }
 
-function resourceId(prefix: string, value: string): string {
-  const normalized = value
-    .normalize('NFKC')
-    .replace(/[^a-zA-Z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  if (!normalized)
+async function opaqueResourceId(prefix: string, ...parts: string[]): Promise<string> {
+  if (parts.some(part => !part.trim()))
     throw new HonchoMemoryError('HONCHO_INVALID_ID', 'Не удалось сформировать идентификатор памяти.')
-  return `${prefix}-${normalized}`.slice(0, 512)
+  const digestBytes = await globalThis.crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(parts.join('\0')),
+  )
+  const digest = Array.from(
+    new Uint8Array(digestBytes),
+    byte => byte.toString(16).padStart(2, '0'),
+  ).join('')
+  return `${prefix}-${digest}`
+}
+
+export async function deriveHonchoIdentity(
+  ownerId: string,
+  fabulaSessionId: string,
+): Promise<HonchoIdentity> {
+  return {
+    playerPeerId: await opaqueResourceId('player', 'owner', ownerId),
+    narratorPeerId: NARRATOR_PEER_ID,
+    sessionId: await opaqueResourceId('session', 'owner', ownerId, 'session', fabulaSessionId),
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -234,11 +249,7 @@ export class HonchoMemoryClient {
     signal?: AbortSignal,
   ): Promise<HonchoIdentity> {
     await this.ensureWorkspace(signal)
-    const identity = {
-      playerPeerId: resourceId('player', ownerId),
-      narratorPeerId: NARRATOR_PEER_ID,
-      sessionId: resourceId('session', fabulaSessionId),
-    }
+    const identity = await deriveHonchoIdentity(ownerId, fabulaSessionId)
     await Promise.all([
       this.request(
         `/v3/workspaces/${WORKSPACE_ID}/peers`,
@@ -271,7 +282,7 @@ export class HonchoMemoryClient {
           id: identity.sessionId,
           metadata: {
             source: 'fabula',
-            fabula_session_id: fabulaSessionId,
+            owner_peer_id: identity.playerPeerId,
           },
           configuration: {
             reasoning: { enabled: true },
