@@ -201,6 +201,7 @@ export class HonchoMemoryClient {
                 turn_id: command.idempotency_key,
                 mode: command.mode,
                 selected_item_ids: command.selected_item_ids,
+                selected_journal_entry_ids: command.selected_journal_entry_ids,
               },
             },
             {

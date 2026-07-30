@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import type { GameSessionSnapshot } from '#shared/game'
-import type { InteractionFontScale, InteractionToolName } from '~/types/interaction-ui'
+import type {
+  InteractionFontScale,
+  InteractionToolComposePayload,
+  InteractionToolName,
+} from '~/types/interaction-ui'
 
 const props = defineProps<{
   activeTool: InteractionToolName | null
@@ -10,7 +14,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  compose: [payload: { text: string, itemId?: string }]
+  compose: [payload: InteractionToolComposePayload]
   openTool: [tool: InteractionToolName]
   setFontScale: [scale: InteractionFontScale]
 }>()
@@ -116,7 +120,7 @@ watch(() => props.activeTool, async (tool) => {
             <button
               type="button"
               class="mt-2 rounded-lg px-2 py-1 text-[12px] text-[var(--accent-light)] transition hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-              @click="emit('compose', { text: `Я опираюсь на запись «${entry.title}»: ${entry.summary}` })"
+              @click="emit('compose', { journalEntryId: entry.id })"
             >
               Использовать в ходе
             </button>

@@ -88,6 +88,7 @@ function confirmedTurn(
     text: `Проверочный личный факт игрока: кодовый маяк ${marker}.`,
     selected_target_ids: [],
     selected_item_ids: [],
+    selected_journal_entry_ids: [],
     selected_suggestion_id: null,
   }
   const response = {

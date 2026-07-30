@@ -23,6 +23,7 @@ const command: TurnCommand = {
   text: 'Я проверяю дверь.',
   selected_target_ids: [],
   selected_item_ids: [],
+  selected_journal_entry_ids: [],
   selected_suggestion_id: null,
 }
 
@@ -51,6 +52,7 @@ const snapshot: EngineSessionSnapshot = {
     present_character_ids: [],
   },
   inventory: [],
+  journal: [],
   characters: [],
   locations: [{
     id: 'location:summoning-hall',
@@ -275,6 +277,57 @@ describe('turn engine model telemetry', () => {
       narrative_summary: 'Печать ответила слабым свечением.',
       costs_and_consequences: ['След на ладони'],
       unresolved_ambiguities: ['Кто нарушил клятву'],
+    }])
+  })
+
+  test('passes a journal reference separately from the player text', async () => {
+    const requests: ChatJsonRequest[] = []
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        requests.push(request)
+        return {
+          requestId: 'request:journal-reference',
+          model: request.model,
+          output: successfulTurnOutput(),
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+    const journalEntry = {
+      id: 'journal:door-sound',
+      entry_type: 'clue' as const,
+      title: 'Шорох за дверью',
+      summary: 'За дверью слышались волочащиеся шаги и тихий стук.',
+      uncertainty: 'confirmed' as const,
+      source_event_ids: ['event:door-sound'],
+      involved_entity_ids: [snapshot.scene.location_id],
+      story_time: 'Первый час',
+      created_at: '2026-01-01T00:00:00.000Z',
+    }
+    const journalCommand: TurnCommand = {
+      ...command,
+      text: 'Я сравниваю этот звук с тем, что слышал раньше.',
+      selected_journal_entry_ids: [journalEntry.id],
+    }
+
+    await createEngine(client).execute(journalCommand, {
+      ...snapshot,
+      journal: [journalEntry],
+    })
+
+    expect(requests[0]?.payload.player_input).toMatchObject({
+      text: journalCommand.text,
+      journal_entry_ids: [journalEntry.id],
+    })
+    expect(requests[0]?.payload.journal_references).toEqual([{
+      id: journalEntry.id,
+      entry_type: journalEntry.entry_type,
+      title: journalEntry.title,
+      summary: journalEntry.summary,
+      uncertainty: journalEntry.uncertainty,
+      source_event_ids: journalEntry.source_event_ids,
+      involved_entity_ids: journalEntry.involved_entity_ids,
+      story_time: journalEntry.story_time,
     }])
   })
 

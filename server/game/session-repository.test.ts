@@ -46,6 +46,7 @@ function makeCommand(sessionId: string, overrides: Partial<GameTurnCommand> = {}
     text: 'Я изучаю линии восьмого круга.',
     selected_target_ids: [],
     selected_item_ids: [],
+    selected_journal_entry_ids: [],
     selected_suggestion_id: null,
     ...overrides,
   }
@@ -257,6 +258,7 @@ describe('game session repository', () => {
     const command = makeCommand(session.id, {
       selected_target_ids: ['character:forged'],
       selected_item_ids: ['item:forged'],
+      selected_journal_entry_ids: ['journal:forged'],
       selected_suggestion_id: 'suggestion:forged',
     })
     let called = false
@@ -265,6 +267,40 @@ describe('game session repository', () => {
       called = true
       return workerResult(snapshot, command)
     }, 'request:forged-references')).rejects.toMatchObject({ code: 'INVALID_COMMAND_REFERENCE' })
+    expect(called).toBe(false)
+  })
+
+  test('keeps a selected journal entry separate from the player text', async () => {
+    const repository = new GameSessionRepository(new MemoryGameSessionStorage())
+    const session = await repository.create(ownerId, createRequest)
+    const journalEntry = session.journal[0]!
+    const command = makeCommand(session.id, {
+      text: 'Я сравниваю следы на арке.',
+      selected_journal_entry_ids: [journalEntry.id],
+    })
+
+    const response = await repository.executeTurn(ownerId, command, async (snapshot) => {
+      expect(snapshot.journal.find(entry => entry.id === journalEntry.id)).toEqual(journalEntry)
+      return workerResult(snapshot, command)
+    }, 'request:journal-reference')
+
+    const playerMessage = response.session.messages.findLast(message => message.role === 'player')
+    expect(playerMessage?.text).toBe(command.text)
+    expect(playerMessage?.selected_journal_entries).toEqual([journalEntry])
+  })
+
+  test('rejects an unknown journal reference before calling the model', async () => {
+    const repository = new GameSessionRepository(new MemoryGameSessionStorage())
+    const session = await repository.create(ownerId, createRequest)
+    const command = makeCommand(session.id, {
+      selected_journal_entry_ids: ['journal:forged'],
+    })
+    let called = false
+
+    await expect(repository.executeTurn(ownerId, command, async (snapshot) => {
+      called = true
+      return workerResult(snapshot, command)
+    }, 'request:forged-journal')).rejects.toMatchObject({ code: 'INVALID_COMMAND_REFERENCE' })
     expect(called).toBe(false)
   })
 

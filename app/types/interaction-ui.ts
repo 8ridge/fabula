@@ -12,8 +12,15 @@ export interface InteractionTurnDraft {
   mode: InteractionMode
   selectedSuggestionId: string | null
   selectedItemIds: string[]
+  selectedJournalEntryIds: string[]
 }
 
 export interface InteractionQueuedTurn extends InteractionTurnDraft {
   id: string
+}
+
+export interface InteractionToolComposePayload {
+  text?: string
+  itemId?: string
+  journalEntryId?: string
 }

@@ -27,6 +27,7 @@ interface SubmitTurnInput {
   selectedSuggestionId: string | null
   selectedTargetIds?: string[]
   selectedItemIds?: string[]
+  selectedJournalEntryIds?: string[]
 }
 
 const SESSION_ID = /^session:[0-9a-f-]{36}$/i
@@ -77,6 +78,13 @@ export function useGameSession(sessionId: Ref<string | null>) {
   const draftKey = computed(() => sessionId.value ? `fabula:draft:${sessionId.value}` : '')
   const pendingKey = computed(() => sessionId.value ? `fabula:pending:${sessionId.value}` : '')
 
+  function withoutLegacyJournalInjection(value: string): string {
+    const normalized = value.trim()
+    const matchesGeneratedReference = session.value?.journal.some(entry =>
+      normalized === `Я опираюсь на запись «${entry.title}»: ${entry.summary}`)
+    return matchesGeneratedReference ? '' : value
+  }
+
   function readPending(expectedSessionVersion?: number): PendingTurn | null {
     if (!import.meta.client || !pendingKey.value)
       return null
@@ -88,8 +96,17 @@ export function useGameSession(sessionId: Ref<string | null>) {
       const valid = value?.command?.session_id === sessionId.value
         && (expectedSessionVersion === undefined
           || value.command.expected_session_version === expectedSessionVersion)
-      if (valid)
-        return value
+      if (valid) {
+        return {
+          ...value,
+          command: {
+            ...value.command,
+            selected_journal_entry_ids: Array.isArray(value.command.selected_journal_entry_ids)
+              ? value.command.selected_journal_entry_ids
+              : [],
+          },
+        }
+      }
       localStorage.removeItem(pendingKey.value)
       return null
     }
@@ -167,6 +184,7 @@ export function useGameSession(sessionId: Ref<string | null>) {
       && prior.command.selected_suggestion_id === input.selectedSuggestionId
       && JSON.stringify(prior.command.selected_target_ids) === JSON.stringify(input.selectedTargetIds || [])
       && JSON.stringify(prior.command.selected_item_ids) === JSON.stringify(input.selectedItemIds || [])
+      && JSON.stringify(prior.command.selected_journal_entry_ids) === JSON.stringify(input.selectedJournalEntryIds || [])
     if (samePayload)
       return prior.command
     return {
@@ -178,6 +196,7 @@ export function useGameSession(sessionId: Ref<string | null>) {
       text: input.text.trim(),
       selected_target_ids: input.selectedTargetIds || [],
       selected_item_ids: input.selectedItemIds || [],
+      selected_journal_entry_ids: input.selectedJournalEntryIds || [],
       selected_suggestion_id: input.selectedSuggestionId,
     }
   }
@@ -258,7 +277,7 @@ export function useGameSession(sessionId: Ref<string | null>) {
           && draft.session_version === session.value.version
           && typeof draft.text === 'string'
         ) {
-          return draft.text
+          return withoutLegacyJournalInjection(draft.text)
         }
       }
       catch {

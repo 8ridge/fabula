@@ -7,6 +7,7 @@ import type {
   InteractionDrawer,
   InteractionFontScale,
   InteractionQueuedTurn,
+  InteractionToolComposePayload,
   InteractionTurnDraft,
   InteractionToolName,
 } from '~/types/interaction-ui'
@@ -31,6 +32,7 @@ const mode = ref<StoryMode>('action')
 const fontScale = ref<InteractionFontScale>('large')
 const selectedSuggestionId = ref<string | null>(null)
 const selectedItemIds = ref<string[]>([])
+const selectedJournalEntryIds = ref<string[]>([])
 const activeTool = ref<InteractionToolName | null>(null)
 const openDrawer = ref<InteractionDrawer>(null)
 const toast = ref('')
@@ -55,6 +57,11 @@ const selectedItems = computed(() => {
   if (!game.session.value)
     return []
   return game.session.value.inventory.filter(item => selectedItemIds.value.includes(item.id))
+})
+const selectedJournalEntries = computed(() => {
+  if (!game.session.value)
+    return []
+  return game.session.value.journal.filter(entry => selectedJournalEntryIds.value.includes(entry.id))
 })
 const playerInventoryCount = computed(() =>
   game.session.value?.inventory.filter(item => item.owner_id === 'player' || item.holder_id === 'player').length || 0)
@@ -95,8 +102,18 @@ function chooseSuggestion(suggestion: SuggestedAction) {
   nextTick(() => composer.value?.selectEnd())
 }
 
-function composeFromTool(payload: { text: string, itemId?: string }) {
-  input.value = payload.text
+function composeFromTool(payload: InteractionToolComposePayload) {
+  if (payload.journalEntryId) {
+    const entryExists = game.session.value?.journal.some(entry => entry.id === payload.journalEntryId)
+    if (entryExists)
+      selectedJournalEntryIds.value = [payload.journalEntryId]
+    selectedSuggestionId.value = null
+    activeTool.value = null
+    nextTick(() => composer.value?.focus())
+    return
+  }
+  if (typeof payload.text === 'string')
+    input.value = payload.text
   selectedSuggestionId.value = null
   selectedItemIds.value = payload.itemId ? [payload.itemId] : []
   activeTool.value = null
@@ -107,7 +124,11 @@ function removeItem(itemId: string) {
   selectedItemIds.value = selectedItemIds.value.filter(id => id !== itemId)
 }
 
-function editMessage(payload: { text: string, itemIds: string[] }) {
+function removeJournalEntry(entryId: string) {
+  selectedJournalEntryIds.value = selectedJournalEntryIds.value.filter(id => id !== entryId)
+}
+
+function editMessage(payload: { text: string, itemIds: string[], journalEntryIds: string[] }) {
   input.value = payload.text
   selectedSuggestionId.value = null
   const currentItemIds = new Set(
@@ -116,6 +137,11 @@ function editMessage(payload: { text: string, itemIds: string[] }) {
       .map(item => item.id) || [],
   )
   selectedItemIds.value = payload.itemIds.filter(itemId => currentItemIds.has(itemId))
+  const currentJournalEntryIds = new Set(
+    game.session.value?.journal.map(entry => entry.id) || [],
+  )
+  selectedJournalEntryIds.value = payload.journalEntryIds.filter(entryId =>
+    currentJournalEntryIds.has(entryId))
   nextTick(() => composer.value?.selectEnd())
 }
 
@@ -144,6 +170,12 @@ function readQueue() {
         && typeof (entry as InteractionQueuedTurn).text === 'string'
         && ['action', 'speech', 'exploration'].includes((entry as InteractionQueuedTurn).mode)
         && Array.isArray((entry as InteractionQueuedTurn).selectedItemIds))
+      .map(entry => ({
+        ...entry,
+        selectedJournalEntryIds: Array.isArray(entry.selectedJournalEntryIds)
+          ? entry.selectedJournalEntryIds
+          : [],
+      }))
       .slice(0, 8)
   }
   catch {
@@ -155,6 +187,7 @@ function clearComposer() {
   input.value = ''
   selectedSuggestionId.value = null
   selectedItemIds.value = []
+  selectedJournalEntryIds.value = []
 }
 
 function restoreTurn(turn: InteractionTurnDraft) {
@@ -167,6 +200,11 @@ function restoreTurn(turn: InteractionTurnDraft) {
       .map(item => item.id) || [],
   )
   selectedItemIds.value = turn.selectedItemIds.filter(itemId => availableItemIds.has(itemId))
+  const availableJournalEntryIds = new Set(
+    game.session.value?.journal.map(entry => entry.id) || [],
+  )
+  selectedJournalEntryIds.value = turn.selectedJournalEntryIds.filter(entryId =>
+    availableJournalEntryIds.has(entryId))
   nextTick(() => composer.value?.selectEnd())
 }
 
@@ -188,6 +226,7 @@ function editQueuedTurn(turnId: string) {
           mode: mode.value,
           selectedSuggestionId: null,
           selectedItemIds: [...selectedItemIds.value],
+          selectedJournalEntryIds: [...selectedJournalEntryIds.value],
         }
       : candidate)
     writeQueue()
@@ -219,6 +258,7 @@ async function executeTurn(turn: InteractionQueuedTurn): Promise<boolean> {
     mode: turn.mode,
     selectedSuggestionId: turn.selectedSuggestionId,
     selectedItemIds: turn.selectedItemIds,
+    selectedJournalEntryIds: turn.selectedJournalEntryIds,
   })
   activeTurn.value = null
   if (!succeeded) {
@@ -265,6 +305,7 @@ async function submitTurn() {
     mode: mode.value,
     selectedSuggestionId: selectedSuggestionId.value,
     selectedItemIds: selectedItemIds.value,
+    selectedJournalEntryIds: selectedJournalEntryIds.value,
   }
   clearComposer()
   if (game.sending.value || activeTurn.value) {
@@ -362,6 +403,7 @@ watch(() => game.session.value?.id, (nextId, previousId) => {
   readQueue()
   selectedSuggestionId.value = null
   selectedItemIds.value = []
+  selectedJournalEntryIds.value = []
   activeTool.value = null
   scrollToLatest()
 })
@@ -533,9 +575,11 @@ onBeforeUnmount(() => {
             :suggestions="game.session.value.suggestions"
             :selected-suggestion-id="selectedSuggestionId"
             :selected-items="selectedItems"
+            :selected-journal-entries="selectedJournalEntries"
             @set-mode="setMode"
             @choose-suggestion="chooseSuggestion"
             @remove-item="removeItem"
+            @remove-journal-entry="removeJournalEntry"
             @submit="submitTurn"
             @cancel="game.cancelTurn()"
             @edit-queued="editQueuedTurn"

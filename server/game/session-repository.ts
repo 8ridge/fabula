@@ -37,6 +37,7 @@ export interface EngineSessionSnapshot {
   persona: PlayerPersona
   scene: GameSessionSnapshot['scene']
   inventory: InventoryItemProjection[]
+  journal: JournalEntryProjection[]
   characters: CharacterProjection[]
   locations: LocationProjection[]
   history: Array<{
@@ -151,12 +152,16 @@ function clone<T>(value: T): T {
 }
 
 function makeMessage(
-  input: Omit<GameMessage, 'id' | 'created_at' | 'selected_items'>
-    & { selected_items?: InventoryItemProjection[] },
+  input: Omit<GameMessage, 'id' | 'created_at' | 'selected_items' | 'selected_journal_entries'>
+    & {
+      selected_items?: InventoryItemProjection[]
+      selected_journal_entries?: JournalEntryProjection[]
+    },
 ): GameMessage {
   return {
     ...input,
     selected_items: clone(input.selected_items || []),
+    selected_journal_entries: clone(input.selected_journal_entries || []),
     id: `message:${globalThis.crypto.randomUUID()}`,
     created_at: nowIso(),
   }
@@ -272,6 +277,8 @@ function normalizeStoredSession(value: StoredGameSession): StoredGameSession {
     if (!Array.isArray(message.selected_items))
       message.selected_items = []
     message.selected_items.forEach(item => normalizeItemProvenance(item))
+    if (!Array.isArray(message.selected_journal_entries))
+      message.selected_journal_entries = []
   })
   if (!Array.isArray(session.snapshot.scene.present_character_ids))
     session.snapshot.scene.present_character_ids = [...pack.opening.presentCharacterIds]
@@ -415,6 +422,15 @@ function assertCommandReferences(session: StoredGameSession, command: GameTurnCo
       'ITEM_NOT_ACCESSIBLE',
       'Выбранный предмет сейчас не находится у игрока или уже исчерпан.',
       409,
+    )
+  }
+
+  if (command.selected_journal_entry_ids.some(entryId =>
+    !session.snapshot.journal.some(entry => entry.id === entryId))) {
+    throw new FabulaApiError(
+      'INVALID_COMMAND_REFERENCE',
+      'Ход ссылается на неизвестную запись журнала.',
+      400,
     )
   }
 
@@ -889,6 +905,7 @@ export class GameSessionRepository {
       persona: clone(session.snapshot.persona),
       scene: clone(session.snapshot.scene),
       inventory: clone(session.snapshot.inventory),
+      journal: clone(session.snapshot.journal),
       characters: clone(session.snapshot.characters),
       locations: clone(session.snapshot.locations),
       history: session.turns.slice(-12).map(turn => ({
@@ -914,6 +931,9 @@ export class GameSessionRepository {
     const selectedItems = session.snapshot.inventory
       .filter(item => command.selected_item_ids.includes(item.id))
       .map(item => clone(item))
+    const selectedJournalEntries = session.snapshot.journal
+      .filter(entry => command.selected_journal_entry_ids.includes(entry.id))
+      .map(entry => clone(entry))
     const nextSession = clone(session)
     let sourceEventIds: string[]
     try {
@@ -939,6 +959,7 @@ export class GameSessionRepository {
         mode: command.mode,
         outcome: null,
         selected_items: selectedItems,
+        selected_journal_entries: selectedJournalEntries,
       }),
       makeMessage({
         role: 'narrator',

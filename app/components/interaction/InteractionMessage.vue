@@ -9,12 +9,21 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   copy: [text: string]
-  edit: [payload: { text: string, itemIds: string[] }]
+  edit: [payload: { text: string, itemIds: string[], journalEntryIds: string[] }]
 }>()
 
 const selectedItemViews = computed(() =>
   (props.message.selected_items || []).map(projectInventoryItem),
 )
+const journalEntryTypeLabels = {
+  event: 'Событие',
+  character: 'Персонаж',
+  location: 'Место',
+  item: 'Предмет',
+  clue: 'Улика',
+  promise: 'Обещание',
+  objective: 'Цель',
+}
 
 const modeLabels = {
   action: 'Действие',
@@ -101,6 +110,27 @@ const paragraphs = computed(() => {
       </span>
     </div>
 
+    <div
+      v-if="message.selected_journal_entries?.length"
+      class="mt-2 flex flex-wrap gap-2"
+      aria-label="Записи журнала этого хода"
+    >
+      <span
+        v-for="entry in message.selected_journal_entries"
+        :key="entry.id"
+        class="inline-flex min-w-0 max-w-full items-center gap-2 rounded-xl border border-[rgb(var(--accent-rgb)/.38)] bg-[#111319] p-1 pr-2"
+        :title="entry.summary"
+      >
+        <span class="grid size-9 shrink-0 place-items-center rounded-lg border border-white/10 bg-[rgb(var(--accent-rgb)/.08)] text-[16px] text-[var(--accent-light)]" aria-hidden="true">✒</span>
+        <span class="min-w-0 max-w-[min(58vw,360px)]">
+          <strong class="block truncate text-[11px] font-semibold leading-tight text-fabula-100">{{ entry.title }}</strong>
+          <span class="mt-0.5 block truncate font-interface text-[9px] leading-none text-fabula-300">
+            {{ journalEntryTypeLabels[entry.entry_type] }} · {{ entry.story_time }}
+          </span>
+        </span>
+      </span>
+    </div>
+
     <footer class="mt-1.5 flex justify-end">
       <button
         v-if="message.role === 'player'"
@@ -109,6 +139,7 @@ const paragraphs = computed(() => {
         @click="emit('edit', {
           text: message.text,
           itemIds: (message.selected_items || []).map(item => item.id),
+          journalEntryIds: (message.selected_journal_entries || []).map(entry => entry.id),
         })"
       >
         Изменить

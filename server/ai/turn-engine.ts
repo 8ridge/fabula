@@ -328,6 +328,19 @@ function buildTurnPacket(
   const story = STORY_PACKS[snapshot.storyPackId]
   const context = getStoryPackContext(snapshot.storyPackId)
   const failedAttempts = snapshot.history.filter(turn => turn.outcome === 'failure' || turn.outcome === 'impossible').length
+  const selectedJournalEntries = command.selected_journal_entry_ids
+    .map(entryId => snapshot.journal.find(entry => entry.id === entryId))
+    .filter((entry): entry is EngineSessionSnapshot['journal'][number] => Boolean(entry))
+    .map(entry => ({
+      id: entry.id,
+      entry_type: entry.entry_type,
+      title: entry.title,
+      summary: entry.summary,
+      uncertainty: entry.uncertainty,
+      source_event_ids: entry.source_event_ids,
+      involved_entity_ids: entry.involved_entity_ids,
+      story_time: entry.story_time,
+    }))
   return {
     schema_version: 'turn-input@0.2',
     prompt_version: 'turn-engine@0.3.0',
@@ -340,8 +353,10 @@ function buildTurnPacket(
       text: command.text,
       target_ids: command.selected_target_ids,
       item_ids: command.selected_item_ids,
+      journal_entry_ids: command.selected_journal_entry_ids,
       selected_suggestion_id: command.selected_suggestion_id,
     },
+    journal_references: selectedJournalEntries,
     scene: {
       scene_id: snapshot.scene.id,
       mode: command.mode,
@@ -649,6 +664,7 @@ function buildQuickFallbackPacket(
     schema_version: 'quick-turn-input@1.0',
     mode: packet.mode ?? null,
     player_input: packet.player_input ?? null,
+    journal_references: packet.journal_references ?? [],
     scene: packet.scene ?? null,
     canon_snapshot: {
       title: canon.title ?? null,

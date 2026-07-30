@@ -254,10 +254,11 @@ export function parseTurnCommand(value: unknown): TurnCommand {
     'text',
     'selected_target_ids',
     'selected_item_ids',
+    'selected_journal_entry_ids',
     'selected_suggestion_id',
   ] as const
   exactKeys(value, keys, '$')
-  requiredKeys(value, keys, '$')
+  requiredKeys(value, keys.filter(key => key !== 'selected_journal_entry_ids'), '$')
 
   if (value.schema_version !== 'turn-command@1.0')
     throw new ContractError('UNSUPPORTED_SCHEMA', 'Неподдерживаемая версия команды.', ['$.schema_version'])
@@ -271,6 +272,9 @@ export function parseTurnCommand(value: unknown): TurnCommand {
   boundedInteger(value.expected_session_version, '$.expected_session_version', 0, 1_000_000)
   const selectedTargetIds = stringArray(value.selected_target_ids, '$.selected_target_ids', 16)
   const selectedItemIds = stringArray(value.selected_item_ids, '$.selected_item_ids', 16)
+  const selectedJournalEntryIds = value.selected_journal_entry_ids === undefined
+    ? []
+    : stringArray(value.selected_journal_entry_ids, '$.selected_journal_entry_ids', 8)
   if (value.selected_suggestion_id !== null && (typeof value.selected_suggestion_id !== 'string' || value.selected_suggestion_id.length > 160))
     throw new ContractError('INVALID_FIELD', 'Некорректный suggestion_id.', ['$.selected_suggestion_id'])
 
@@ -283,6 +287,7 @@ export function parseTurnCommand(value: unknown): TurnCommand {
     text: text.trim(),
     selected_target_ids: selectedTargetIds,
     selected_item_ids: selectedItemIds,
+    selected_journal_entry_ids: selectedJournalEntryIds,
     selected_suggestion_id: value.selected_suggestion_id as string | null,
   }
 }

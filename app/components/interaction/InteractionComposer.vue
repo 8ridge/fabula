@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import type { InventoryItemProjection, SuggestedAction } from '#shared/game'
+import type {
+  InventoryItemProjection,
+  JournalEntryProjection,
+  SuggestedAction,
+} from '#shared/game'
 import type {
   InteractionMode,
   InteractionQueuedTurn,
@@ -18,6 +22,7 @@ const props = defineProps<{
   suggestions: SuggestedAction[]
   selectedSuggestionId: string | null
   selectedItems: InventoryItemProjection[]
+  selectedJournalEntries: JournalEntryProjection[]
 }>()
 
 const selectedItemViews = computed(() => props.selectedItems.map(projectInventoryItem))
@@ -26,6 +31,7 @@ const emit = defineEmits<{
   setMode: [mode: InteractionMode]
   chooseSuggestion: [suggestion: SuggestedAction]
   removeItem: [itemId: string]
+  removeJournalEntry: [entryId: string]
   submit: []
   cancel: []
   editQueued: [turnId: string]
@@ -43,6 +49,15 @@ const modeLabels: Record<InteractionMode, string> = {
   action: 'Действие',
   speech: 'Речь',
   exploration: 'Исследование',
+}
+const journalEntryTypeLabels: Record<JournalEntryProjection['entry_type'], string> = {
+  event: 'Событие',
+  character: 'Персонаж',
+  location: 'Место',
+  item: 'Предмет',
+  clue: 'Улика',
+  promise: 'Обещание',
+  objective: 'Цель',
 }
 const placeholder = computed(() => {
   if (props.turnPending)
@@ -153,7 +168,11 @@ defineExpose({ resize, focus, selectEnd })
         </button>
       </div>
 
-      <div v-if="selectedItemViews.length" class="mb-2 flex flex-wrap gap-2" aria-label="Предметы в ходе">
+      <div
+        v-if="selectedItemViews.length || selectedJournalEntries.length"
+        class="mb-2 flex flex-wrap gap-2"
+        aria-label="Ссылки в ходе"
+      >
         <span
           v-for="item in selectedItemViews"
           :key="item.id"
@@ -174,6 +193,28 @@ defineExpose({ resize, focus, selectEnd })
             class="grid size-7 shrink-0 place-items-center rounded-lg text-[16px] text-fabula-300 transition hover:bg-white/8 hover:text-fabula-100"
             :aria-label="`Убрать ${item.name} из хода`"
             @click="emit('removeItem', item.id)"
+          >
+            ×
+          </button>
+        </span>
+        <span
+          v-for="entry in selectedJournalEntries"
+          :key="entry.id"
+          class="inline-flex min-w-0 max-w-full items-center gap-2 rounded-xl border border-[rgb(var(--accent-rgb)/.42)] bg-[rgb(var(--accent-rgb)/.09)] p-1 pr-1.5 text-[var(--accent-light)]"
+          :title="entry.summary"
+        >
+          <span class="grid size-9 shrink-0 place-items-center rounded-lg border border-white/10 bg-[#111319] text-[17px]" aria-hidden="true">✒</span>
+          <span class="min-w-0 max-w-[min(58vw,360px)]">
+            <strong class="block truncate text-[12px] font-semibold leading-tight">{{ entry.title }}</strong>
+            <span class="mt-0.5 block truncate font-interface text-[9px] leading-none text-fabula-300">
+              {{ journalEntryTypeLabels[entry.entry_type] }} · {{ entry.story_time }}
+            </span>
+          </span>
+          <button
+            type="button"
+            class="grid size-7 shrink-0 place-items-center rounded-lg text-[16px] text-fabula-300 transition hover:bg-white/8 hover:text-fabula-100"
+            :aria-label="`Убрать запись «${entry.title}» из хода`"
+            @click="emit('removeJournalEntry', entry.id)"
           >
             ×
           </button>

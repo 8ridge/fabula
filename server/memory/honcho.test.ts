@@ -22,6 +22,7 @@ const command: GameTurnCommand = {
   text: 'Я использую аптечку.',
   selected_target_ids: [],
   selected_item_ids: ['item:kit'],
+  selected_journal_entry_ids: [],
   selected_suggestion_id: null,
 }
 
@@ -87,6 +88,7 @@ function gameResponse(): GameTurnResponse {
         mode: 'action',
         outcome: null,
         selected_items: [item],
+        selected_journal_entries: [],
       },
       {
         id: 'message:narrator',
@@ -97,6 +99,7 @@ function gameResponse(): GameTurnResponse {
         mode: null,
         outcome: 'success',
         selected_items: [],
+        selected_journal_entries: [],
       },
     ],
     suggestions: [],

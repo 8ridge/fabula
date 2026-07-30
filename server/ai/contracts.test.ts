@@ -11,6 +11,7 @@ export function validTurnCommand(overrides: Record<string, unknown> = {}) {
     text: 'Я осматриваю арку.',
     selected_target_ids: [],
     selected_item_ids: [],
+    selected_journal_entry_ids: [],
     selected_suggestion_id: null,
     ...overrides,
   }
@@ -94,6 +95,20 @@ describe('turn command contract', () => {
     const parsed = parseTurnCommand(validTurnCommand())
     expect(parsed.schema_version).toBe('turn-command@1.0')
     expect(parsed.text).toBe('Я осматриваю арку.')
+    expect(parsed.selected_journal_entry_ids).toEqual([])
+  })
+
+  test('accepts journal references and normalizes older commands without them', () => {
+    const withReference = parseTurnCommand(validTurnCommand({
+      selected_journal_entry_ids: ['journal:12345678'],
+    }))
+    expect(withReference.selected_journal_entry_ids).toEqual(['journal:12345678'])
+
+    const {
+      selected_journal_entry_ids: _journalEntryIds,
+      ...olderCommand
+    } = validTurnCommand()
+    expect(parseTurnCommand(olderCommand).selected_journal_entry_ids).toEqual([])
   })
 
   test('rejects forged server authority fields', () => {

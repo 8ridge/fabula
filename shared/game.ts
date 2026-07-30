@@ -35,6 +35,7 @@ export interface GameMessage {
   mode: StoryMode | null
   outcome: 'success' | 'partial_success' | 'failure' | 'impossible' | null
   selected_items: InventoryItemProjection[]
+  selected_journal_entries: JournalEntryProjection[]
 }
 
 export interface InventoryItemProjection {
@@ -164,6 +165,7 @@ export interface GameTurnCommand {
   text: string
   selected_target_ids: string[]
   selected_item_ids: string[]
+  selected_journal_entry_ids: string[]
   selected_suggestion_id: string | null
 }
 
