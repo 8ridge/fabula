@@ -40,6 +40,14 @@ export interface JournalProjectionDraft {
   story_time: string
 }
 
+export interface CharacterProjectionUpdateDraft {
+  character_id: string
+  source_event_ids: string[]
+  relation: string | null
+  description: string | null
+  knowledge_summary: string | null
+}
+
 export interface JournalProjectionContext {
   snapshot: EngineSessionSnapshot
   output: TurnOutput
@@ -49,6 +57,7 @@ export interface JournalProjectionContext {
 
 export interface JournalProjectionResult {
   entries: JournalProjectionDraft[]
+  characterUpdates: CharacterProjectionUpdateDraft[]
   fallbackUsed: boolean
   modelRuns: SafeModelRun[]
 }
@@ -234,6 +243,30 @@ function assertJournalProjection(
       throw new FabulaApiError('MODEL_AUTHORITY_ERROR', 'Журнал сослался на неподтвержденное событие.', 502)
     if (!entry.title.trim() || entry.title.length > 160 || !entry.summary.trim() || entry.summary.length > 2_000)
       throw new FabulaApiError('MODEL_CONTRACT_ERROR', 'Журнал вернул некорректный текст.', 502)
+  }
+}
+
+function assertCharacterProjectionUpdates(
+  updates: CharacterProjectionUpdateDraft[],
+  characters: CharacterProjection[],
+  sourceEventIds: string[],
+): void {
+  const knownCharacters = new Set(characters.map(character => character.id))
+  const committedEvents = new Set(sourceEventIds)
+  const seenCharacters = new Set<string>()
+  for (const update of updates) {
+    if (!knownCharacters.has(update.character_id) || seenCharacters.has(update.character_id))
+      throw new FabulaApiError('MODEL_AUTHORITY_ERROR', 'Индекс персонажей использовал неизвестного или повторного персонажа.', 502)
+    seenCharacters.add(update.character_id)
+    if (!update.source_event_ids.length
+      || update.source_event_ids.some(eventId => !committedEvents.has(eventId))) {
+      throw new FabulaApiError('MODEL_AUTHORITY_ERROR', 'Индекс персонажей сослался на неподтвержденное событие.', 502)
+    }
+    const values = [update.relation, update.description, update.knowledge_summary]
+    if (values.every(value => value === null)
+      || values.some(value => value !== null && (!value.trim() || value.length > 2_000))) {
+      throw new FabulaApiError('MODEL_CONTRACT_ERROR', 'Индекс персонажей вернул некорректное обновление.', 502)
+    }
   }
 }
 
@@ -1130,10 +1163,16 @@ export class GameSessionRepository {
           reservedJournalIds,
           sourceEventIds,
         )
+        assertCharacterProjectionUpdates(
+          journalProjection.characterUpdates,
+          nextSession.snapshot.characters,
+          sourceEventIds,
+        )
       }
       catch {
         journalProjection = {
           entries: [],
+          characterUpdates: [],
           fallbackUsed: true,
           modelRuns: [],
         }
@@ -1148,6 +1187,16 @@ export class GameSessionRepository {
           })),
           ...nextSession.snapshot.journal.filter(entry => !reservedIds.has(entry.id)),
         ].slice(0, 80)
+      }
+      for (const update of journalProjection.characterUpdates) {
+        const character = nextSession.snapshot.characters
+          .find(candidate => candidate.id === update.character_id)!
+        if (update.relation !== null)
+          character.relation = update.relation
+        if (update.description !== null)
+          character.description = update.description
+        if (update.knowledge_summary !== null)
+          character.knowledge_summary = update.knowledge_summary
       }
       response.fallback_used = result.fallbackUsed || journalProjection.fallbackUsed
       response.session = clone(nextSession.snapshot)

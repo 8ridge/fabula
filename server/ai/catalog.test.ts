@@ -13,7 +13,7 @@ describe('AI registry', () => {
     expect(AI_MODULES['scene-plan-paid'].modelId).toBe('nemotron-paid')
     expect(AI_MODULES['authoritative-turn'].devAlternativeModelId).toBe('aion')
     expect(AI_MODULES.inventory.modelId).toBe('nemotron-paid')
-    expect(AI_MODULES.journal.modelId).toBe('nemotron-journal')
+    expect(AI_MODULES.journal.modelId).toBe('mistral')
   })
 
   test('does not hide available modules behind runtime feature flags', () => {
@@ -39,8 +39,8 @@ describe('AI registry', () => {
 
   test('marks authoritative prompt fragments as internal-only', () => {
     expect(AI_MODULES.inventory.standalone).toBe(false)
-    expect(AI_MODULES.inventory.contract).toBe('inventory-advisory@1.0')
-    expect(AI_MODULES.inventory.fallbackModelId).toBe('mistral')
+    expect(AI_MODULES.inventory.contract).toBe('inventory-advisory@1.1')
+    expect(AI_MODULES.inventory.fallbackModelId).toBe('nemotron-inventory-fallback')
     expect(AI_MODULES.journal.standalone).toBe(false)
     expect(AI_MODULES.journal.fallbackPolicy).toBe('deterministic-server-projection')
     expect(AI_MODULES['action-tracker'].standalone).toBe(false)

@@ -117,6 +117,11 @@ function inventoryAdvisoryFor(request: ChatJsonRequest) {
   const playerInput = request.payload.player_input as Record<string, unknown>
   const selectedItemIds = playerInput.selected_item_ids as string[]
   const serverInventory = request.payload.server_inventory as Array<Record<string, unknown>>
+  const currentScene = request.payload.current_scene as Record<string, unknown>
+  const authority = request.payload.authority as Record<string, unknown>
+  const acquisitionRequested = /(?:беру|взять|поднять|подобрать|забрать)/iu
+    .test(String(playerInput.text))
+  const reservedItemId = (authority.reserved_item_ids as string[])[0]
   const selectedItems = selectedItemIds.map((itemId) => {
     const item = serverInventory.find(candidate => candidate.item_id === itemId)!
     return {
@@ -133,21 +138,125 @@ function inventoryAdvisoryFor(request: ChatJsonRequest) {
       quantity: item.quantity,
       charges: item.charges,
       condition: item.condition,
+      slot: item.slot,
+      version: item.version,
       provenance_summary: item.provenance_summary,
       reason_codes: [],
     }
   })
+  const acquisitionCandidate = acquisitionRequested && reservedItemId
+    ? {
+        type: 'inventory.create_instance',
+        item_id: reservedItemId,
+        required_on_success: true,
+        amount: 1,
+        from_entity_id: null,
+        to_entity_id: 'player',
+        reason: 'Игрок явно берет переносимую бутылку себе.',
+        expected_state: null,
+        resulting_state: {
+          owner_id: 'player',
+          holder_id: 'player',
+          location_id: currentScene.location_id,
+          quantity: 1,
+          charges: null,
+          condition: 'usable',
+          slot: 'hand',
+          version: 0,
+        },
+        instance_draft: {
+          template_id: 'item-template:water-bottle',
+          name: 'Бутылка с темной жидкостью',
+          category: 'resource',
+          description: 'Липкая стеклянная бутылка с темной жидкостью.',
+          owner_id: 'player',
+          holder_id: 'player',
+          location_id: currentScene.location_id,
+          quantity: 1,
+          charges: null,
+          condition: 'usable',
+          slot: 'hand',
+        },
+        narrative_requirements: ['Бутылка физически остается у игрока.'],
+        forbidden_narrative_claims: ['Игрок добровольно оставляет бутылку.'],
+      }
+    : null
   return {
-    module_version: 'inventory-advisory@1.0',
+    module_version: 'inventory-advisory@1.1',
     action_feasible: selectedItems.every(item => item.accessible),
-    reason_codes: selectedItems.length ? [] : ['no_item_interaction'],
+    reason_codes: acquisitionCandidate
+      ? ['portable_object_acquisition']
+      : selectedItems.length ? [] : ['no_item_interaction'],
     selected_items: selectedItems,
-    operation_candidates: [],
+    tracked_items: serverInventory.map(item => ({
+      item_id: item.item_id,
+      selected: selectedItemIds.includes(String(item.item_id)),
+      accessible: item.holder_id === 'player'
+        && item.location_id === currentScene.location_id
+        && item.condition !== 'spent'
+        && Number(item.quantity) > 0
+        && item.charges !== 0,
+      owner_id: item.owner_id,
+      holder_id: item.holder_id,
+      location_id: item.location_id,
+      quantity: item.quantity,
+      charges: item.charges,
+      condition: item.condition,
+      slot: item.slot,
+      version: item.version,
+      provenance_summary: item.provenance_summary,
+      scene_relation: item.condition === 'spent' || Number(item.quantity) === 0 || item.charges === 0
+        ? 'spent'
+        : item.holder_id === 'player'
+          ? 'carried_by_player'
+          : item.location_id === currentScene.location_id
+            ? 'present_in_scene'
+            : 'remote',
+      reason_codes: [],
+    })),
+    referenced_objects: acquisitionCandidate
+      ? [{
+          normalized_name: 'бутылка с темной жидкостью',
+          source: 'player_input',
+          portability: 'portable',
+          continuity_status: 'candidate_new_instance',
+          matched_item_id: reservedItemId,
+          evidence: [String(playerInput.text)],
+        }]
+      : [],
+    operation_candidates: acquisitionCandidate ? [acquisitionCandidate] : [],
+    scene_sync: {
+      current_location_id: currentScene.location_id,
+      player_carried_item_ids: serverInventory
+        .filter(item => item.holder_id === 'player')
+        .map(item => item.item_id),
+      scene_item_ids: serverInventory
+        .filter(item => item.location_id === currentScene.location_id)
+        .map(item => item.item_id),
+      remote_item_ids: serverInventory
+        .filter(item => item.location_id !== currentScene.location_id)
+        .map(item => item.item_id),
+      orphaned_item_ids: [],
+      consistency_errors: [],
+    },
+    story_sync: {
+      canon_compatible: true,
+      scene_compatible: true,
+      plot_relevant_item_ids: reservedItemId && acquisitionCandidate ? [reservedItemId] : [],
+      required_narrative_facts: acquisitionCandidate ? ['Бутылка остается у игрока.'] : [],
+      forbidden_narrative_claims: acquisitionCandidate ? ['Бутылка остается на столе после успеха.'] : [],
+      continuity_risks: [],
+      unresolved_questions: [],
+    },
     interaction_effects: {
       time_cost: 'none',
       noise: 'none',
+      hands_required: acquisitionCandidate ? 1 : 0,
+      storage_required: acquisitionCandidate ? 'hand' : 'none',
       traces: [],
       witness_ids: [],
+      resource_changes: [],
+      condition_changes: [],
     },
     consistency_notes: [],
   }
@@ -156,7 +265,7 @@ function inventoryAdvisoryFor(request: ChatJsonRequest) {
 function createEngine(client: OpenRouterClient): TurnEngine {
   const clientWithInventoryStub = {
     chatJson: async (request: ChatJsonRequest) => {
-      if (request.schema?.name === 'fabula_inventory_advisory_1_0') {
+      if (request.schema?.name === 'fabula_inventory_advisory_1_1') {
         return {
           requestId: 'request:inventory-stub',
           model: request.model,
@@ -270,7 +379,7 @@ describe('turn engine model telemetry', () => {
         return {
           requestId: `request:${requests.length}`,
           model: request.model,
-          output: request.schema?.name === 'fabula_inventory_advisory_1_0'
+          output: request.schema?.name === 'fabula_inventory_advisory_1_1'
             ? inventoryAdvisoryFor(request)
             : successfulTurnOutput(),
           usage: { total_tokens: 10, cost: 0.001 },
@@ -281,7 +390,7 @@ describe('turn engine model telemetry', () => {
     const result = await createPipelineEngine(client).execute(command, snapshot)
 
     expect(requests.map(request => request.schema?.name)).toEqual([
-      'fabula_inventory_advisory_1_0',
+      'fabula_inventory_advisory_1_1',
       'fabula_turn_output_0_2',
     ])
     expect(requests[0]).toMatchObject({
@@ -290,18 +399,30 @@ describe('turn engine model telemetry', () => {
       payload: {
         schema_version: 'inventory-input@1.0',
         turn_id: command.idempotency_key,
+        current_scene: {
+          objective: snapshot.scene.objective,
+          present_character_ids: snapshot.scene.present_character_ids,
+        },
+        recent_turns: [{
+          turn_id: snapshot.history[0]!.turnId,
+          narrative_summary: snapshot.history[0]!.narrative,
+        }],
+        pack_constraints: {
+          canonical_core_markdown: storyPackSource.canonicalCore,
+          source_hash: storyPackSource.sourceHash,
+        },
       },
     })
     expect(result.advisoryUsed).toBe(true)
     expect(result.modelRuns.map(run => run.role)).toEqual(['inventory', 'primary'])
   })
 
-  test('uses the inventory fallback before starting the authoritative turn', async () => {
+  test('uses the Nemotron inventory fallback before starting the authoritative turn', async () => {
     const requests: ChatJsonRequest[] = []
     const client = {
       chatJson: async (request: ChatJsonRequest) => {
         requests.push(request)
-        const inventoryAttempt = request.schema?.name === 'fabula_inventory_advisory_1_0'
+        const inventoryAttempt = request.schema?.name === 'fabula_inventory_advisory_1_1'
         return {
           requestId: `request:${requests.length}`,
           model: request.model,
@@ -319,7 +440,7 @@ describe('turn engine model telemetry', () => {
 
     expect(requests.map(request => request.model)).toEqual([
       'nvidia/nemotron-3-ultra-550b-a55b',
-      'mistralai/mistral-small-2603',
+      'nvidia/nemotron-3-super-120b-a12b',
       'deepseek/deepseek-v4-flash',
     ])
     expect(requests[1]?.timeoutMs).toBe(TURN_MODEL_TIMEOUTS.inventoryFallbackMs)
@@ -543,9 +664,11 @@ describe('turn engine model telemetry', () => {
     expect(result.model).toBe('aion-labs/aion-3.0-mini')
   })
 
-  test('projects the confirmed turn into the journal with Nemotron 3 Super', async () => {
+  test('projects the confirmed turn into the journal and character index with Mistral', async () => {
     const eventId = snapshot.reservedIds.events[0]!
     const journalId = 'journal:reserved:0001'
+    const characterId = 'character:ilva-rein'
+    const factId = 'fact:ilva-heard-door'
     const output = successfulTurnOutput()
     const requests: ChatJsonRequest[] = []
     const client = {
@@ -555,7 +678,7 @@ describe('turn engine model telemetry', () => {
           requestId: 'request:journal',
           model: request.model,
           output: {
-            module_version: 'journal-compiler@0.2',
+            module_version: 'journal-character-compiler@1.0',
             entries: [{
               entry_id: journalId,
               event_refs: [eventId],
@@ -570,7 +693,13 @@ describe('turn engine model telemetry', () => {
               open_threads: [],
               tags: ['дверь'],
             }],
-            character_index_updates: [],
+            character_updates: [{
+              character_id: characterId,
+              source_event_refs: [eventId],
+              relation_summary: 'Помогает проверять источник шума',
+              public_description: null,
+              knowledge_fact_refs: [factId],
+            }],
             location_index_updates: [],
             quest_index_updates: [],
             server_only_callback_hooks: [],
@@ -584,15 +713,36 @@ describe('turn engine model telemetry', () => {
     const result = await engine.projectJournal(command, {
       snapshot: {
         ...snapshot,
+        characters: [{
+          id: characterId,
+          name: 'Илва Рейн',
+          role: 'Младшая архивистка',
+          relation: 'Первый возможный союзник',
+          description: 'Обнаружила восьмой круг.',
+          knowledge_summary: '',
+        }],
         confirmedEvents: [{
           id: eventId,
           kind: 'door_inspected',
           actorIds: ['player'],
-          targetIds: [],
+          targetIds: [characterId],
           itemIds: [],
           locationId: snapshot.scene.location_id,
           sourceTurnId: command.idempotency_key,
           createdAt: '2026-01-01T00:00:00.000Z',
+        }],
+        confirmedFacts: [{
+          id: factId,
+          claim: 'Илва услышала шум за дверью.',
+          truthStatus: 'observed',
+          sourceEventIds: [eventId],
+          createdAt: '2026-01-01T00:00:00.000Z',
+        }],
+        knowledge: [{
+          characterId,
+          factId,
+          sourceEventId: eventId,
+          confidence: 1,
         }],
       },
       output,
@@ -601,10 +751,10 @@ describe('turn engine model telemetry', () => {
     })
 
     expect(requests[0]).toMatchObject({
-      model: 'nvidia/nemotron-3-super-120b-a12b',
+      model: 'mistralai/mistral-small-2603',
       jsonMode: 'json-schema',
       schema: {
-        name: 'fabula_journal_compiler_0_2',
+        name: 'fabula_journal_character_compiler_1_0',
       },
     })
     expect(result).toMatchObject({
@@ -613,6 +763,11 @@ describe('turn engine model telemetry', () => {
         id: journalId,
         title: 'Проверка двери',
         source_event_ids: [eventId],
+      }],
+      characterUpdates: [{
+        character_id: characterId,
+        relation: 'Помогает проверять источник шума',
+        knowledge_summary: 'Илва услышала шум за дверью.',
       }],
       modelRuns: [{
         role: 'journal',
@@ -684,12 +839,26 @@ describe('turn engine model telemetry', () => {
       model: 'deepseek/deepseek-v4-flash',
       payload: {
         inventory_advisory: {
-          module_version: 'inventory-advisory@1.0',
+          module_version: 'inventory-advisory@1.1',
           selected_items: [{
             item_id: 'item:kit',
             accessible: true,
             provenance_summary: 'Получена на Земле до начала истории.',
           }],
+          tracked_items: [{
+            item_id: 'item:kit',
+            selected: true,
+            scene_relation: 'carried_by_player',
+            version: 0,
+          }],
+          scene_sync: {
+            player_carried_item_ids: ['item:kit'],
+            scene_item_ids: ['item:kit'],
+          },
+          story_sync: {
+            canon_compatible: true,
+            scene_compatible: true,
+          },
         },
         external_memory: {
           source: 'honcho',
@@ -720,7 +889,7 @@ describe('turn engine model telemetry', () => {
     const client = {
       chatJson: async (request: ChatJsonRequest) => {
         requests.push(request)
-        if (request.schema?.name === 'fabula_inventory_advisory_1_0') {
+        if (request.schema?.name === 'fabula_inventory_advisory_1_1') {
           return {
             requestId: 'request:bottle-inventory',
             model: request.model,
@@ -774,7 +943,7 @@ describe('turn engine model telemetry', () => {
     const result = await createPipelineEngine(client).execute(bottleCommand, bottleSnapshot)
 
     expect(requests.map(request => request.schema?.name)).toEqual([
-      'fabula_inventory_advisory_1_0',
+      'fabula_inventory_advisory_1_1',
       'fabula_turn_output_0_2',
     ])
     expect(requests[1]).toMatchObject({
@@ -817,7 +986,7 @@ describe('turn engine model telemetry', () => {
     const client = {
       chatJson: async (request: ChatJsonRequest) => {
         requests.push(request)
-        if (request.schema?.name === 'fabula_inventory_advisory_1_0') {
+        if (request.schema?.name === 'fabula_inventory_advisory_1_1') {
           return {
             requestId: 'request:bottle-inventory',
             model: request.model,

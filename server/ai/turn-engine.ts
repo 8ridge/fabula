@@ -2,7 +2,7 @@ import { STORY_PACKS } from '../../shared/storypacks'
 import type { StoryPackId } from '../../shared/storypacks'
 import { AI_MODELS } from './catalog'
 import type { FabulaAiConfig } from './config'
-import type { JsonValue, TurnCommand, TurnOutput } from './contracts'
+import type { JsonValue, TurnCommand, TurnOperation, TurnOutput } from './contracts'
 import { ContractError, parseTurnOutput, TURN_OUTPUT_JSON_SCHEMA } from './contracts'
 import { AiExecutionError, FabulaApiError } from './http'
 import type { SafeModelRun } from './http'
@@ -36,11 +36,11 @@ export interface TurnExternalMemory {
 }
 
 export const TURN_MODEL_TIMEOUTS = {
-  inventoryPrimaryMs: 10_000,
-  inventoryFallbackMs: 8_000,
+  inventoryPrimaryMs: 17_000,
+  inventoryFallbackMs: 12_000,
   primaryMs: 17_000,
   fallbackMs: 8_000,
-  journalMs: 8_000,
+  journalMs: 10_000,
 } as const
 
 const QUICK_TURN_PROMPT = `Ты создаешь короткое безопасное продолжение интерактивной истории.
@@ -211,6 +211,7 @@ export class TurnEngine {
     if (!context.sourceEventIds.length) {
       return {
         entries: [],
+        characterUpdates: [],
         fallbackUsed: false,
         modelRuns: [],
       }
@@ -221,18 +222,19 @@ export class TurnEngine {
     try {
       const storyPackSource = await this.storyPackSourceLoader(context.snapshot.storyPackId)
       result = await this.client.chatJson({
-        model: AI_MODELS.nemotronJournal.slug,
+        model: AI_MODELS.mistral.slug,
         system: await this.promptLoader('journal'),
         payload: buildJournalPacket(command, context, storyPackSource),
-        maxOutputTokens: 1200,
+        maxOutputTokens: 2200,
         timeoutMs: TURN_MODEL_TIMEOUTS.journalMs,
         signal,
-        maxPrice: { prompt: 0.1, completion: 0.45 },
+        maxPrice: { prompt: 0.25, completion: 0.8 },
         schema: getStandaloneContract('journal'),
-        jsonMode: AI_MODELS.nemotronJournal.jsonMode,
+        jsonMode: AI_MODELS.mistral.jsonMode,
       })
       const output = parseStandaloneOutput('journal', result.output)
       const entries = journalDraftsFromOutput(output, command, context)
+      const characterUpdates = characterDraftsFromOutput(output, context)
       modelRuns.push({
         role: 'journal',
         model: result.model,
@@ -244,6 +246,7 @@ export class TurnEngine {
       })
       return {
         entries,
+        characterUpdates,
         fallbackUsed: false,
         modelRuns,
       }
@@ -251,7 +254,7 @@ export class TurnEngine {
     catch (error) {
       modelRuns.push({
         role: 'journal',
-        model: result?.model || openRouterModel(error) || AI_MODELS.nemotronJournal.slug,
+        model: result?.model || openRouterModel(error) || AI_MODELS.mistral.slug,
         request_id: result?.requestId || openRouterRequestId(error),
         usage: result?.usage || openRouterUsage(error),
         status: 'discarded',
@@ -262,6 +265,7 @@ export class TurnEngine {
         throw error
       return {
         entries: [],
+        characterUpdates: [],
         fallbackUsed: true,
         modelRuns,
       }
@@ -294,7 +298,7 @@ export class TurnEngine {
       })
       const proposal = guardQuickActionAlignment(parseQuickTurnProposal(result.output), command)
       const output = quickProposalToTurnOutput(proposal, command, snapshot)
-      assertInventoryAlignment(output, inventoryAdvisory, command)
+      assertInventoryAlignment(output, inventoryAdvisory, command, snapshot)
       validateOutput?.(output)
       modelRuns.push({
         role: 'fallback',
@@ -341,11 +345,11 @@ export class TurnEngine {
         jsonMode: AI_MODELS.nemotronPaid.jsonMode,
       },
       {
-        model: AI_MODELS.mistral.slug,
+        model: AI_MODELS.nemotronInventoryFallback.slug,
         role: 'inventory-fallback' as const,
         timeoutMs: TURN_MODEL_TIMEOUTS.inventoryFallbackMs,
-        maxPrice: { prompt: 0.25, completion: 0.8 },
-        jsonMode: AI_MODELS.mistral.jsonMode,
+        maxPrice: { prompt: 0.1, completion: 0.45 },
+        jsonMode: AI_MODELS.nemotronInventoryFallback.jsonMode,
       },
     ]
 
@@ -356,7 +360,7 @@ export class TurnEngine {
           model: attempt.model,
           system: await this.promptLoader('inventory'),
           payload: packet,
-          maxOutputTokens: 1800,
+          maxOutputTokens: 3200,
           timeoutMs: attempt.timeoutMs,
           signal,
           maxPrice: attempt.maxPrice,
@@ -366,7 +370,6 @@ export class TurnEngine {
         const advisory = requireExplicitAcquisitionCandidate(
           parseStandaloneOutput('inventory', result.output),
           command,
-          snapshot,
         )
         assertInventoryAdvisoryAlignment(advisory, command, snapshot)
         modelRuns.push({
@@ -444,7 +447,7 @@ export class TurnEngine {
       )
       assertKnownReferences(output, snapshot)
       assertCommandOutcomeAlignment(output, command)
-      assertInventoryAlignment(output, inventoryAdvisory, command)
+      assertInventoryAlignment(output, inventoryAdvisory, command, snapshot)
       validateOutput?.(output)
       modelRuns.push({
         role,
@@ -490,9 +493,12 @@ function buildInventoryPacket(
     },
     current_scene: {
       scene_id: snapshot.scene.id,
+      title: snapshot.scene.title,
       location_id: snapshot.scene.location_id,
       location_name: snapshot.scene.location_name,
       story_time: snapshot.scene.story_time,
+      objective: snapshot.scene.objective,
+      present_character_ids: snapshot.scene.present_character_ids,
     },
     server_inventory: snapshot.inventory.map(item => ({
       item_id: item.id,
@@ -510,34 +516,74 @@ function buildInventoryPacket(
       version: item.version,
       provenance_summary: item.provenance.summary,
     })),
-    present_characters: snapshot.scene.present_character_ids.map(characterId => ({
-      character_id: characterId,
-      name: STORY_PACKS[snapshot.storyPackId].publicCharacters
-        .find(character => character.id === characterId)?.name || characterId,
+    character_state: snapshot.characters.map(character => ({
+      character_id: character.id,
+      name: character.name,
+      role: character.role,
+      relation: character.relation,
+      public_description: character.description,
+      knowledge_summary: character.knowledge_summary,
+      present_in_scene: snapshot.scene.present_character_ids.includes(character.id),
     })),
-    recent_turns: snapshot.history.slice(-4).map(turn => ({
+    location_state: snapshot.locations.map(location => ({
+      location_id: location.id,
+      name: location.name,
+      description: location.description,
+      status: location.status,
+    })),
+    journal_state: snapshot.journal.map(entry => ({
+      entry_id: entry.id,
+      entry_type: entry.entry_type,
+      title: entry.title,
+      summary: entry.summary,
+      uncertainty: entry.uncertainty,
+      source_event_ids: entry.source_event_ids,
+      involved_entity_ids: entry.involved_entity_ids,
+      story_time: entry.story_time,
+    })),
+    per_character_knowledge: snapshot.knowledge.map((knowledge) => {
+      const fact = snapshot.confirmedFacts.find(candidate => candidate.id === knowledge.factId)
+      return {
+        character_id: knowledge.characterId,
+        fact_id: knowledge.factId,
+        claim: fact?.claim || null,
+        source_event_id: knowledge.sourceEventId,
+        confidence: knowledge.confidence,
+      }
+    }),
+    recent_turns: snapshot.history.map(turn => ({
       turn_id: turn.turnId,
+      scene_id: turn.sceneId,
+      mode: turn.mode,
       player_input: turn.playerText.slice(0, 800),
       outcome: turn.outcome,
       narrative_summary: turn.narrative.slice(0, 800),
+      costs_and_consequences: turn.costsAndConsequences,
+      unresolved_ambiguities: turn.unresolvedAmbiguities,
     })),
-    confirmed_events: snapshot.confirmedEvents.slice(-16).map(event => ({
+    confirmed_events: snapshot.confirmedEvents.map(event => ({
       event_id: event.id,
       kind: event.kind,
       actor_ids: event.actorIds,
       target_ids: event.targetIds,
       item_ids: event.itemIds,
       location_id: event.locationId,
+      source_turn_id: event.sourceTurnId,
     })),
-    confirmed_facts: snapshot.confirmedFacts.slice(-16).map(fact => ({
+    confirmed_facts: snapshot.confirmedFacts.map(fact => ({
       fact_id: fact.id,
       claim: fact.claim,
       truth_status: fact.truthStatus,
+      source_event_ids: fact.sourceEventIds,
     })),
     pack_constraints: {
       story_pack_id: snapshot.storyPackId,
+      story_pack_version: snapshot.storyPackVersion,
+      technical_pack_id: storyPackSource.technicalPackId,
+      source_hash: storyPackSource.sourceHash,
       hard_canon: storyPackSource.hardCanon,
       prompt_overlay: storyPackSource.promptOverlay,
+      canonical_core_markdown: storyPackSource.canonicalCore,
     },
     authority: {
       known_entities: knownEntityCatalog(snapshot),
@@ -598,12 +644,32 @@ function buildJournalPacket(
       uncertainty: entry.uncertainty,
       source_event_ids: entry.source_event_ids,
     })),
+    character_state: context.snapshot.characters.map(character => ({
+      character_id: character.id,
+      name: character.name,
+      role: character.role,
+      relation: character.relation,
+      public_description: character.description,
+      knowledge_summary: character.knowledge_summary,
+      present_in_scene: context.snapshot.scene.present_character_ids.includes(character.id),
+    })),
+    per_character_knowledge: context.snapshot.knowledge.map((knowledge) => {
+      const fact = context.snapshot.confirmedFacts.find(candidate => candidate.id === knowledge.factId)
+      return {
+        character_id: knowledge.characterId,
+        fact_id: knowledge.factId,
+        public_fact_claim: fact?.claim || null,
+        source_event_id: knowledge.sourceEventId,
+        confidence: knowledge.confidence,
+      }
+    }),
     authority: {
       reserved_journal_ids: context.reservedJournalIds,
       allowed_event_refs: context.sourceEventIds,
       allowed_fact_refs: context.snapshot.confirmedFacts.map(fact => fact.id),
       allowed_item_refs: context.snapshot.inventory.map(item => item.id),
       allowed_entity_refs: knownEntityCatalog(context.snapshot).map(entity => entity.id),
+      allowed_character_refs: context.snapshot.characters.map(character => character.id),
       location_ref: context.snapshot.scene.location_id,
     },
   }
@@ -668,6 +734,63 @@ function journalDraftsFromOutput(
       source_event_ids: [...eventRefs],
       involved_entity_ids: [...new Set(['player', ...participantRefs, ...itemRefs])],
       story_time: context.snapshot.scene.story_time,
+    }
+  })
+}
+
+function characterDraftsFromOutput(
+  output: Record<string, JsonValue>,
+  context: JournalProjectionContext,
+): JournalProjectionResult['characterUpdates'] {
+  const updates = output.character_updates as Array<Record<string, JsonValue>>
+  const allowedCharacterIds = new Set(context.snapshot.characters.map(character => character.id))
+  const allowedEventIds = new Set(context.sourceEventIds)
+  const facts = new Map(context.snapshot.confirmedFacts.map(fact => [fact.id, fact]))
+  const knowledgeByCharacter = new Map<string, Set<string>>()
+  for (const knowledge of context.snapshot.knowledge) {
+    const factIds = knowledgeByCharacter.get(knowledge.characterId) || new Set<string>()
+    factIds.add(knowledge.factId)
+    knowledgeByCharacter.set(knowledge.characterId, factIds)
+  }
+  const seenCharacters = new Set<string>()
+
+  return updates.map((update, index) => {
+    const characterId = String(update.character_id)
+    const sourceEventIds = update.source_event_refs as string[]
+    const knowledgeFactIds = update.knowledge_fact_refs as string[]
+    const invalidPaths: string[] = []
+    if (!allowedCharacterIds.has(characterId) || seenCharacters.has(characterId))
+      invalidPaths.push(`$.character_updates[${index}].character_id`)
+    if (!sourceEventIds.length || sourceEventIds.some(eventId => !allowedEventIds.has(eventId)))
+      invalidPaths.push(`$.character_updates[${index}].source_event_refs`)
+    const knownFactIds = knowledgeByCharacter.get(characterId) || new Set<string>()
+    if (knowledgeFactIds.some(factId => !facts.has(factId) || !knownFactIds.has(factId)))
+      invalidPaths.push(`$.character_updates[${index}].knowledge_fact_refs`)
+    if (update.relation_summary === null
+      && update.public_description === null
+      && !knowledgeFactIds.length) {
+      invalidPaths.push(`$.character_updates[${index}]`)
+    }
+    if (invalidPaths.length) {
+      throw new ContractError(
+        'MODEL_AUTHORITY_ERROR',
+        'Индекс персонажей сослался на неподтвержденные данные.',
+        invalidPaths,
+      )
+    }
+    seenCharacters.add(characterId)
+    return {
+      character_id: characterId,
+      source_event_ids: [...sourceEventIds],
+      relation: update.relation_summary === null
+        ? null
+        : String(update.relation_summary).trim(),
+      description: update.public_description === null
+        ? null
+        : String(update.public_description).trim(),
+      knowledge_summary: knowledgeFactIds.length
+        ? knowledgeFactIds.map(factId => facts.get(factId)!.claim).join(' ')
+        : null,
     }
   })
 }
@@ -898,6 +1021,21 @@ function inventoryItemAccessible(
     && item.charges !== 0
 }
 
+function inventorySceneRelation(
+  item: EngineSessionSnapshot['inventory'][number],
+  snapshot: EngineSessionSnapshot,
+): 'carried_by_player' | 'present_in_scene' | 'held_by_present_character' | 'remote' | 'spent' {
+  if (item.condition === 'spent' || item.quantity === 0 || item.charges === 0)
+    return 'spent'
+  if (item.holder_id === 'player')
+    return 'carried_by_player'
+  if (snapshot.scene.present_character_ids.includes(item.holder_id))
+    return 'held_by_present_character'
+  if (item.location_id === snapshot.scene.location_id)
+    return 'present_in_scene'
+  return 'remote'
+}
+
 function assertInventoryAdvisoryAlignment(
   advisory: Record<string, JsonValue>,
   command: TurnCommand,
@@ -931,6 +1069,8 @@ function assertInventoryAdvisoryAlignment(
       quantity: item.quantity,
       charges: item.charges,
       condition: item.condition,
+      slot: item.slot,
+      version: item.version,
       provenance_summary: item.provenance.summary,
     }
     for (const [field, value] of Object.entries(expected)) {
@@ -955,6 +1095,42 @@ function assertInventoryAdvisoryAlignment(
   const knownIds = new Set(knownEntityCatalog(snapshot).map(entity => entity.id))
   const existingItemIds = new Set(snapshot.inventory.map(item => item.id))
   const reservedItemIds = new Set(snapshot.reservedIds.itemInstances)
+  const trackedItems = advisory.tracked_items as Array<Record<string, JsonValue>>
+  if (trackedItems.length !== snapshot.inventory.length) {
+    throw new ContractError(
+      'MODEL_INVENTORY_MISMATCH',
+      'Модель инвентаря вернула неполный реестр предметов.',
+      ['$.tracked_items'],
+    )
+  }
+  trackedItems.forEach((candidate, index) => {
+    const item = snapshot.inventory[index]!
+    const expected = {
+      item_id: item.id,
+      selected: command.selected_item_ids.includes(item.id),
+      accessible: inventoryItemAccessible(item, snapshot),
+      owner_id: item.owner_id,
+      holder_id: item.holder_id,
+      location_id: item.location_id,
+      quantity: item.quantity,
+      charges: item.charges,
+      condition: item.condition,
+      slot: item.slot,
+      version: item.version,
+      provenance_summary: item.provenance.summary,
+      scene_relation: inventorySceneRelation(item, snapshot),
+    }
+    for (const [field, value] of Object.entries(expected)) {
+      if (candidate[field] !== value) {
+        throw new ContractError(
+          'MODEL_INVENTORY_MISMATCH',
+          'Модель инвентаря изменила полный реестр предметов.',
+          [`$.tracked_items[${index}].${field}`],
+        )
+      }
+    }
+  })
+
   const allowedOperations = new Set(snapshot.allowedOperationTypes.filter(type => type.startsWith('inventory.')))
   const operationCandidates = advisory.operation_candidates as Array<Record<string, JsonValue>>
   operationCandidates.forEach((candidate, index) => {
@@ -977,6 +1153,72 @@ function assertInventoryAdvisoryAlignment(
         [`$.operation_candidates[${index}].item_id`],
       )
     }
+    const item = typeof itemId === 'string'
+      ? snapshot.inventory.find(entry => entry.id === itemId)
+      : null
+    const expectedState = candidate.expected_state as Record<string, JsonValue> | null
+    const resultingState = candidate.resulting_state as Record<string, JsonValue> | null
+    const instanceDraft = candidate.instance_draft as Record<string, JsonValue> | null
+    if (!resultingState) {
+      throw new ContractError(
+        'MODEL_INVENTORY_MISMATCH',
+        'Предметная операция требует полного resulting_state.',
+        [`$.operation_candidates[${index}].resulting_state`],
+      )
+    }
+    if (type === 'inventory.create_instance') {
+      if (expectedState !== null || instanceDraft === null) {
+        throw new ContractError(
+          'MODEL_INVENTORY_MISMATCH',
+          'Новый предмет требует полного instance_draft без expected_state.',
+          [`$.operation_candidates[${index}]`],
+        )
+      }
+      for (const field of ['owner_id', 'holder_id', 'location_id', 'quantity', 'charges', 'condition', 'slot']) {
+        if (instanceDraft[field] !== resultingState[field]) {
+          throw new ContractError(
+            'MODEL_INVENTORY_MISMATCH',
+            'instance_draft не совпадает с результирующим состоянием нового предмета.',
+            [`$.operation_candidates[${index}].instance_draft.${field}`],
+          )
+        }
+      }
+      if (resultingState.version !== 0) {
+        throw new ContractError(
+          'MODEL_INVENTORY_MISMATCH',
+          'Новый предмет обязан начинаться с version=0.',
+          [`$.operation_candidates[${index}].resulting_state.version`],
+        )
+      }
+    }
+    else {
+      if (!item || !expectedState || instanceDraft !== null) {
+        throw new ContractError(
+          'MODEL_INVENTORY_MISMATCH',
+          'Операция существующего предмета требует точного expected_state.',
+          [`$.operation_candidates[${index}]`],
+        )
+      }
+      const expected = {
+        owner_id: item.owner_id,
+        holder_id: item.holder_id,
+        location_id: item.location_id,
+        quantity: item.quantity,
+        charges: item.charges,
+        condition: item.condition,
+        slot: item.slot,
+        version: item.version,
+      }
+      for (const [field, value] of Object.entries(expected)) {
+        if (expectedState[field] !== value) {
+          throw new ContractError(
+            'MODEL_INVENTORY_MISMATCH',
+            'Операция предмета изменила ожидаемое серверное состояние.',
+            [`$.operation_candidates[${index}].expected_state.${field}`],
+          )
+        }
+      }
+    }
     for (const field of ['from_entity_id', 'to_entity_id'] as const) {
       const entityId = candidate[field]
       if (entityId !== null && (typeof entityId !== 'string' || !knownIds.has(entityId))) {
@@ -984,6 +1226,16 @@ function assertInventoryAdvisoryAlignment(
           'MODEL_AUTHORITY_ERROR',
           'Модель инвентаря использовала сущность вне серверного каталога.',
           [`$.operation_candidates[${index}].${field}`],
+        )
+      }
+    }
+    for (const field of ['owner_id', 'holder_id', 'location_id'] as const) {
+      const entityId = resultingState[field]
+      if (typeof entityId !== 'string' || !knownIds.has(entityId)) {
+        throw new ContractError(
+          'MODEL_AUTHORITY_ERROR',
+          'Результирующее состояние предмета использовало неизвестную сущность.',
+          [`$.operation_candidates[${index}].resulting_state.${field}`],
         )
       }
     }
@@ -999,58 +1251,86 @@ function assertInventoryAdvisoryAlignment(
       ['$.interaction_effects.witness_ids'],
     )
   }
+
+  const sceneSync = advisory.scene_sync as Record<string, JsonValue>
+  if (sceneSync.current_location_id !== snapshot.scene.location_id) {
+    throw new ContractError(
+      'MODEL_INVENTORY_MISMATCH',
+      'Предметная сверка изменила текущую локацию.',
+      ['$.scene_sync.current_location_id'],
+    )
+  }
+  const scenePartitions = {
+    player_carried_item_ids: snapshot.inventory
+      .filter(item => item.holder_id === 'player')
+      .map(item => item.id),
+    scene_item_ids: snapshot.inventory
+      .filter(item => item.location_id === snapshot.scene.location_id)
+      .map(item => item.id),
+    remote_item_ids: snapshot.inventory
+      .filter(item => item.location_id !== snapshot.scene.location_id)
+      .map(item => item.id),
+    orphaned_item_ids: snapshot.inventory
+      .filter(item => !knownIds.has(item.holder_id))
+      .map(item => item.id),
+  }
+  for (const [field, expectedIds] of Object.entries(scenePartitions)) {
+    const actualIds = sceneSync[field] as string[]
+    if (JSON.stringify(actualIds) !== JSON.stringify(expectedIds)) {
+      throw new ContractError(
+        'MODEL_INVENTORY_MISMATCH',
+        'Предметная сверка неверно распределила экземпляры по сцене.',
+        [`$.scene_sync.${field}`],
+      )
+    }
+  }
+
+  const storySync = advisory.story_sync as Record<string, JsonValue>
+  if ((storySync.canon_compatible === false || storySync.scene_compatible === false)
+    && advisory.action_feasible !== false) {
+    throw new ContractError(
+      'MODEL_INVENTORY_MISMATCH',
+      'Предметное действие не может быть допустимым при конфликте со сценой или StoryPack.',
+      ['$.action_feasible', '$.story_sync'],
+    )
+  }
+  const plotRelevantItemIds = storySync.plot_relevant_item_ids as string[]
+  if (plotRelevantItemIds.some(itemId => !existingItemIds.has(itemId) && !reservedItemIds.has(itemId))) {
+    throw new ContractError(
+      'MODEL_AUTHORITY_ERROR',
+      'Предметная сверка сослалась на неизвестный сюжетный предмет.',
+      ['$.story_sync.plot_relevant_item_ids'],
+    )
+  }
 }
 
 function requireExplicitAcquisitionCandidate(
   advisory: Record<string, JsonValue>,
   command: TurnCommand,
-  snapshot: EngineSessionSnapshot,
 ): Record<string, JsonValue> {
   if (!requestsPortableObjectAcquisition(command) || advisory.action_feasible === false)
     return advisory
 
   const operationCandidates = advisory.operation_candidates as Array<Record<string, JsonValue>>
   if (operationCandidates.some(candidate =>
-    candidate.type === 'inventory.create_instance'
-    || (candidate.type === 'inventory.transfer_custody' && candidate.to_entity_id === 'player'))) {
+    candidate.required_on_success === true
+    && (candidate.type === 'inventory.create_instance'
+      || (candidate.type === 'inventory.transfer_custody' && candidate.to_entity_id === 'player')))) {
     return advisory
   }
 
-  const itemId = snapshot.reservedIds.itemInstances[0]
-  if (!itemId || !snapshot.allowedOperationTypes.includes('inventory.create_instance')) {
-    throw new ContractError(
-      'MODEL_INVENTORY_MISMATCH',
-      'Для выбранного получения предмета сервер не зарезервировал операцию инвентаря.',
-      ['$.authority.reserved_item_ids', '$.authority.allowed_operation_types'],
-    )
-  }
-
-  const reasonCodes = (advisory.reason_codes as string[])
-    .filter(reasonCode => reasonCode !== 'no_item_interaction')
-  if (!reasonCodes.includes('portable_object_acquisition'))
-    reasonCodes.push('portable_object_acquisition')
-
-  return {
-    ...advisory,
-    reason_codes: reasonCodes,
-    operation_candidates: [
-      ...operationCandidates,
-      {
-        type: 'inventory.create_instance',
-        item_id: itemId,
-        amount: null,
-        from_entity_id: null,
-        to_entity_id: 'player',
-        reason: 'Игрок явно берет переносимый предмет себе.',
-      },
-    ],
-  }
+  throw new ContractError(
+    'MODEL_INVENTORY_MISMATCH',
+    'Nemotron не создал обязательную предметную операцию для явного получения объекта.',
+    ['$.operation_candidates'],
+  )
 }
 
 function assertInventoryAlignment(
   output: TurnOutput,
   advisory: Record<string, JsonValue>,
   command: TurnCommand,
+  snapshot: EngineSessionSnapshot,
 ): void {
   if (advisory.action_feasible === false && output.status === 'resolved') {
     throw new ContractError(
@@ -1061,17 +1341,84 @@ function assertInventoryAlignment(
   }
 
   const operationCandidates = advisory.operation_candidates as Array<Record<string, JsonValue>>
-  const inventoryOperations = output.operations.filter(operation => operation.type.startsWith('inventory.'))
+  const inventoryOperations = output.operations.filter(
+    (operation): operation is Extract<TurnOperation, { type: `inventory.${string}` }> =>
+      operation.type.startsWith('inventory.'),
+  )
   for (const operation of inventoryOperations) {
     const itemId = 'item_id' in operation ? operation.item_id : null
-    const supported = operationCandidates.some(candidate =>
+    const candidate = operationCandidates.find(candidate =>
       candidate.type === operation.type && candidate.item_id === itemId)
-    if (!supported) {
+    if (!candidate) {
       throw new ContractError(
         'MODEL_INVENTORY_MISMATCH',
         'Авторитетный ход добавил операцию предмета без заключения модели инвентаря.',
         [`$.operations[${operation.operation_index}]`],
       )
+    }
+    if (operation.type === 'inventory.create_instance') {
+      const instanceDraft = candidate.instance_draft as Record<string, JsonValue>
+      const fields = [
+        'template_id',
+        'name',
+        'category',
+        'description',
+        'owner_id',
+        'holder_id',
+        'location_id',
+        'quantity',
+        'charges',
+        'condition',
+        'slot',
+      ] as const
+      for (const field of fields) {
+        if (operation[field] !== instanceDraft[field]) {
+          throw new ContractError(
+            'MODEL_INVENTORY_MISMATCH',
+            'Авторитетный ход изменил подробный проект нового предмета Nemotron.',
+            [`$.operations[${operation.operation_index}].${field}`],
+          )
+        }
+      }
+    }
+    else {
+      const item = snapshot.inventory.find(entry => entry.id === operation.item_id)!
+      const resultingState = candidate.resulting_state as Record<string, JsonValue>
+      const expectedResult = {
+        owner_id: operation.type === 'inventory.transfer_ownership'
+          ? operation.to_owner_id
+          : item.owner_id,
+        holder_id: operation.type === 'inventory.transfer_custody'
+          ? operation.to_holder_id
+          : item.holder_id,
+        location_id: item.location_id,
+        quantity: item.quantity,
+        charges: item.charges,
+        condition: item.condition,
+        slot: item.slot,
+        version: item.version + 1,
+      }
+      if (operation.type === 'inventory.consume') {
+        if (item.charges !== null) {
+          expectedResult.charges = item.charges - operation.amount
+          if (expectedResult.charges === 0)
+            expectedResult.condition = 'spent'
+        }
+        else {
+          expectedResult.quantity = item.quantity - operation.amount
+          if (expectedResult.quantity === 0)
+            expectedResult.condition = 'spent'
+        }
+      }
+      for (const [field, value] of Object.entries(expectedResult)) {
+        if (resultingState[field] !== value) {
+          throw new ContractError(
+            'MODEL_INVENTORY_MISMATCH',
+            'Авторитетный ход не совпал с результирующим состоянием Nemotron.',
+            [`$.operations[${operation.operation_index}].${field}`],
+          )
+        }
+      }
     }
   }
 
@@ -1079,15 +1426,15 @@ function assertInventoryAlignment(
     output.status === 'resolved'
     && ['success', 'partial_success'].includes(output.resolution.outcome)
   ) {
-    const missingAcquisition = operationCandidates
-      .filter(candidate => candidate.type === 'inventory.create_instance')
+    const missingRequiredOperation = operationCandidates
+      .filter(candidate => candidate.required_on_success === true)
       .find(candidate => !inventoryOperations.some(operation =>
-        operation.type === 'inventory.create_instance'
+        operation.type === candidate.type
         && operation.item_id === candidate.item_id))
-    if (missingAcquisition) {
+    if (missingRequiredOperation) {
       throw new ContractError(
         'MODEL_INVENTORY_MISMATCH',
-        'Рассказчик подтвердил получение предмета без добавления его в инвентарь.',
+        'Рассказчик подтвердил успех без обязательного изменения предмета.',
         ['$.resolution.outcome', '$.operations'],
       )
     }

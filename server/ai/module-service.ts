@@ -382,5 +382,7 @@ function textPriceCeiling(modelId: string): { prompt?: number, completion?: numb
     return { prompt: 0.25, completion: 0.8 }
   if (modelId === 'nemotron-paid')
     return { prompt: 0.55, completion: 2.3 }
+  if (modelId === 'nemotron-inventory-fallback')
+    return { prompt: 0.1, completion: 0.45 }
   throw new FabulaApiError('FALLBACK_PRICE_UNKNOWN', 'Для fallback-модели не настроен тарифный предел.', 503)
 }

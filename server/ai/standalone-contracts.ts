@@ -91,7 +91,7 @@ const canonAuditSchema = strictObject({
 })
 
 const journalSchema = strictObject({
-  module_version: { type: 'string', const: 'journal-compiler@0.2' },
+  module_version: { type: 'string', const: 'journal-character-compiler@1.0' },
   entries: objectList(strictObject({
     entry_id: text(160),
     event_refs: stringList(),
@@ -110,7 +110,13 @@ const journalSchema = strictObject({
     open_threads: stringList(),
     tags: stringList(),
   })),
-  character_index_updates: stringList(),
+  character_updates: objectList(strictObject({
+    character_id: text(160),
+    source_event_refs: stringList(16, 160),
+    relation_summary: nullable(text(500)),
+    public_description: nullable(text(1_000)),
+    knowledge_fact_refs: stringList(16, 160),
+  }), 16),
   location_index_updates: stringList(),
   quest_index_updates: stringList(),
   server_only_callback_hooks: objectList(strictObject({
@@ -140,7 +146,7 @@ const difficultySchema = strictObject({
 })
 
 const inventoryAdvisorySchema = strictObject({
-  module_version: { type: 'string', const: 'inventory-advisory@1.0' },
+  module_version: { type: 'string', const: 'inventory-advisory@1.1' },
   action_feasible: { type: 'boolean' },
   reason_codes: stringList(24, 160),
   selected_items: objectList(strictObject({
@@ -156,9 +162,53 @@ const inventoryAdvisorySchema = strictObject({
       type: 'string',
       enum: ['pristine', 'usable', 'worn', 'damaged', 'spent'],
     }),
+    slot: nullable({
+      type: 'string',
+      enum: ['hand', 'body', 'bag'],
+    }),
+    version: { type: 'integer', minimum: 0, maximum: 1_000_000 },
     provenance_summary: nullable(text(1_000)),
     reason_codes: stringList(16, 160),
   }), 16),
+  tracked_items: objectList(strictObject({
+    item_id: text(160),
+    selected: { type: 'boolean' },
+    accessible: { type: 'boolean' },
+    owner_id: text(160),
+    holder_id: text(160),
+    location_id: text(160),
+    quantity: { type: 'integer', minimum: 0, maximum: 1_000_000 },
+    charges: nullable({ type: 'integer', minimum: 0, maximum: 1_000_000 }),
+    condition: {
+      type: 'string',
+      enum: ['pristine', 'usable', 'worn', 'damaged', 'spent'],
+    },
+    slot: nullable({
+      type: 'string',
+      enum: ['hand', 'body', 'bag'],
+    }),
+    version: { type: 'integer', minimum: 0, maximum: 1_000_000 },
+    provenance_summary: text(1_000),
+    scene_relation: {
+      type: 'string',
+      enum: ['carried_by_player', 'present_in_scene', 'held_by_present_character', 'remote', 'spent'],
+    },
+    reason_codes: stringList(16, 160),
+  }), 128),
+  referenced_objects: objectList(strictObject({
+    normalized_name: text(240),
+    source: {
+      type: 'string',
+      enum: ['player_input', 'scene', 'story_pack', 'confirmed_event', 'confirmed_fact', 'recent_turn'],
+    },
+    portability: { type: 'string', enum: ['portable', 'fixed', 'unknown'] },
+    continuity_status: {
+      type: 'string',
+      enum: ['existing_instance', 'candidate_new_instance', 'environment_only', 'contradiction', 'unknown'],
+    },
+    matched_item_id: nullable(text(160)),
+    evidence: stringList(16, 500),
+  }), 32),
   operation_candidates: objectList(strictObject({
     type: {
       type: 'string',
@@ -170,16 +220,91 @@ const inventoryAdvisorySchema = strictObject({
       ],
     },
     item_id: nullable(text(160)),
+    required_on_success: { type: 'boolean' },
     amount: nullable({ type: 'integer', minimum: 1, maximum: 1_000_000 }),
     from_entity_id: nullable(text(160)),
     to_entity_id: nullable(text(160)),
     reason: text(1_000),
+    expected_state: nullable(strictObject({
+      owner_id: text(160),
+      holder_id: text(160),
+      location_id: text(160),
+      quantity: { type: 'integer', minimum: 0, maximum: 1_000_000 },
+      charges: nullable({ type: 'integer', minimum: 0, maximum: 1_000_000 }),
+      condition: {
+        type: 'string',
+        enum: ['pristine', 'usable', 'worn', 'damaged', 'spent'],
+      },
+      slot: nullable({
+        type: 'string',
+        enum: ['hand', 'body', 'bag'],
+      }),
+      version: { type: 'integer', minimum: 0, maximum: 1_000_000 },
+    })),
+    resulting_state: nullable(strictObject({
+      owner_id: text(160),
+      holder_id: text(160),
+      location_id: text(160),
+      quantity: { type: 'integer', minimum: 0, maximum: 1_000_000 },
+      charges: nullable({ type: 'integer', minimum: 0, maximum: 1_000_000 }),
+      condition: {
+        type: 'string',
+        enum: ['pristine', 'usable', 'worn', 'damaged', 'spent'],
+      },
+      slot: nullable({
+        type: 'string',
+        enum: ['hand', 'body', 'bag'],
+      }),
+      version: { type: 'integer', minimum: 0, maximum: 1_000_000 },
+    })),
+    instance_draft: nullable(strictObject({
+      template_id: text(160),
+      name: text(160),
+      category: { type: 'string', enum: ['tool', 'document', 'medicine', 'keepsake', 'resource'] },
+      description: text(1_000),
+      owner_id: text(160),
+      holder_id: text(160),
+      location_id: text(160),
+      quantity: { type: 'integer', minimum: 1, maximum: 1_000_000 },
+      charges: nullable({ type: 'integer', minimum: 0, maximum: 1_000_000 }),
+      condition: {
+        type: 'string',
+        enum: ['pristine', 'usable', 'worn', 'damaged', 'spent'],
+      },
+      slot: nullable({
+        type: 'string',
+        enum: ['hand', 'body', 'bag'],
+      }),
+    })),
+    narrative_requirements: stringList(16, 500),
+    forbidden_narrative_claims: stringList(16, 500),
   }), 16),
+  scene_sync: strictObject({
+    current_location_id: text(160),
+    player_carried_item_ids: stringList(128, 160),
+    scene_item_ids: stringList(128, 160),
+    remote_item_ids: stringList(128, 160),
+    orphaned_item_ids: stringList(128, 160),
+    consistency_errors: stringList(32, 1_000),
+  }),
+  story_sync: strictObject({
+    canon_compatible: { type: 'boolean' },
+    scene_compatible: { type: 'boolean' },
+    plot_relevant_item_ids: stringList(64, 160),
+    required_narrative_facts: stringList(32, 1_000),
+    forbidden_narrative_claims: stringList(32, 1_000),
+    continuity_risks: stringList(32, 1_000),
+    unresolved_questions: stringList(32, 1_000),
+  }),
   interaction_effects: strictObject({
     time_cost: { type: 'string', enum: ['none', 'brief', 'meaningful', 'extended'] },
     noise: { type: 'string', enum: ['none', 'low', 'medium', 'high'] },
+    hands_required: { type: 'integer', minimum: 0, maximum: 2 },
+    storage_required: { type: 'string', enum: ['none', 'hand', 'body', 'bag', 'external'] },
     traces: stringList(16, 500),
     witness_ids: stringList(16, 160),
+    resource_changes: stringList(16, 500),
+    condition_changes: stringList(16, 500),
   }),
   consistency_notes: stringList(24, 1_000),
 })
@@ -189,9 +314,9 @@ const CONTRACTS: Partial<Record<AiModuleId, { name: string, schema: JsonSchema }
   'scene-plan-paid': { name: 'fabula_scene_plan_0_2', schema: scenePlanSchema },
   narration: { name: 'fabula_aion_narrative_0_2', schema: narrationSchema },
   'turn-qa': { name: 'fabula_canon_audit_0_2', schema: canonAuditSchema },
-  journal: { name: 'fabula_journal_compiler_0_2', schema: journalSchema },
+  journal: { name: 'fabula_journal_character_compiler_1_0', schema: journalSchema },
   difficulty: { name: 'fabula_difficulty_advisory_0_2', schema: difficultySchema },
-  inventory: { name: 'fabula_inventory_advisory_1_0', schema: inventoryAdvisorySchema },
+  inventory: { name: 'fabula_inventory_advisory_1_1', schema: inventoryAdvisorySchema },
 }
 
 export function getStandaloneContract(moduleId: AiModuleId): { name: string, schema: JsonSchema } {

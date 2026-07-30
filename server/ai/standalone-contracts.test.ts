@@ -51,7 +51,7 @@ describe('standalone AI contracts', () => {
 
   test('accepts the strict inventory advisory and rejects invented fields', () => {
     const advisory = {
-      module_version: 'inventory-advisory@1.0',
+      module_version: 'inventory-advisory@1.1',
       action_feasible: true,
       reason_codes: ['item_accessible'],
       selected_items: [{
@@ -64,15 +64,55 @@ describe('standalone AI contracts', () => {
         quantity: 1,
         charges: 2,
         condition: 'usable',
+        slot: 'bag',
+        version: 3,
         provenance_summary: 'Получена до начала истории.',
         reason_codes: [],
       }],
+      tracked_items: [{
+        item_id: 'item:kit',
+        selected: true,
+        accessible: true,
+        owner_id: 'player',
+        holder_id: 'player',
+        location_id: 'location:hall',
+        quantity: 1,
+        charges: 2,
+        condition: 'usable',
+        slot: 'bag',
+        version: 3,
+        provenance_summary: 'Получена до начала истории.',
+        scene_relation: 'carried_by_player',
+        reason_codes: [],
+      }],
+      referenced_objects: [],
       operation_candidates: [],
+      scene_sync: {
+        current_location_id: 'location:hall',
+        player_carried_item_ids: ['item:kit'],
+        scene_item_ids: ['item:kit'],
+        remote_item_ids: [],
+        orphaned_item_ids: [],
+        consistency_errors: [],
+      },
+      story_sync: {
+        canon_compatible: true,
+        scene_compatible: true,
+        plot_relevant_item_ids: ['item:kit'],
+        required_narrative_facts: [],
+        forbidden_narrative_claims: [],
+        continuity_risks: [],
+        unresolved_questions: [],
+      },
       interaction_effects: {
         time_cost: 'brief',
         noise: 'none',
+        hands_required: 1,
+        storage_required: 'bag',
         traces: [],
         witness_ids: [],
+        resource_changes: [],
+        condition_changes: [],
       },
       consistency_notes: [],
     }
@@ -82,5 +122,37 @@ describe('standalone AI contracts', () => {
       ...advisory,
       authoritative_operation: true,
     })).toThrow()
+  })
+
+  test('accepts structured journal and character updates from Mistral', () => {
+    const projection = {
+      module_version: 'journal-character-compiler@1.0',
+      entries: [{
+        entry_id: 'journal:reserved:0001',
+        event_refs: ['event:confirmed:0001'],
+        title: 'Изменение доверия',
+        public_summary: 'Илва подтверждает, что услышала тот же шум за дверью.',
+        location_ref: 'location:summoning-hall',
+        participant_refs: ['character:ilva-rein'],
+        fact_refs: ['fact:confirmed:0001'],
+        item_refs: [],
+        relationship_changes_visible_to_player: ['Илва стала внимательнее к словам игрока.'],
+        rumors: [],
+        open_threads: [],
+        tags: ['Илва'],
+      }],
+      character_updates: [{
+        character_id: 'character:ilva-rein',
+        source_event_refs: ['event:confirmed:0001'],
+        relation_summary: 'Считает наблюдения игрока полезными',
+        public_description: null,
+        knowledge_fact_refs: ['fact:confirmed:0001'],
+      }],
+      location_index_updates: [],
+      quest_index_updates: [],
+      server_only_callback_hooks: [],
+    }
+
+    expect(parseStandaloneOutput('journal', projection)).toEqual(projection)
   })
 })

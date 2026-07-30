@@ -420,11 +420,18 @@ describe('game session repository', () => {
             involved_entity_ids: ['player'],
             story_time: context.snapshot.scene.story_time,
           }],
+          characterUpdates: [{
+            character_id: context.snapshot.characters[0]!.id,
+            source_event_ids: [eventId],
+            relation: 'Доверяет наблюдениям игрока',
+            description: null,
+            knowledge_summary: null,
+          }],
           fallbackUsed: false,
           modelRuns: [{
             role: 'journal',
-            model: 'nvidia/nemotron-3-super-120b-a12b',
-            request_id: 'request:nemotron-journal',
+            model: 'mistralai/mistral-small-2603',
+            request_id: 'request:mistral-journal',
             usage: { total_tokens: 12 },
             status: 'accepted',
             error_code: null,
@@ -439,6 +446,7 @@ describe('game session repository', () => {
       title: 'Линии круга',
     })
     expect(response.session.journal[0]?.source_event_ids[0]?.startsWith('event:')).toBe(true)
+    expect(response.session.characters[0]?.relation).toBe('Доверяет наблюдениям игрока')
     expect(response.fallback_used).toBe(false)
   })
 
