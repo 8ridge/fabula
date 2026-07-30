@@ -44,6 +44,15 @@
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+2122;}
 
 
+@font-face{font-family:'Spectral';font-style:normal;font-weight:400;font-display:swap;src:url('/assets/fonts/Spectral-400-normal-cyrillic.woff2') format('woff2'); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;}
+@font-face{font-family:'Spectral';font-style:normal;font-weight:400;font-display:swap;src:url('/assets/fonts/Spectral-400-normal-latin.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+@font-face{font-family:'Spectral';font-style:normal;font-weight:500;font-display:swap;src:url('/assets/fonts/Spectral-500-normal-cyrillic.woff2') format('woff2'); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;}
+@font-face{font-family:'Spectral';font-style:normal;font-weight:500;font-display:swap;src:url('/assets/fonts/Spectral-500-normal-latin.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:400;font-display:swap;src:url('/assets/fonts/IBMPlexMono-400-normal-cyrillic.woff2') format('woff2'); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:400;font-display:swap;src:url('/assets/fonts/IBMPlexMono-400-normal-latin.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:500;font-display:swap;src:url('/assets/fonts/IBMPlexMono-500-normal-cyrillic.woff2') format('woff2'); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:500;font-display:swap;src:url('/assets/fonts/IBMPlexMono-500-normal-latin.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+
 /* ===== ЛЕНДИНГ (перенос из index.html) ===== */
 
   :root{
@@ -67,7 +76,7 @@
   a:focus-visible,button:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
   /* no overflow-x here: clip on <html> plus hidden on <body> kills scrolling outright */
   html{scroll-behavior:smooth}
-  body{font-family:'Cormorant Garamond',serif;color:var(--ink);background:var(--bg);
+  body{font-family:'Spectral',serif;color:var(--ink);background:var(--bg);
     overflow-x:hidden;line-height:1.5}
   img{max-width:100%;display:block}
   .wrap{width:min(var(--max),92vw);margin:0 auto}
@@ -523,14 +532,14 @@
     overscroll-behavior:contain;scroll-behavior:smooth;scrollbar-width:none;-ms-overflow-style:none}
   .gp-chat::-webkit-scrollbar{display:none}
   .gp-m{margin-bottom:.7em;font-size:clamp(15px,1.15vw,17px)}
-  .gp-m.nar p{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:17px;line-height:1.58;
+  .gp-m.nar p{font-family:'Spectral',serif;font-style:italic;font-size:17px;line-height:1.58;
     color:#b9b2a6;text-indent:1.6em}
   .gp-m.nar .kf{aspect-ratio:2.6/1;max-height:clamp(170px,26vh,290px);overflow:hidden;
     border-radius:8px;margin:2px 0 13px;animation:kfIn 1.4s cubic-bezier(.22,.61,.36,1) both}
   @keyframes kfIn{0%{opacity:0;filter:blur(10px);transform:scale(1.05)}
     60%{opacity:1;filter:blur(0)}100%{opacity:1;filter:blur(0);transform:none}}
   .gp-m.nar .kf img{width:100%;height:100%;object-fit:cover}
-  .gp-m.me p,.gp-m.me{font-family:'Cormorant Garamond',serif;font-size:16px;line-height:1.52;
+  .gp-m.me p,.gp-m.me{font-family:'Spectral',serif;font-size:16px;line-height:1.52;
     color:#e8c97a;font-style:italic;text-indent:1.6em}
   /* запись мира — засечка на полях рукописи, а не строка лога */
   .gp-m.ctx{position:relative;display:flex;flex-direction:column;gap:.3em;text-indent:0;
@@ -551,7 +560,7 @@
   .gp-m.ctx.note::before{background:linear-gradient(180deg,transparent,#ffffff26 20%,#ffffff26 80%,transparent)}
   .gp-m.ctx.note::after{background:none;border:1px solid #ffffff4d;box-shadow:none}
   .gp-m.ctx.note .k{color:#7d7770;letter-spacing:.18em}
-  .gp-m.ctx.note b{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1em;color:#a9a297}
+  .gp-m.ctx.note b{font-family:'Spectral',serif;font-style:italic;font-size:1em;color:#a9a297}
   .gp-m.ctx.note i{font-size:.82em;color:#77716a}
   @keyframes ctxIn{0%{opacity:0;filter:blur(7px);transform:translateY(.5em)}
     55%{opacity:1;filter:blur(0)}
@@ -644,7 +653,7 @@
   .auth-field label{display:block;font-family:'Forum',serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
     color:var(--ink-mute);margin-bottom:6px}
   .auth-field input{width:100%;padding:13px 15px;border-radius:11px;border:1px solid var(--line);background:#ffffff06;
-    color:var(--ink);font-family:'Cormorant Garamond',serif;font-size:16px;transition:.2s}
+    color:var(--ink);font-family:'Spectral',serif;font-size:16px;transition:.2s}
   .auth-field input:focus{outline:none;border-color:var(--ink-dim);background:#ffffff0a}
   .auth-field.err input{border-color:#c76b57}
   .auth-msg{min-height:16px;font-family:'Forum',serif;font-size:12px;color:#c76b57;margin:2px 0 8px}
@@ -672,4 +681,7 @@
   .pw-wrap input{padding-right:46px}
   .pw-eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--ink-mute);font-size:17px;cursor:pointer;padding:6px;line-height:1}
   .pw-eye:hover{color:var(--ink)}
+  /* моно-акценты на лендинге (мелкие метки) */
+  .eyebrow,.pack-stats{font-family:'IBM Plex Mono',monospace!important;letter-spacing:.08em!important}
+  .eyebrow{font-size:11px}
 
