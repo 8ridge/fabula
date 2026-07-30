@@ -298,7 +298,7 @@ export class TurnEngine {
         },
       })
       const proposal = guardQuickActionAlignment(parseQuickTurnProposal(result.output), command)
-      const output = quickProposalToTurnOutput(proposal, command, snapshot)
+      const output = quickProposalToTurnOutput(proposal, command, snapshot, inventoryAdvisory)
       assertInventoryAlignment(output, inventoryAdvisory, command, snapshot)
       validateOutput?.(output)
       modelRuns.push({
@@ -413,12 +413,11 @@ export class TurnEngine {
       }
     }
 
-    throw new AiExecutionError(
-      'MODEL_FALLBACK_EXHAUSTED',
-      'Основная и резервная модели не смогли проверить взаимодействие с предметами.',
-      modelRuns,
-      modelRuns.some(run => run.error_code === 'UPSTREAM_TIMEOUT' || run.error_code === 'UPSTREAM_RATE_LIMITED'),
-    )
+    const localAdvisory = buildLocalInventoryAdvisory(command, snapshot)
+    return {
+      advisory: localAdvisory,
+      fallbackUsed: true,
+    }
   }
 
   private async tryTurnModel(
@@ -612,6 +611,241 @@ function buildInventoryPacket(
       allowed_operations: snapshot.allowedOperationTypes.filter(type => type.startsWith('inventory.')),
     },
   }
+}
+
+function buildLocalInventoryAdvisory(
+  command: TurnCommand,
+  snapshot: EngineSessionSnapshot,
+): Record<string, JsonValue> {
+  const reference = explicitAcquisitionReference(command)
+  const itemId = snapshot.reservedIds.itemInstances[0]
+  const evidence = reference ? localAcquisitionEvidence(reference, snapshot) : null
+  const canCreateInstance = Boolean(
+    reference
+    && evidence
+    && command.selected_item_ids.length === 0
+    && itemId
+    && snapshot.allowedOperationTypes.includes('inventory.create_instance'),
+  )
+  const name = reference ? acquisitionDisplayName(reference) : null
+  const templateFragment = reference
+    ? reference
+        .toLocaleLowerCase('ru')
+        .replace(/[^\p{L}\p{N}]+/gu, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 100) || 'scene-object'
+    : null
+  const instanceDraft = canCreateInstance && name && templateFragment
+    ? {
+        template_id: `item-template:scene:${templateFragment}`,
+        name,
+        category: 'resource',
+        description: `Переносимый предмет из текущей сцены. Подтверждение: ${evidence!.slice(0, 700)}`,
+        owner_id: 'player',
+        holder_id: 'player',
+        location_id: snapshot.scene.location_id,
+        quantity: 1,
+        charges: null,
+        condition: 'usable',
+        slot: 'hand',
+      } satisfies Record<string, JsonValue>
+    : null
+  const knownIds = new Set(knownEntityCatalog(snapshot).map(entity => entity.id))
+  const selectedItems = command.selected_item_ids.map((selectedItemId) => {
+    const item = snapshot.inventory.find(candidate => candidate.id === selectedItemId)!
+    return {
+      item_id: item.id,
+      exists: true,
+      accessible: inventoryItemAccessible(item, snapshot),
+      owner_id: item.owner_id,
+      holder_id: item.holder_id,
+      location_id: item.location_id,
+      quantity: item.quantity,
+      charges: item.charges,
+      condition: item.condition,
+      slot: item.slot,
+      version: item.version,
+      provenance_summary: item.provenance.summary,
+      reason_codes: [],
+    }
+  })
+  const playerCarriedItemIds = snapshot.inventory
+    .filter(item => item.holder_id === 'player')
+    .map(item => item.id)
+  const sceneItemIds = snapshot.inventory
+    .filter(item => item.location_id === snapshot.scene.location_id)
+    .map(item => item.id)
+  const remoteItemIds = snapshot.inventory
+    .filter(item => item.location_id !== snapshot.scene.location_id)
+    .map(item => item.id)
+  const advisory = {
+    module_version: 'inventory-advisory@1.1',
+    action_feasible: reference
+      ? canCreateInstance
+      : selectedItems.every(item => item.accessible),
+    reason_codes: canCreateInstance
+      ? ['portable_object_acquisition', 'local_inventory_fallback']
+      : reference
+        ? ['unconfirmed_scene_object', 'local_inventory_fallback']
+        : selectedItems.length
+          ? ['local_inventory_fallback']
+          : ['no_item_interaction', 'local_inventory_fallback'],
+    selected_items: selectedItems,
+    tracked_items: snapshot.inventory.map(item => ({
+      item_id: item.id,
+      selected: command.selected_item_ids.includes(item.id),
+      accessible: inventoryItemAccessible(item, snapshot),
+      owner_id: item.owner_id,
+      holder_id: item.holder_id,
+      location_id: item.location_id,
+      quantity: item.quantity,
+      charges: item.charges,
+      condition: item.condition,
+      slot: item.slot,
+      version: item.version,
+      provenance_summary: item.provenance.summary,
+      scene_relation: inventorySceneRelation(item, snapshot),
+      reason_codes: [],
+    })),
+    referenced_objects: reference && name
+      ? [{
+          normalized_name: name.toLocaleLowerCase('ru'),
+          source: evidence ? 'recent_turn' : 'player_input',
+          portability: evidence ? 'portable' : 'unknown',
+          continuity_status: canCreateInstance ? 'candidate_new_instance' : 'unknown',
+          matched_item_id: canCreateInstance ? itemId! : null,
+          evidence: evidence ? [evidence] : [command.text],
+        }]
+      : [],
+    operation_candidates: canCreateInstance && instanceDraft && itemId && name
+      ? [{
+          type: 'inventory.create_instance',
+          item_id: itemId,
+          required_on_success: true,
+          amount: 1,
+          from_entity_id: null,
+          to_entity_id: 'player',
+          reason: 'Игрок явно подтвердил получение переносимого предмета, уже присутствующего в истории сцены.',
+          expected_state: null,
+          resulting_state: {
+            owner_id: 'player',
+            holder_id: 'player',
+            location_id: snapshot.scene.location_id,
+            quantity: 1,
+            charges: null,
+            condition: 'usable',
+            slot: 'hand',
+            version: 0,
+          },
+          instance_draft: instanceDraft,
+          narrative_requirements: [`${name} физически остается у игрока.`],
+          forbidden_narrative_claims: ['Игрок добровольно оставляет предмет вместо подтвержденного получения.'],
+        }]
+      : [],
+    scene_sync: {
+      current_location_id: snapshot.scene.location_id,
+      player_carried_item_ids: playerCarriedItemIds,
+      scene_item_ids: sceneItemIds,
+      remote_item_ids: remoteItemIds,
+      orphaned_item_ids: snapshot.inventory
+        .filter(item => !knownIds.has(item.holder_id))
+        .map(item => item.id),
+      consistency_errors: [],
+    },
+    story_sync: {
+      canon_compatible: true,
+      scene_compatible: !reference || canCreateInstance,
+      plot_relevant_item_ids: canCreateInstance && itemId ? [itemId] : [],
+      required_narrative_facts: canCreateInstance && name ? [`${name} остается у игрока.`] : [],
+      forbidden_narrative_claims: canCreateInstance && name
+        ? [`${name} остается в сцене после успешного получения.`]
+        : [],
+      continuity_risks: canCreateInstance
+        ? ['Предметный вывод создан локально из подтвержденной истории из-за недоступности моделей инвентаря.']
+        : [],
+      unresolved_questions: reference && !canCreateInstance
+        ? ['Присутствие переносимого предмета не подтверждено историей сцены.']
+        : [],
+    },
+    interaction_effects: {
+      time_cost: 'none',
+      noise: 'none',
+      hands_required: canCreateInstance ? 1 : 0,
+      storage_required: canCreateInstance ? 'hand' : 'none',
+      traces: [],
+      witness_ids: [],
+      resource_changes: [],
+      condition_changes: [],
+    },
+    consistency_notes: ['Локальный резерв использован только после отказа обоих маршрутов Nemotron.'],
+  } satisfies Record<string, JsonValue>
+  const parsed = parseStandaloneOutput('inventory', advisory)
+  assertInventoryAdvisoryAlignment(parsed, command, snapshot)
+  return parsed
+}
+
+function explicitAcquisitionReference(command: TurnCommand): string | null {
+  if (command.mode !== 'action')
+    return null
+  const normalized = command.text.replaceAll('ё', 'е').trim()
+  if (/(?:^|\s)(?:взять|беру|возьму|взял(?:а|и)?)\s+себя\s+в\s+руки/iu.test(normalized))
+    return null
+  const match = normalized.match(
+    /(?:^|\s)(?:взять|беру|возьму|взял(?:а|и)?|поднять|поднимаю|поднял(?:а|и)?|подобрать|подбираю|подобрал(?:а|и)?|забрать|забираю|забрал(?:а|и)?)\s+(.+)$/iu,
+  )
+  if (!match?.[1])
+    return null
+  const reference = match[1]
+    .replace(/^(?:себе\s+)?(?:эту?|этот|это|тот|ту|данн\p{L}+|лежащ\p{L}+|стоящ\p{L}+)\s+/iu, '')
+    .replace(/\s+(?:к\s+себе|с\s+собой|себе|в\s+руки|(?:как\s+предмет\s+)?в\s+инвентарь)\s*[.!?]*$/iu, '')
+    .replace(/[.!?]+$/g, '')
+    .trim()
+  return reference.length >= 2 && reference.length <= 120 ? reference : null
+}
+
+function localAcquisitionEvidence(
+  reference: string,
+  snapshot: EngineSessionSnapshot,
+): string | null {
+  const firstWord = reference.toLocaleLowerCase('ru').match(/[\p{L}\p{N}]+/u)?.[0]
+  if (!firstWord)
+    return null
+  const stem = firstWord.length > 4 ? firstWord.slice(0, -1) : firstWord
+  const sources = [
+    snapshot.scene.objective,
+    ...snapshot.locations.map(location => location.description),
+    ...snapshot.journal.map(entry => entry.summary),
+    ...snapshot.history.flatMap(turn => [turn.playerText, turn.narrative]),
+    ...snapshot.confirmedFacts.map(fact => fact.claim),
+  ]
+  for (const source of [...sources].reverse()) {
+    const sentence = source
+      .split(/(?<=[.!?])\s+/u)
+      .find((candidate) => {
+        const normalized = candidate.toLocaleLowerCase('ru')
+        return normalized.includes(stem)
+          && !/(?:\bне\b|никак\p{L}*|возможно|может\s+быть|предположительно)/iu.test(normalized)
+      })
+    if (sentence)
+      return sentence
+  }
+  return null
+}
+
+function acquisitionDisplayName(reference: string): string {
+  const words = reference.split(/\s+/)
+  const first = words[0]!.toLocaleLowerCase('ru')
+  const normalizedFirst = first.endsWith('ку')
+    ? `${first.slice(0, -2)}ка`
+    : first.endsWith('гу')
+      ? `${first.slice(0, -2)}га`
+      : first.endsWith('ю')
+        ? `${first.slice(0, -1)}я`
+        : first.endsWith('у')
+          ? `${first.slice(0, -1)}а`
+          : first
+  const normalized = [normalizedFirst, ...words.slice(1)].join(' ').slice(0, 160)
+  return normalized.charAt(0).toLocaleUpperCase('ru') + normalized.slice(1)
 }
 
 function buildJournalPacket(
@@ -1508,13 +1742,7 @@ function contradictsDoorAction(intent: DoorActionIntent, text: string): boolean 
 }
 
 function requestsPortableObjectAcquisition(command: TurnCommand): boolean {
-  if (command.mode !== 'action')
-    return false
-  const normalized = command.text.replaceAll('ё', 'е')
-  if (/(?:взять|беру|возьму)\s+себя\s+в\s+руки/iu.test(normalized))
-    return false
-  return /(?:^|\s)(?:взять|беру|возьму|поднять|поднимаю|подобрать|подбираю|забрать|забираю)\s+(?:себе\s+)?(?:эту?|этот|это|тот|ту|данн\p{L}+|лежащ\p{L}+|стоящ\p{L}+)?\s*[\p{L}\p{N}]/iu
-    .test(normalized)
+  return explicitAcquisitionReference(command) !== null
 }
 
 function voluntarilyAbandonsAcquisition(text: string): boolean {
@@ -1702,6 +1930,7 @@ function quickProposalToTurnOutput(
   proposal: QuickTurnProposal,
   command: TurnCommand,
   snapshot: EngineSessionSnapshot,
+  inventoryAdvisory: Record<string, JsonValue>,
 ): TurnOutput {
   const resolved = proposal.outcome !== 'impossible'
   const visibleSummary = cleanQuickSummary(proposal.summary)
@@ -1734,6 +1963,32 @@ function quickProposalToTurnOutput(
         source_turn_id: command.idempotency_key,
       }]
     : []
+  const requiredCreation = ['success', 'partial_success'].includes(proposal.outcome)
+    ? (inventoryAdvisory.operation_candidates as Array<Record<string, JsonValue>>).find(candidate =>
+        candidate.required_on_success === true
+        && candidate.type === 'inventory.create_instance')
+    : null
+  const creationDraft = requiredCreation?.instance_draft
+  const createdItemId = requiredCreation?.item_id
+  if (
+    eventId
+    && requiredCreation
+    && creationDraft
+    && typeof creationDraft === 'object'
+    && !Array.isArray(creationDraft)
+    && typeof createdItemId === 'string'
+  ) {
+    const eventOperation = operations[0] as Extract<TurnOperation, { type: 'event.create' }>
+    eventOperation.item_ids = [...new Set([...eventOperation.item_ids, createdItemId])]
+    operations.push({
+      type: 'inventory.create_instance',
+      operation_index: 1,
+      source_event_id: eventId,
+      item_id: createdItemId,
+      ...creationDraft,
+    } as Extract<TurnOperation, { type: 'inventory.create_instance' }>)
+  }
+  const createsInventoryItem = operations.some(operation => operation.type === 'inventory.create_instance')
   return parseTurnOutput({
     schema_version: 'turn-output@0.2',
     turn_id: command.idempotency_key,
@@ -1770,7 +2025,9 @@ function quickProposalToTurnOutput(
     operations,
     narrative_brief: {
       must_include: [],
-      must_not_invent: ['новых персонажей', 'новых предметов', 'смену сцены'],
+      must_not_invent: createsInventoryItem
+        ? ['новых персонажей', 'смену сцены']
+        : ['новых персонажей', 'новых предметов', 'смену сцены'],
       tone: 'concrete',
       point_of_view: 'second_person',
       sensory_scope: ['current_scene'],
@@ -1783,7 +2040,9 @@ function quickProposalToTurnOutput(
       canon_fact_ids_used: [],
       memory_event_ids_used: [],
       assumptions: [
-        'Резервный ход не меняет сцену, присутствие или инвентарь.',
+        createsInventoryItem
+          ? 'Резервный ход создает только предмет из проверенного inventory advisory.'
+          : 'Резервный ход не меняет сцену, присутствие или инвентарь.',
         ...(proposal.serverGuarded
           ? ['Сервер отклонил противоположный результат резервной модели.']
           : []),

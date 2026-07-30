@@ -138,7 +138,11 @@ export function assertFreeModelPayloadSafe(payload: Record<string, JsonValue>): 
   const invalidPaths: string[] = []
 
   function containsPhoneNumber(value: string): boolean {
-    return (value.match(/\+?\d[\d\s()-]{7,}\d/g) || [])
+    const withoutCanonicalUuids = value.replace(
+      /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi,
+      ' ',
+    )
+    return (withoutCanonicalUuids.match(/\+?\d[\d\s()-]{7,}\d/g) || [])
       .some(candidate => (candidate.match(/\d/g) || []).length >= 9)
   }
 

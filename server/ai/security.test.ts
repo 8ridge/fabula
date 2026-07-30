@@ -62,6 +62,21 @@ describe('Nemotron privacy projection', () => {
     })).toThrow(FabulaApiError)
   })
 
+  test('does not treat canonical turn UUIDs as phone numbers', () => {
+    const turnId = 'turn:d5e54471-7159-4454-923c-cbff3dcaa6d8'
+
+    expect(() => assertFreeModelPayloadSafe({
+      player_input: { text: 'Я взял бутылку в инвентарь' },
+      recent_turns: [{ turn_id: turnId }],
+      confirmed_events: [{ source_turn_id: turnId }],
+    })).not.toThrow()
+
+    expect(() => assertFreeModelPayloadSafe({
+      recent_turns: [{ turn_id: turnId }],
+      player_input: { text: 'Позвони по номеру +7 (999) 123-45-67' },
+    })).toThrow(FabulaApiError)
+  })
+
   test('accepts only HTTPS references from the configured asset origin', () => {
     const config = resolveAiConfig({
       openrouterSiteUrl: 'https://fabula.example/app',
