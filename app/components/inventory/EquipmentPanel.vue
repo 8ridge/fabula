@@ -23,17 +23,17 @@ const equippedCount = computed(() =>
 )
 
 const positionClasses: Record<InventoryEquipmentPositionId, string> = {
-  head_accessory: 'col-start-1 row-start-1 justify-self-start self-start',
-  head: 'col-start-3 row-start-1 justify-self-end self-start',
-  body: 'col-start-1 row-start-2 justify-self-start self-center',
-  backpack: 'col-start-3 row-start-2 justify-self-end self-center',
-  left_hand: 'col-start-1 row-start-3 justify-self-start self-center',
-  right_hand: 'col-start-3 row-start-3 justify-self-end self-center',
-  left_hand_accessory: 'col-start-1 row-start-4 justify-self-start self-center',
-  right_hand_accessory: 'col-start-3 row-start-4 justify-self-end self-center',
-  belt: 'col-start-1 row-start-5 justify-self-start self-center',
-  legs: 'col-start-3 row-start-5 justify-self-end self-center',
-  feet: 'col-start-3 row-start-6 justify-self-end self-end',
+  head_accessory: 'left-1/2 top-2 -translate-x-1/2',
+  head: 'left-1/2 top-[14%] -translate-x-1/2',
+  body: 'left-1/2 top-[29%] -translate-x-1/2',
+  backpack: 'right-2 top-[29%]',
+  left_hand: 'left-2 top-[39%]',
+  right_hand: 'right-2 top-[39%]',
+  left_hand_accessory: 'left-2 top-[50%]',
+  right_hand_accessory: 'right-2 top-[50%]',
+  belt: 'left-1/2 top-[50%] -translate-x-1/2',
+  legs: 'left-1/2 top-[61%] -translate-x-1/2',
+  feet: 'left-1/2 top-[72%] -translate-x-1/2',
 }
 
 function visibleItem(slot: InventoryEquipmentSlot): InventoryItemView | null {
@@ -62,7 +62,7 @@ function visibleItem(slot: InventoryEquipmentSlot): InventoryItemView | null {
       </span>
     </header>
 
-    <div class="relative mx-auto grid h-[35rem] w-full max-w-[28rem] grid-cols-[minmax(0,1fr)_4.75rem_minmax(0,1fr)] grid-rows-6 overflow-hidden rounded-2xl border border-white/10 bg-[radial-gradient(circle_at_50%_38%,rgb(var(--accent-rgb)/.11),transparent_34%),linear-gradient(145deg,#16171d,#0d0e12)] p-2.5">
+    <div class="relative mx-auto h-[35rem] w-full max-w-[28rem] overflow-hidden rounded-2xl border border-white/10 bg-[radial-gradient(circle_at_50%_38%,rgb(var(--accent-rgb)/.11),transparent_34%),linear-gradient(145deg,#16171d,#0d0e12)] p-2.5">
       <div class="pointer-events-none absolute inset-4 rounded-xl border border-dashed border-white/[.08]" />
 
       <div class="pointer-events-none absolute inset-5 flex items-center justify-center" aria-hidden="true">
@@ -94,7 +94,7 @@ function visibleItem(slot: InventoryEquipmentSlot): InventoryItemView | null {
             : 'border-white/[.13] bg-[#131419]/95 shadow-lg hover:border-white/25',
           !visibleItem(slot) && 'cursor-default opacity-75 hover:border-white/[.13]',
         ]"
-        class="z-10 flex min-h-[3.4rem] w-[5.75rem] items-center gap-1.5 rounded-xl border p-1.5 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
+        class="absolute z-10 flex min-h-[3.4rem] w-[5.75rem] items-center gap-1.5 rounded-xl border p-1.5 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
         @click="visibleItem(slot) && emit('select', visibleItem(slot)!.id)"
       >
         <InventoryItemIcon
