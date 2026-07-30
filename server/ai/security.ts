@@ -134,6 +134,48 @@ export function sanitizeNemotronPayload(payload: Record<string, unknown>): Recor
   return sanitized
 }
 
+export function assertFreeModelPayloadSafe(payload: Record<string, JsonValue>): void {
+  const invalidPaths: string[] = []
+
+  function containsPhoneNumber(value: string): boolean {
+    return (value.match(/\+?\d[\d\s()-]{7,}\d/g) || [])
+      .some(candidate => (candidate.match(/\d/g) || []).length >= 9)
+  }
+
+  function inspect(value: JsonValue, path: string): void {
+    if (typeof value === 'string') {
+      if (
+        /[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/.test(value)
+        || /https?:\/\//i.test(value)
+        || /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(value)
+        || containsPhoneNumber(value)
+      ) {
+        invalidPaths.push(path)
+      }
+      return
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => inspect(item, `${path}[${index}]`))
+      return
+    }
+    if (value && typeof value === 'object') {
+      for (const [key, item] of Object.entries(value))
+        inspect(item, `${path}.${key}`)
+    }
+  }
+
+  inspect(payload, '$')
+  if (invalidPaths.length) {
+    throw new FabulaApiError(
+      'PII_REJECTED',
+      'Бесплатная модель не получила контекст с прямыми идентификаторами.',
+      422,
+      false,
+      invalidPaths,
+    )
+  }
+}
+
 function sanitizeValue(value: unknown, path: string, depth: number): JsonValue {
   if (depth > 5)
     throw new FabulaApiError('SANITIZED_PAYLOAD_INVALID', 'Обезличенный payload слишком глубокий.', 422)

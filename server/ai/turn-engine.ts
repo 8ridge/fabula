@@ -7,6 +7,7 @@ import { ContractError, parseTurnOutput, TURN_OUTPUT_JSON_SCHEMA } from './contr
 import { AiExecutionError, FabulaApiError } from './http'
 import type { SafeModelRun } from './http'
 import { OpenRouterClient, OpenRouterError } from './openrouter'
+import { assertFreeModelPayloadSafe } from './security'
 import { getStandaloneContract, parseStandaloneOutput } from './standalone-contracts'
 import type {
   EngineSessionSnapshot,
@@ -36,8 +37,8 @@ export interface TurnExternalMemory {
 }
 
 export const TURN_MODEL_TIMEOUTS = {
-  inventoryPrimaryMs: 17_000,
-  inventoryFallbackMs: 12_000,
+  inventoryPrimaryMs: 60_000,
+  inventoryFallbackMs: 25_000,
   primaryMs: 17_000,
   fallbackMs: 8_000,
   journalMs: 10_000,
@@ -338,24 +339,28 @@ export class TurnEngine {
     const contract = getStandaloneContract('inventory')
     const attempts = [
       {
-        model: AI_MODELS.nemotronPaid.slug,
+        model: AI_MODELS.nemotronFree.slug,
         role: 'inventory' as const,
         timeoutMs: TURN_MODEL_TIMEOUTS.inventoryPrimaryMs,
-        maxPrice: { prompt: 0.55, completion: 2.3 },
-        jsonMode: AI_MODELS.nemotronPaid.jsonMode,
+        maxPrice: { prompt: 0, completion: 0 },
+        jsonMode: AI_MODELS.nemotronFree.jsonMode,
+        sanitizedFreeEndpoint: true,
       },
       {
-        model: AI_MODELS.nemotronInventoryFallback.slug,
+        model: AI_MODELS.nemotronPaid.slug,
         role: 'inventory-fallback' as const,
         timeoutMs: TURN_MODEL_TIMEOUTS.inventoryFallbackMs,
-        maxPrice: { prompt: 0.1, completion: 0.45 },
-        jsonMode: AI_MODELS.nemotronInventoryFallback.jsonMode,
+        maxPrice: { prompt: 0.55, completion: 2.3 },
+        jsonMode: AI_MODELS.nemotronPaid.jsonMode,
+        sanitizedFreeEndpoint: false,
       },
     ]
 
     for (const attempt of attempts) {
       let result: Awaited<ReturnType<OpenRouterClient['chatJson']>> | null = null
       try {
+        if (attempt.sanitizedFreeEndpoint)
+          assertFreeModelPayloadSafe(packet)
         result = await this.client.chatJson({
           model: attempt.model,
           system: await this.promptLoader('inventory'),
@@ -366,9 +371,16 @@ export class TurnEngine {
           maxPrice: attempt.maxPrice,
           schema: contract,
           jsonMode: attempt.jsonMode,
+          sanitizedFreeEndpoint: attempt.sanitizedFreeEndpoint,
+          reasoning: { enabled: false, exclude: true },
         })
         const advisory = requireExplicitAcquisitionCandidate(
-          parseStandaloneOutput('inventory', result.output),
+          parseStandaloneOutput(
+            'inventory',
+            attempt.sanitizedFreeEndpoint
+              ? withInventoryAdvisoryVersion(result.output)
+              : result.output,
+          ),
           command,
         )
         assertInventoryAdvisoryAlignment(advisory, command, snapshot)
@@ -474,6 +486,15 @@ export class TurnEngine {
         throw error
       return null
     }
+  }
+}
+
+function withInventoryAdvisoryVersion(output: unknown): unknown {
+  if (!output || typeof output !== 'object' || Array.isArray(output))
+    return output
+  return {
+    ...output,
+    module_version: 'inventory-advisory@1.1',
   }
 }
 

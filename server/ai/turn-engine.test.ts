@@ -394,8 +394,12 @@ describe('turn engine model telemetry', () => {
       'fabula_turn_output_0_2',
     ])
     expect(requests[0]).toMatchObject({
-      model: 'nvidia/nemotron-3-ultra-550b-a55b',
+      model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
       timeoutMs: TURN_MODEL_TIMEOUTS.inventoryPrimaryMs,
+      maxPrice: { prompt: 0, completion: 0 },
+      sanitizedFreeEndpoint: true,
+      jsonMode: 'tool-call',
+      reasoning: { enabled: false, exclude: true },
       payload: {
         schema_version: 'inventory-input@1.0',
         turn_id: command.idempotency_key,
@@ -439,8 +443,8 @@ describe('turn engine model telemetry', () => {
     const result = await createPipelineEngine(client).execute(command, snapshot)
 
     expect(requests.map(request => request.model)).toEqual([
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
       'nvidia/nemotron-3-ultra-550b-a55b',
-      'nvidia/nemotron-3-super-120b-a12b',
       'deepseek/deepseek-v4-flash',
     ])
     expect(requests[1]?.timeoutMs).toBe(TURN_MODEL_TIMEOUTS.inventoryFallbackMs)
@@ -450,6 +454,40 @@ describe('turn engine model telemetry', () => {
       'inventory-fallback',
       'primary',
     ])
+  })
+
+  test('normalizes the server-owned inventory contract version from free Nemotron', async () => {
+    const requests: ChatJsonRequest[] = []
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        requests.push(request)
+        if (request.schema?.name === 'fabula_inventory_advisory_1_1') {
+          return {
+            requestId: 'request:free-inventory',
+            model: request.model,
+            output: {
+              ...inventoryAdvisoryFor(request),
+              module_version: 'inventory-advisory',
+            },
+            usage: { total_tokens: 10, cost: 0 },
+          }
+        }
+        return {
+          requestId: 'request:primary',
+          model: request.model,
+          output: successfulTurnOutput(),
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+
+    const result = await createPipelineEngine(client).execute(command, snapshot)
+
+    expect(requests.map(request => request.model)).toEqual([
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'deepseek/deepseek-v4-flash',
+    ])
+    expect(result.modelRuns.map(run => run.status)).toEqual(['accepted', 'accepted'])
   })
 
   test('starts a scene-boundary turn with one authoritative model call', async () => {

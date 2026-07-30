@@ -256,7 +256,9 @@ export class AiModuleService {
             : textPriceCeiling(candidate.id),
           sanitizedFreeEndpoint: candidate.id === 'nemotron-free',
           jsonMode: candidate.jsonMode,
-          schema: candidate.jsonMode === 'json-schema' ? contract : undefined,
+          schema: candidate.jsonMode === 'json-schema' || candidate.jsonMode === 'tool-call'
+            ? contract
+            : undefined,
         })
         const output = parseStandaloneOutput(moduleId, result.output)
         modelRuns.push({

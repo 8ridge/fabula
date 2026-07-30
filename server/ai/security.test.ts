@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 import { resolveAiConfig } from './config'
 import { FabulaApiError } from './http'
-import { assertAiConfigured, assertApprovedAssetUrls, sanitizeNemotronPayload } from './security'
+import {
+  assertAiConfigured,
+  assertApprovedAssetUrls,
+  assertFreeModelPayloadSafe,
+  sanitizeNemotronPayload,
+} from './security'
 
 describe('Nemotron privacy projection', () => {
   test('requires only the server OpenRouter key to make AI available', () => {
@@ -31,6 +36,29 @@ describe('Nemotron privacy projection', () => {
   test('rejects PII-like values even inside allowed fields', () => {
     expect(() => sanitizeNemotronPayload({
       active_threads: ['write me at hidden@example.com'],
+    })).toThrow(FabulaApiError)
+  })
+
+  test('allows detailed fictional inventory context but rejects direct identifiers', () => {
+    expect(() => assertFreeModelPayloadSafe({
+      turn_id: 'turn:f816fa03-3052-49d9-9b67-51e2ae8c7881',
+      player_input: { text: 'Взять бутылку в инвентарь' },
+      journal_state: [{
+        entry_id: 'journal:0d4d7d66-3f7b-4e6f-830e-3b65685da440',
+      }],
+      server_inventory: [{
+        item_id: 'item:bottle',
+        name: 'Бутылка',
+        holder_id: 'entity:player',
+      }],
+    })).not.toThrow()
+
+    expect(() => assertFreeModelPayloadSafe({
+      player_input: { text: 'Напиши мне на hidden@example.com' },
+    })).toThrow(FabulaApiError)
+
+    expect(() => assertFreeModelPayloadSafe({
+      player_input: { text: 'Позвони по номеру +7 (999) 123-45-67' },
     })).toThrow(FabulaApiError)
   })
 

@@ -25,7 +25,11 @@ export interface ChatJsonRequest {
   }
   sanitizedFreeEndpoint?: boolean
   devAllowNonZdr?: boolean
-  jsonMode?: 'json-schema' | 'json-object' | 'prompt-only'
+  jsonMode?: 'json-schema' | 'json-object' | 'tool-call' | 'prompt-only'
+  reasoning?: {
+    enabled: boolean
+    exclude?: boolean
+  }
 }
 
 export interface ChatJsonResult {
@@ -263,6 +267,8 @@ export class OpenRouterClient {
       max_tokens: request.maxOutputTokens,
       provider,
     }
+    if (request.reasoning)
+      body.reasoning = request.reasoning
     const jsonMode = request.jsonMode || (request.schema ? 'json-schema' : 'json-object')
     if (request.schema && jsonMode === 'json-schema') {
       body.response_format = {
@@ -272,6 +278,20 @@ export class OpenRouterClient {
           strict: true,
           schema: request.schema.schema,
         },
+      }
+    }
+    else if (request.schema && jsonMode === 'tool-call') {
+      body.tools = [{
+        type: 'function',
+        function: {
+          name: request.schema.name,
+          description: 'Верни проверяемый структурированный результат.',
+          parameters: request.schema.schema,
+        },
+      }]
+      body.tool_choice = {
+        type: 'function',
+        function: { name: request.schema.name },
       }
     }
     else if (jsonMode === 'json-object') {
@@ -294,7 +314,23 @@ export class OpenRouterClient {
     const usage = asUsage(responseBody.usage)
     let output: unknown
     try {
-      output = parseStrictJson(message.content)
+      if (request.schema && jsonMode === 'tool-call') {
+        const toolCalls = message.tool_calls
+        const toolCall = Array.isArray(toolCalls) && isRecord(toolCalls[0]) ? toolCalls[0] : null
+        const fn = toolCall && isRecord(toolCall.function) ? toolCall.function : null
+        if (!fn || fn.name !== request.schema.name) {
+          throw new OpenRouterError(
+            'MODEL_JSON_INVALID',
+            'Модель не вызвала обязательную функцию структурированного ответа.',
+          )
+        }
+        output = typeof fn.arguments === 'string'
+          ? parseStrictJson(fn.arguments)
+          : fn.arguments
+      }
+      else {
+        output = parseStrictJson(message.content)
+      }
     }
     catch (error) {
       if (error instanceof OpenRouterError)

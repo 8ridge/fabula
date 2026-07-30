@@ -33,7 +33,7 @@ interface SubmitTurnInput {
 }
 
 const SESSION_ID = /^session:[0-9a-f-]{36}$/i
-const TURN_CLIENT_TIMEOUT_MS = 65_000
+const TURN_CLIENT_TIMEOUT_MS = 130_000
 
 type TurnAbortReason = 'user' | 'deadline' | 'unmount' | null
 

@@ -120,13 +120,24 @@ describe('OpenRouter transport', () => {
     })
   })
 
-  test('does not send unsupported JSON mode to the free Nemotron endpoint', async () => {
+  test('uses a forced tool call instead of unsupported response_format for free Nemotron', async () => {
     let capturedBody: Record<string, unknown> = {}
     const fakeFetch = async (_url: string | URL | Request, init?: RequestInit) => {
       capturedBody = JSON.parse(String(init?.body))
       return new Response(JSON.stringify({
         model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
-        choices: [{ message: { content: '{"ok":true}' } }],
+        choices: [{
+          message: {
+            content: '',
+            tool_calls: [{
+              type: 'function',
+              function: {
+                name: 'fabula_free_nemotron_test',
+                arguments: '{"ok":true}',
+              },
+            }],
+          },
+        }],
       }), { status: 200 })
     }
     await new OpenRouterClient(config, fakeFetch as typeof fetch).chatJson({
@@ -136,9 +147,37 @@ describe('OpenRouter transport', () => {
       maxOutputTokens: 100,
       maxPrice: { prompt: 0, completion: 0 },
       sanitizedFreeEndpoint: true,
-      jsonMode: 'prompt-only',
+      jsonMode: 'tool-call',
+      reasoning: { enabled: false, exclude: true },
+      schema: {
+        name: 'fabula_free_nemotron_test',
+        schema: {
+          type: 'object',
+          properties: { ok: { type: 'boolean' } },
+          required: ['ok'],
+          additionalProperties: false,
+        },
+      },
     })
     expect(capturedBody.response_format).toBeUndefined()
+    expect(capturedBody.reasoning).toEqual({ enabled: false, exclude: true })
+    expect(capturedBody.tool_choice).toEqual({
+      type: 'function',
+      function: { name: 'fabula_free_nemotron_test' },
+    })
+    expect(capturedBody.tools).toEqual([{
+      type: 'function',
+      function: {
+        name: 'fabula_free_nemotron_test',
+        description: 'Верни проверяемый структурированный результат.',
+        parameters: {
+          type: 'object',
+          properties: { ok: { type: 'boolean' } },
+          required: ['ok'],
+          additionalProperties: false,
+        },
+      },
+    }])
   })
 
   test('keeps the timeout active while reading the response body', async () => {

@@ -1,5 +1,5 @@
 export type AiModuleKind = 'text' | 'image' | 'video'
-export type AiJsonMode = 'json-schema' | 'json-object' | 'prompt-only'
+export type AiJsonMode = 'json-schema' | 'json-object' | 'tool-call' | 'prompt-only'
 
 export interface AiModelDefinition {
   id: string
@@ -47,15 +47,15 @@ export const AI_MODELS = {
     id: 'nemotron-free',
     label: 'Nemotron 3 Ultra Free',
     slug: 'nvidia/nemotron-3-ultra-550b-a55b:free',
-    role: 'Обезличенный планировщик и директор сложности',
+    role: 'Инвентарь, предметы, планирование и директор сложности',
     modality: 'text',
-    jsonMode: 'prompt-only',
+    jsonMode: 'tool-call',
   },
   nemotronPaid: {
     id: 'nemotron-paid',
     label: 'Nemotron 3 Ultra',
     slug: 'nvidia/nemotron-3-ultra-550b-a55b',
-    role: 'Полная предметная сверка и платный fallback планировщика',
+    role: 'Платный fallback планировщика и инвентаря',
     modality: 'text',
     jsonMode: 'json-schema',
   },
@@ -291,13 +291,13 @@ export const AI_MODULES = {
     id: 'inventory',
     promptNumber: '08',
     title: 'Предметы и инвентарь',
-    modelId: 'nemotron-paid',
+    modelId: 'nemotron-free',
     kind: 'text',
     contract: 'inventory-advisory@1.1',
     standalone: false,
     maxOutputTokens: 3200,
-    maxPrice: { prompt: 0.55, completion: 2.3 },
-    fallbackModelId: 'nemotron-inventory-fallback',
+    maxPrice: { prompt: 0, completion: 0 },
+    fallbackModelId: 'nemotron-paid',
     fallbackPolicy: 'same-family-model-then-fail-turn',
   },
   journal: {
