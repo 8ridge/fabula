@@ -831,3 +831,14 @@
   .dev-kill{background:#ffffff08;border:1px solid rgba(255,255,255,.14);color:#d9655f;border-radius:9px;padding:7px 14px;font-family:'Forum',serif;font-size:13px;cursor:pointer;flex:none}
   .dev-kill:hover{background:#ffffff12}
   .dev-empty{font-family:'Forum',serif;font-size:14px;color:#6d6d78;padding:14px 2px}
+
+  /* аватар: карандаш снаружи круга, дефолт — инициал ника */
+  .ava-wrap{position:relative;width:92px;height:92px;margin:0 auto 12px}
+  .scr[data-scr="profile"] .avatar{margin-bottom:0!important}
+  .scr[data-scr="profile"] .avatar .fb{color:#d7d7dd;font-family:'Forum',serif;font-size:40px}
+  .scr[data-scr="profile"] .ava-cam{cursor:pointer;padding:0;line-height:1}
+  /* глазик пароля в модалке */
+  .pmodal .pm-field{position:relative}
+  .pmodal .pm-field input{padding-right:44px}
+  .pmodal .pm-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:#8a8a92;font-size:16px;cursor:pointer;padding:6px;line-height:1}
+  .pmodal .pm-eye:hover{color:#eaeaee}

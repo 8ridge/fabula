@@ -667,4 +667,9 @@
     color:var(--ink-mute);text-decoration:none}
   .auth-skip:hover{color:var(--ink-dim)}
   @media(max-width:1000px){.nav-links a.auth-open{display:inline}}
+  /* показать/скрыть пароль */
+  .pw-wrap{position:relative}
+  .pw-wrap input{padding-right:46px}
+  .pw-eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--ink-mute);font-size:17px;cursor:pointer;padding:6px;line-height:1}
+  .pw-eye:hover{color:var(--ink)}
 

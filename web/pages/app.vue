@@ -83,7 +83,10 @@
             <div class="p-actions"><button class="p-act" data-act="logout" title="Выйти"><span class="g">🚪</span>Выйти</button><button class="p-act p-gear" data-act="open-settings" title="Настройки">⚙</button></div>
           </div>
           <div class="p-top">
-            <div class="avatar" id="avaBtn" title="Загрузить фото"><img id="avaImg" src="/assets/avatar.jpg" onerror="this.style.display='none'"><span class="fb">♞</span><span class="ring"></span><span class="ava-cam">✎</span></div>
+            <div class="ava-wrap">
+              <div class="avatar" id="avaBtn" title="Загрузить фото"><img id="avaImg" alt="" style="display:none"><span class="fb" id="avaFb">·</span></div>
+              <button type="button" class="ava-cam" id="avaCam" title="Загрузить фото">✎</button>
+            </div>
             <input type="file" id="avaFile" accept="image/*" style="display:none">
             <div class="p-name" data-p="username">@…</div>
             <div class="p-tier"><span data-p="email">…</span> <span data-p="verified" style="color:#7cc47f">✓ подтверждена</span></div>
@@ -304,14 +307,16 @@ onMounted(() => {
     if (badge) badge.style.display = data.email_verified ? '' : 'none';
     const gp = document.querySelector('[data-p="google"]');
     if (gp) gp.textContent = data.providers.includes('google') ? 'привязан · отвязать' : 'привязать';
-    const av=document.getElementById('avaImg');
-    if(av && data.has_avatar){ av.style.display=''; av.src=AUTH_API + '/auth/avatar/'+data.id+'?v='+(data.avatar_v||''); }
+    const av=document.getElementById('avaImg'), fb=document.getElementById('avaFb');
+    if(fb) fb.textContent=((data.username||'?').trim().charAt(0)||'?').toUpperCase();
+    if(av){ if(data.has_avatar){ av.style.display=''; av.src=AUTH_API + '/auth/avatar/'+data.id+'?v='+(data.avatar_v||''); } else { av.style.display='none'; av.removeAttribute('src'); } }
   }
   loadProfile();
 
   const avaBtn=document.getElementById('avaBtn'), avaFile=document.getElementById('avaFile');
   if(avaBtn&&avaFile){
     avaBtn.addEventListener('click', ()=>avaFile.click());
+    const avaCam=document.getElementById('avaCam'); if(avaCam) avaCam.addEventListener('click', (e)=>{ e.stopPropagation(); avaFile.click(); });
     avaFile.addEventListener('change', async ()=>{
       const f=avaFile.files&&avaFile.files[0]; if(!f) return;
       if(f.size>3*1024*1024){ toast('Файл больше 3 МБ'); return; }
@@ -335,6 +340,7 @@ onMounted(() => {
   function openModal(title, bodyHtml, onOk){
     document.getElementById('pmTitle').textContent = title;
     document.getElementById('pmBody').innerHTML = bodyHtml;
+    document.querySelectorAll('#pmBody .pm-eye').forEach(b=>b.addEventListener('click',()=>{ const i=b.previousElementSibling; if(i&&i.tagName==='INPUT'){ i.type=i.type==='password'?'text':'password'; b.textContent=i.type==='password'?'👁':'🙈'; } }));
     document.getElementById('pmMsg').textContent = '';
     document.getElementById('pmOk').style.display = bodyHtml.includes('pmGoogleBtn') ? 'none' : '';
     pm.classList.add('on');
@@ -415,9 +421,9 @@ onMounted(() => {
       }
       if (act === 'password') {
         openModal('Смена пароля',
-          `<label class="pm-l">Текущий пароль</label><input id="pmCur" type="password" autocomplete="current-password">`+
-          `<label class="pm-l">Новый пароль (≥6)</label><input id="pmNew" type="password" autocomplete="new-password">`+
-          `<label class="pm-l">Повтор нового</label><input id="pmRep" type="password" autocomplete="new-password">`,
+          `<label class="pm-l">Текущий пароль</label><div class="pm-field"><input id="pmCur" type="password" autocomplete="current-password"><button type="button" class="pm-eye" tabindex="-1">👁</button></div>`+
+          `<label class="pm-l">Новый пароль (≥6)</label><div class="pm-field"><input id="pmNew" type="password" autocomplete="new-password"><button type="button" class="pm-eye" tabindex="-1">👁</button></div>`+
+          `<label class="pm-l">Повтор нового</label><div class="pm-field"><input id="pmRep" type="password" autocomplete="new-password"><button type="button" class="pm-eye" tabindex="-1">👁</button></div>`,
           async (msg)=>{
             const cur=document.getElementById('pmCur').value, nw=document.getElementById('pmNew').value, rp=document.getElementById('pmRep').value;
             if(nw.length<6){ msg.textContent='Новый пароль от 6 символов'; return true; }

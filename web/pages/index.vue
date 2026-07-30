@@ -302,11 +302,11 @@
       </div>
       <div class="auth-field">
         <label>Пароль</label>
-        <input type="password" id="afPass" autocomplete="current-password" placeholder="••••••••">
+        <div class="pw-wrap"><input type="password" id="afPass" autocomplete="current-password" placeholder="••••••••"><button type="button" class="pw-eye" data-eye="afPass" tabindex="-1">👁</button></div>
       </div>
       <div class="auth-field auth-reg">
         <label>Повтори пароль</label>
-        <input type="password" id="afPass2" autocomplete="new-password" placeholder="••••••••">
+        <div class="pw-wrap"><input type="password" id="afPass2" autocomplete="new-password" placeholder="••••••••"><button type="button" class="pw-eye" data-eye="afPass2" tabindex="-1">👁</button></div>
       </div>
       <div class="auth-msg" id="authMsg"></div>
       <button type="submit" class="btn btn-solid auth-submit" id="authSubmit">Войти</button>
@@ -350,6 +350,12 @@ onMounted(() => {
     if (startBtn) { startBtn.textContent = 'Продолжить'; startBtn.setAttribute('href','/app') }
   }
   try { if (localStorage.getItem('fabula-token')) markLoggedInNav() } catch (e) {}
+
+  // показать/скрыть пароль
+  document.querySelectorAll('.pw-eye').forEach(b=>b.addEventListener('click',()=>{
+    const i=document.getElementById(b.dataset.eye);
+    if(i){ i.type=i.type==='password'?'text':'password'; b.textContent=i.type==='password'?'👁':'🙈'; }
+  }))
 
 
 document.documentElement.classList.add('js');
