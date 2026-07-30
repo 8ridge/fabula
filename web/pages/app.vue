@@ -309,7 +309,7 @@ onMounted(() => {
     if (gp) gp.textContent = data.providers.includes('google') ? 'привязан · отвязать' : 'привязать';
     const av=document.getElementById('avaImg'), fb=document.getElementById('avaFb');
     if(fb) fb.textContent=((data.username||'?').trim().charAt(0)||'?').toUpperCase();
-    if(av){ if(data.has_avatar){ av.style.display=''; av.src=AUTH_API + '/auth/avatar/'+data.id+'?v='+(data.avatar_v||''); } else { av.style.display='none'; av.removeAttribute('src'); } }
+    if(av){ if(data.has_avatar){ av.style.display=''; av.src=AUTH_API + '/auth/avatar/'+data.id+'?v='+(data.avatar_v||''); if(fb) fb.style.display='none'; } else { av.style.display='none'; av.removeAttribute('src'); if(fb) fb.style.display=''; } }
   }
   loadProfile();
 
@@ -326,7 +326,7 @@ onMounted(() => {
         c.toBlob(async (blob)=>{
           const fd=new FormData(); fd.append('file', blob, 'avatar.webp');
           const { res, data } = await apiAuth('/auth/avatar','POST',fd);
-          if(res.ok){ toast('Аватар обновлён'); const id=(window.__fabulaUser||{}).id; const el=document.getElementById('avaImg'); if(el&&id){ el.style.display=''; el.src=AUTH_API + '/auth/avatar/'+id+'?v='+((data&&data.v)||Date.now()); } }
+          if(res.ok){ toast('Аватар обновлён'); const id=(window.__fabulaUser||{}).id; const el=document.getElementById('avaImg'); const fbx=document.getElementById('avaFb'); if(el&&id){ el.style.display=''; el.src=AUTH_API + '/auth/avatar/'+id+'?v='+((data&&data.v)||Date.now()); if(fbx) fbx.style.display='none'; } }
           else toast('Не удалось загрузить');
         }, 'image/webp', 0.9);
       };
