@@ -560,6 +560,8 @@ onBeforeUnmount(() => {
               <InteractionGenerationStatus
                 v-if="game.sending.value"
                 :intent="game.pendingTurn.value?.command.text || input"
+                :mode="game.pendingTurn.value?.command.mode || mode"
+                :persona-name="game.session.value.persona.name"
                 @cancel="game.cancelTurn()"
               />
             </div>

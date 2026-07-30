@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { gsap } from 'gsap'
+import type { StoryMode } from '#shared/storypacks'
 
 const props = defineProps<{
   intent: string
+  mode: StoryMode
+  personaName: string
 }>()
 
 const emit = defineEmits<{
@@ -15,6 +18,11 @@ let animationContext: gsap.Context | null = null
 const intentExcerpt = computed(() => props.intent.length > 110
   ? `${props.intent.slice(0, 107)}…`
   : props.intent)
+const modeLabel = computed(() => ({
+  action: 'Действие',
+  exploration: 'Исследование',
+  speech: 'Реплика',
+})[props.mode])
 
 onMounted(() => {
   if (!root.value || globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
@@ -75,6 +83,9 @@ onBeforeUnmount(() => animationContext?.revert())
           </span>
         </div>
         <p class="mt-1 truncate font-story text-[13px] italic text-[#9b9ba6]" :title="intent">«{{ intentExcerpt }}»</p>
+        <p class="mt-1 font-interface text-[10px] text-[var(--accent-light)]">
+          {{ personaName }} · {{ modeLabel }}
+        </p>
 
         <button type="button" class="mt-2 font-interface text-[11px] text-[#9b9ba6] transition hover:text-red-100" @click="emit('cancel')">
           Остановить

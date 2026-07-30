@@ -93,7 +93,69 @@ const storyPackSource: RuntimeStoryPackSource = {
   canonicalCore: '# StoryPack 04\n\n## Сюжет по восьми актам',
 }
 
+function inventoryAdvisoryFor(request: ChatJsonRequest) {
+  const playerInput = request.payload.player_input as Record<string, unknown>
+  const selectedItemIds = playerInput.selected_item_ids as string[]
+  const serverInventory = request.payload.server_inventory as Array<Record<string, unknown>>
+  const selectedItems = selectedItemIds.map((itemId) => {
+    const item = serverInventory.find(candidate => candidate.item_id === itemId)!
+    return {
+      item_id: item.item_id,
+      exists: true,
+      accessible: item.holder_id === 'player'
+        && item.location_id === (request.payload.current_scene as Record<string, unknown>).location_id
+        && item.condition !== 'spent'
+        && Number(item.quantity) > 0
+        && item.charges !== 0,
+      owner_id: item.owner_id,
+      holder_id: item.holder_id,
+      location_id: item.location_id,
+      quantity: item.quantity,
+      charges: item.charges,
+      condition: item.condition,
+      provenance_summary: item.provenance_summary,
+      reason_codes: [],
+    }
+  })
+  return {
+    module_version: 'inventory-advisory@1.0',
+    action_feasible: selectedItems.every(item => item.accessible),
+    reason_codes: selectedItems.length ? [] : ['no_item_interaction'],
+    selected_items: selectedItems,
+    operation_candidates: [],
+    interaction_effects: {
+      time_cost: 'none',
+      noise: 'none',
+      traces: [],
+      witness_ids: [],
+    },
+    consistency_notes: [],
+  }
+}
+
 function createEngine(client: OpenRouterClient): TurnEngine {
+  const clientWithInventoryStub = {
+    chatJson: async (request: ChatJsonRequest) => {
+      if (request.schema?.name === 'fabula_inventory_advisory_1_0') {
+        return {
+          requestId: 'request:inventory-stub',
+          model: request.model,
+          output: inventoryAdvisoryFor(request),
+          usage: { total_tokens: 5, cost: 0.0005 },
+        }
+      }
+      return client.chatJson(request)
+    },
+  } as unknown as OpenRouterClient
+  return new TurnEngine(
+    config,
+    clientWithInventoryStub,
+    async () => 'system prompt',
+    async () => storyPackSource,
+  )
+}
+
+function createPipelineEngine(client: OpenRouterClient): TurnEngine {
   return new TurnEngine(
     config,
     client,
@@ -179,6 +241,75 @@ function quickTurnProposal() {
 }
 
 describe('turn engine model telemetry', () => {
+  test('runs the inventory resolver before the authoritative model', async () => {
+    const requests: ChatJsonRequest[] = []
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        requests.push(request)
+        return {
+          requestId: `request:${requests.length}`,
+          model: request.model,
+          output: request.schema?.name === 'fabula_inventory_advisory_1_0'
+            ? inventoryAdvisoryFor(request)
+            : successfulTurnOutput(),
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+
+    const result = await createPipelineEngine(client).execute(command, snapshot)
+
+    expect(requests.map(request => request.schema?.name)).toEqual([
+      'fabula_inventory_advisory_1_0',
+      'fabula_turn_output_0_2',
+    ])
+    expect(requests[0]).toMatchObject({
+      model: 'deepseek/deepseek-v4-flash',
+      timeoutMs: TURN_MODEL_TIMEOUTS.inventoryPrimaryMs,
+      payload: {
+        schema_version: 'inventory-input@1.0',
+        turn_id: command.idempotency_key,
+      },
+    })
+    expect(result.advisoryUsed).toBe(true)
+    expect(result.modelRuns.map(run => run.role)).toEqual(['inventory', 'primary'])
+  })
+
+  test('uses the inventory fallback before starting the authoritative turn', async () => {
+    const requests: ChatJsonRequest[] = []
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        requests.push(request)
+        const inventoryAttempt = request.schema?.name === 'fabula_inventory_advisory_1_0'
+        return {
+          requestId: `request:${requests.length}`,
+          model: request.model,
+          output: inventoryAttempt && requests.length === 1
+            ? { invalid: true }
+            : inventoryAttempt
+              ? inventoryAdvisoryFor(request)
+              : successfulTurnOutput(),
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+
+    const result = await createPipelineEngine(client).execute(command, snapshot)
+
+    expect(requests.map(request => request.model)).toEqual([
+      'deepseek/deepseek-v4-flash',
+      'mistralai/mistral-small-2603',
+      'deepseek/deepseek-v4-flash',
+    ])
+    expect(requests[1]?.timeoutMs).toBe(TURN_MODEL_TIMEOUTS.inventoryFallbackMs)
+    expect(result.fallbackUsed).toBe(true)
+    expect(result.modelRuns.map(run => run.role)).toEqual([
+      'inventory',
+      'inventory-fallback',
+      'primary',
+    ])
+  })
+
   test('starts a scene-boundary turn with one authoritative model call', async () => {
     const requests: ChatJsonRequest[] = []
     const client = {
@@ -206,7 +337,7 @@ describe('turn engine model telemetry', () => {
     expect(requests[0]?.payload.scene).toMatchObject({
       scene_plan: null,
     })
-    expect(result.advisoryUsed).toBe(false)
+    expect(result.advisoryUsed).toBe(true)
   })
 
   test('builds the model packet from the canonical StoryPack source', async () => {
@@ -352,7 +483,7 @@ describe('turn engine model telemetry', () => {
       model: 'deepseek/deepseek-v4-flash',
       timeoutMs: TURN_MODEL_TIMEOUTS.primaryMs,
     }])
-    expect(result.advisoryUsed).toBe(false)
+    expect(result.advisoryUsed).toBe(true)
     expect(result.fallbackUsed).toBe(false)
   })
 
@@ -433,7 +564,158 @@ describe('turn engine model telemetry', () => {
         },
       },
     })
-    expect(result.modelRuns.map(run => run.role)).toEqual(['primary'])
+    expect(result.modelRuns.map(run => run.role)).toEqual(['inventory', 'primary'])
+  })
+
+  test('requires a successful acquisition to create the reserved inventory item', async () => {
+    const bottleItemId = 'item:reserved:bottle'
+    const bottleCommand: TurnCommand = {
+      ...command,
+      mode: 'action',
+      text: 'Я все равно беру эту бутылку в руки',
+    }
+    const bottleSnapshot: EngineSessionSnapshot = {
+      ...snapshot,
+      reservedIds: {
+        ...snapshot.reservedIds,
+        itemInstances: [bottleItemId],
+      },
+      allowedOperationTypes: ['event.create', 'inventory.create_instance'],
+    }
+    const requests: ChatJsonRequest[] = []
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        requests.push(request)
+        if (request.schema?.name === 'fabula_inventory_advisory_1_0') {
+          return {
+            requestId: 'request:bottle-inventory',
+            model: request.model,
+            output: {
+              ...inventoryAdvisoryFor(request),
+              reason_codes: ['portable_object_acquisition'],
+              operation_candidates: [{
+                type: 'inventory.create_instance',
+                item_id: bottleItemId,
+                amount: null,
+                from_entity_id: null,
+                to_entity_id: 'player',
+                reason: 'Игрок явно берет переносимую бутылку.',
+              }],
+            },
+            usage: { total_tokens: 10, cost: 0.001 },
+          }
+        }
+        const output = successfulTurnOutput()
+        output.intent.type = 'take_bottle'
+        output.resolution.summary = 'Ты берешь бутылку в руку.'
+        output.narrative_text = 'Ты берешь бутылку за горлышко. Прохладное стекло остается в твоей руке.'
+        output.operations = [
+          {
+            type: 'event.create',
+            operation_index: 0,
+            event_id: bottleSnapshot.reservedIds.events[0]!,
+            event_kind: 'bottle_taken',
+            actor_ids: ['player'],
+            target_ids: [],
+            item_ids: [bottleItemId],
+            location_id: bottleSnapshot.scene.location_id,
+            source_turn_id: bottleCommand.idempotency_key,
+          },
+          {
+            type: 'inventory.create_instance',
+            operation_index: 1,
+            source_event_id: bottleSnapshot.reservedIds.events[0]!,
+            item_id: bottleItemId,
+            template_id: 'item-template:water-bottle',
+            name: 'Бутылка с темной жидкостью',
+            category: 'resource',
+            description: 'Липкая стеклянная бутылка с темной жидкостью.',
+            owner_id: 'player',
+            holder_id: 'player',
+            location_id: bottleSnapshot.scene.location_id,
+            quantity: 1,
+            charges: null,
+            condition: 'usable',
+            slot: 'hand',
+          },
+        ]
+        return {
+          requestId: 'request:bottle-turn',
+          model: request.model,
+          output,
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+
+    const result = await createPipelineEngine(client).execute(bottleCommand, bottleSnapshot)
+
+    expect(requests.map(request => request.schema?.name)).toEqual([
+      'fabula_inventory_advisory_1_0',
+      'fabula_turn_output_0_2',
+    ])
+    expect(result.output.operations.find(operation =>
+      operation.type === 'inventory.create_instance')).toMatchObject({
+      type: 'inventory.create_instance',
+      item_id: bottleItemId,
+      holder_id: 'player',
+    })
+    expect(result.advisoryUsed).toBe(true)
+  })
+
+  test('rejects a narrator who makes the player withdraw from taking an object', async () => {
+    const takeCommand: TurnCommand = {
+      ...command,
+      mode: 'action',
+      text: 'Пойти взять бутылку',
+    }
+    const requests: ChatJsonRequest[] = []
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        requests.push(request)
+        if (requests.length === 1) {
+          const output = successfulTurnOutput()
+          output.resolution.summary = 'Ты тянешься к бутылке, но не берешь ее.'
+          output.narrative_text = 'Ты замечаешь темную жидкость и отдергиваешь руку, не касаясь бутылки.'
+          return {
+            requestId: 'request:withdraw-primary',
+            model: request.model,
+            output,
+            usage: { total_tokens: 10, cost: 0.001 },
+          }
+        }
+        return {
+          requestId: 'request:withdraw-fallback',
+          model: request.model,
+          output: {
+            outcome: 'failure',
+            summary: 'Ты тянешься к бутылке, но не касаешься ее.',
+            event_kind: 'bottle_left_untouched',
+          },
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+
+    const result = await createEngine(client).execute(takeCommand, snapshot)
+
+    expect(requests).toHaveLength(2)
+    expect(result.output.resolution).toMatchObject({
+      outcome: 'failure',
+      reason_codes: ['quick_fallback', 'server_action_guard'],
+    })
+    expect(result.output.narrative_text).toContain('внешнее препятствие')
+    expect(result.modelRuns.slice(-2)).toMatchObject([
+      {
+        role: 'primary',
+        status: 'discarded',
+        error_code: 'MODEL_ACTION_MISMATCH',
+      },
+      {
+        role: 'fallback',
+        status: 'accepted',
+      },
+    ])
   })
 
   test('preserves usage and safe error codes for discarded paid attempts', async () => {
@@ -605,7 +887,7 @@ describe('turn engine model telemetry', () => {
       reason_codes: ['quick_fallback', 'server_action_guard'],
     })
     expect(result.output.narrative_text).not.toMatch(/откры|распах/iu)
-    expect(result.modelRuns).toMatchObject([
+    expect(result.modelRuns.slice(-2)).toMatchObject([
       {
         role: 'primary',
         status: 'discarded',
