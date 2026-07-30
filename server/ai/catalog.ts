@@ -29,6 +29,7 @@ export interface AiModuleDefinition {
   maxInputReferences?: number
   requiresInputReference?: boolean
   fallbackModelId?: string
+  devAlternativeModelId?: string
   fallbackPolicy: string
   disabledReason?: string
 }
@@ -54,7 +55,15 @@ export const AI_MODELS = {
     id: 'nemotron-paid',
     label: 'Nemotron 3 Ultra',
     slug: 'nvidia/nemotron-3-ultra-550b-a55b',
-    role: 'Платный fallback планировщика',
+    role: 'Анализ предметов и платный fallback планировщика',
+    modality: 'text',
+    jsonMode: 'json-schema',
+  },
+  nemotronJournal: {
+    id: 'nemotron-journal',
+    label: 'Nemotron 3 Super',
+    slug: 'nvidia/nemotron-3-super-120b-a12b',
+    role: 'Post-commit проекция журнала',
     modality: 'text',
     jsonMode: 'json-schema',
   },
@@ -62,7 +71,7 @@ export const AI_MODELS = {
     id: 'aion',
     label: 'Aion 3.0 Mini',
     slug: 'aion-labs/aion-3.0-mini',
-    role: 'Рассказчик, отключенный до появления ZDR endpoint',
+    role: 'Dev-альтернатива модели создания сюжета',
     modality: 'text',
     jsonMode: 'json-object',
   },
@@ -143,6 +152,7 @@ export const AI_MODULES = {
     maxOutputTokens: 4000,
     maxPrice: { prompt: 0.15, completion: 0.3 },
     fallbackModelId: 'mistral',
+    devAlternativeModelId: 'aion',
     fallbackPolicy: 'same-contract-model',
   },
   'scene-plan': {
@@ -281,12 +291,12 @@ export const AI_MODULES = {
     id: 'inventory',
     promptNumber: '08',
     title: 'Предметы и инвентарь',
-    modelId: 'deepseek',
+    modelId: 'nemotron-paid',
     kind: 'text',
     contract: 'inventory-advisory@1.0',
     standalone: false,
     maxOutputTokens: 1800,
-    maxPrice: { prompt: 0.15, completion: 0.3 },
+    maxPrice: { prompt: 0.55, completion: 2.3 },
     fallbackModelId: 'mistral',
     fallbackPolicy: 'same-contract-model-then-fail-turn',
   },
@@ -294,13 +304,13 @@ export const AI_MODULES = {
     id: 'journal',
     promptNumber: '09',
     title: 'Журнал и память',
-    modelId: 'deepseek',
+    modelId: 'nemotron-journal',
     kind: 'text',
     contract: 'journal-compiler@0.2',
+    standalone: false,
     maxOutputTokens: 1800,
-    maxPrice: { prompt: 0.15, completion: 0.3 },
-    fallbackModelId: 'mistral',
-    fallbackPolicy: 'same-contract-model',
+    maxPrice: { prompt: 0.1, completion: 0.45 },
+    fallbackPolicy: 'deterministic-server-projection',
   },
   'world-compiler': {
     id: 'world-compiler',

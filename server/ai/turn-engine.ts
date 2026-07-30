@@ -8,7 +8,14 @@ import { AiExecutionError, FabulaApiError } from './http'
 import type { SafeModelRun } from './http'
 import { OpenRouterClient, OpenRouterError } from './openrouter'
 import { getStandaloneContract, parseStandaloneOutput } from './standalone-contracts'
-import type { EngineSessionSnapshot, SessionTurnResult, TurnOutputValidator } from '../game/session-repository'
+import type {
+  EngineSessionSnapshot,
+  JournalProjectionContext,
+  JournalProjectionDraft,
+  JournalProjectionResult,
+  SessionTurnResult,
+  TurnOutputValidator,
+} from '../game/session-repository'
 import { getStoryPackContext } from '../game/storypack-context'
 import type { RuntimeStoryPackSource } from '../game/storypack-source'
 import { loadRuntimeStoryPack } from '../game/storypack-source'
@@ -17,8 +24,9 @@ export interface TurnEngineResult extends SessionTurnResult {
   modelRuns: SafeModelRun[]
 }
 
-type PromptLoader = (moduleId: 'authoritative-turn' | 'inventory') => Promise<string>
+type PromptLoader = (moduleId: 'authoritative-turn' | 'inventory' | 'journal') => Promise<string>
 type StoryPackSourceLoader = (storyPackId: StoryPackId) => Promise<RuntimeStoryPackSource>
+export type DevStoryModel = 'deepseek' | 'aion'
 
 export interface TurnExternalMemory {
   source: 'honcho'
@@ -32,6 +40,7 @@ export const TURN_MODEL_TIMEOUTS = {
   inventoryFallbackMs: 8_000,
   primaryMs: 17_000,
   fallbackMs: 8_000,
+  journalMs: 8_000,
 } as const
 
 const QUICK_TURN_PROMPT = `Ты создаешь короткое безопасное продолжение интерактивной истории.
@@ -105,6 +114,7 @@ export class TurnEngine {
     signal?: AbortSignal,
     validateOutput?: TurnOutputValidator,
     externalMemory?: TurnExternalMemory | null,
+    storyModelId: DevStoryModel = 'deepseek',
   ): Promise<TurnEngineResult> {
     const modelRuns: SafeModelRun[] = []
     const storyPackSource = await this.storyPackSourceLoader(snapshot.storyPackId)
@@ -124,8 +134,9 @@ export class TurnEngine {
       storyPackSource,
       externalMemory,
     )
+    const storyModel = storyModelId === 'aion' ? AI_MODELS.aion : AI_MODELS.deepseek
     const primary = await this.tryTurnModel(
-      AI_MODELS.deepseek.slug,
+      storyModel,
       'primary',
       packet,
       command,
@@ -139,7 +150,7 @@ export class TurnEngine {
     if (primary) {
       return {
         output: primary,
-        model: AI_MODELS.deepseek.slug,
+        model: storyModel.slug,
         fallbackUsed: inventoryResult.fallbackUsed,
         advisoryUsed: true,
         modelRuns,
@@ -172,6 +183,71 @@ export class TurnEngine {
         modelRuns,
         modelRuns.some(run => run.error_code === 'UPSTREAM_TIMEOUT' || run.error_code === 'UPSTREAM_RATE_LIMITED'),
       )
+    }
+  }
+
+  async projectJournal(
+    command: TurnCommand,
+    context: JournalProjectionContext,
+    signal?: AbortSignal,
+  ): Promise<JournalProjectionResult> {
+    if (!context.sourceEventIds.length) {
+      return {
+        entries: [],
+        fallbackUsed: false,
+        modelRuns: [],
+      }
+    }
+
+    const modelRuns: SafeModelRun[] = []
+    let result: Awaited<ReturnType<OpenRouterClient['chatJson']>> | null = null
+    try {
+      const storyPackSource = await this.storyPackSourceLoader(context.snapshot.storyPackId)
+      result = await this.client.chatJson({
+        model: AI_MODELS.nemotronJournal.slug,
+        system: await this.promptLoader('journal'),
+        payload: buildJournalPacket(command, context, storyPackSource),
+        maxOutputTokens: 1200,
+        timeoutMs: TURN_MODEL_TIMEOUTS.journalMs,
+        signal,
+        maxPrice: { prompt: 0.1, completion: 0.45 },
+        schema: getStandaloneContract('journal'),
+        jsonMode: AI_MODELS.nemotronJournal.jsonMode,
+      })
+      const output = parseStandaloneOutput('journal', result.output)
+      const entries = journalDraftsFromOutput(output, command, context)
+      modelRuns.push({
+        role: 'journal',
+        model: result.model,
+        request_id: result.requestId,
+        usage: result.usage,
+        status: 'accepted',
+        error_code: null,
+        validation_errors: [],
+      })
+      return {
+        entries,
+        fallbackUsed: false,
+        modelRuns,
+      }
+    }
+    catch (error) {
+      modelRuns.push({
+        role: 'journal',
+        model: result?.model || openRouterModel(error) || AI_MODELS.nemotronJournal.slug,
+        request_id: result?.requestId || openRouterRequestId(error),
+        usage: result?.usage || openRouterUsage(error),
+        status: 'discarded',
+        error_code: safeErrorCode(error),
+        validation_errors: safeValidationErrors(error),
+      })
+      if (signal?.aborted)
+        throw error
+      return {
+        entries: [],
+        fallbackUsed: true,
+        modelRuns,
+      }
     }
   }
 
@@ -241,16 +317,18 @@ export class TurnEngine {
     const contract = getStandaloneContract('inventory')
     const attempts = [
       {
-        model: AI_MODELS.deepseek.slug,
+        model: AI_MODELS.nemotronPaid.slug,
         role: 'inventory' as const,
         timeoutMs: TURN_MODEL_TIMEOUTS.inventoryPrimaryMs,
-        maxPrice: { prompt: 0.15, completion: 0.3 },
+        maxPrice: { prompt: 0.55, completion: 2.3 },
+        jsonMode: AI_MODELS.nemotronPaid.jsonMode,
       },
       {
         model: AI_MODELS.mistral.slug,
         role: 'inventory-fallback' as const,
         timeoutMs: TURN_MODEL_TIMEOUTS.inventoryFallbackMs,
         maxPrice: { prompt: 0.25, completion: 0.8 },
+        jsonMode: AI_MODELS.mistral.jsonMode,
       },
     ]
 
@@ -266,6 +344,7 @@ export class TurnEngine {
           signal,
           maxPrice: attempt.maxPrice,
           schema: contract,
+          jsonMode: attempt.jsonMode,
         })
         const advisory = parseStandaloneOutput('inventory', result.output)
         assertInventoryAdvisoryAlignment(advisory, command, snapshot)
@@ -307,7 +386,7 @@ export class TurnEngine {
   }
 
   private async tryTurnModel(
-    model: string,
+    model: typeof AI_MODELS.deepseek | typeof AI_MODELS.aion,
     role: 'primary' | 'fallback',
     packet: Record<string, JsonValue>,
     command: TurnCommand,
@@ -321,19 +400,21 @@ export class TurnEngine {
     let result: Awaited<ReturnType<OpenRouterClient['chatJson']>> | null = null
     try {
       result = await this.client.chatJson({
-        model,
+        model: model.slug,
         system: await this.promptLoader('authoritative-turn'),
         payload: packet,
         maxOutputTokens: role === 'primary' ? 2000 : 1800,
         timeoutMs: role === 'primary' ? TURN_MODEL_TIMEOUTS.primaryMs : TURN_MODEL_TIMEOUTS.fallbackMs,
         signal,
-        maxPrice: role === 'primary'
-          ? { prompt: 0.15, completion: 0.3 }
-          : { prompt: 0.25, completion: 0.8 },
+        maxPrice: model.id === 'aion'
+          ? { prompt: 0.8, completion: 1.6 }
+          : { prompt: 0.15, completion: 0.3 },
         schema: {
           name: 'fabula_turn_output_0_2',
           schema: TURN_OUTPUT_JSON_SCHEMA,
         },
+        devAllowNonZdr: model.id === 'aion',
+        jsonMode: model.jsonMode,
       })
       const output = parseTurnOutput(
         withServerEnvelope(result.output, command, snapshot, storyPackSource),
@@ -358,7 +439,7 @@ export class TurnEngine {
     catch (error) {
       modelRuns.push({
         role,
-        model: result?.model || openRouterModel(error) || model,
+        model: result?.model || openRouterModel(error) || model.slug,
         request_id: result?.requestId || openRouterRequestId(error),
         usage: result?.usage || openRouterUsage(error),
         status: 'discarded',
@@ -443,6 +524,131 @@ function buildInventoryPacket(
       allowed_operations: snapshot.allowedOperationTypes.filter(type => type.startsWith('inventory.')),
     },
   }
+}
+
+function buildJournalPacket(
+  command: TurnCommand,
+  context: JournalProjectionContext,
+  storyPackSource: RuntimeStoryPackSource,
+): Record<string, JsonValue> {
+  const committedEventIds = new Set(context.sourceEventIds)
+  return {
+    schema_version: 'journal-input@0.2',
+    turn_id: command.idempotency_key,
+    story_pack: {
+      id: context.snapshot.storyPackId,
+      version: context.snapshot.storyPackVersion,
+      prompt_overlay: storyPackSource.promptOverlay,
+    },
+    scene: {
+      id: context.snapshot.scene.id,
+      location_id: context.snapshot.scene.location_id,
+      story_time: context.snapshot.scene.story_time,
+    },
+    committed_events: context.snapshot.confirmedEvents
+      .filter(event => committedEventIds.has(event.id))
+      .map(event => ({
+        event_id: event.id,
+        kind: event.kind,
+        actor_ids: event.actorIds,
+        target_ids: event.targetIds,
+        item_ids: event.itemIds,
+        location_id: event.locationId,
+        source_turn_id: event.sourceTurnId,
+      })),
+    player_visible_facts: context.snapshot.confirmedFacts.slice(-24).map(fact => ({
+      fact_id: fact.id,
+      claim: fact.claim,
+      truth_status: fact.truthStatus,
+      source_event_ids: fact.sourceEventIds,
+    })),
+    inventory_operations: context.output.operations
+      .filter(operation => operation.type.startsWith('inventory.'))
+      .map(operation => ({ ...operation })) as unknown as JsonValue,
+    visible_resolution: {
+      outcome: context.output.resolution.outcome,
+      summary: context.output.resolution.summary,
+      narrative_text: context.output.narrative_text,
+      unresolved_ambiguities: context.output.audit.unresolved_ambiguities,
+    },
+    existing_open_threads: context.snapshot.journal.slice(0, 12).map(entry => ({
+      entry_id: entry.id,
+      title: entry.title,
+      uncertainty: entry.uncertainty,
+      source_event_ids: entry.source_event_ids,
+    })),
+    authority: {
+      reserved_journal_ids: context.reservedJournalIds,
+      allowed_event_refs: context.sourceEventIds,
+      allowed_fact_refs: context.snapshot.confirmedFacts.map(fact => fact.id),
+      allowed_item_refs: context.snapshot.inventory.map(item => item.id),
+      allowed_entity_refs: knownEntityCatalog(context.snapshot).map(entity => entity.id),
+      location_ref: context.snapshot.scene.location_id,
+    },
+  }
+}
+
+function journalDraftsFromOutput(
+  output: Record<string, JsonValue>,
+  command: TurnCommand,
+  context: JournalProjectionContext,
+): JournalProjectionDraft[] {
+  const entries = output.entries as Array<Record<string, JsonValue>>
+  if (!entries.length)
+    throw new ContractError('MODEL_CONTRACT_ERROR', 'Журнал не создал запись для подтвержденного события.')
+  if (entries.length > context.reservedJournalIds.length) {
+    throw new ContractError(
+      'MODEL_AUTHORITY_ERROR',
+      'Журнал создал больше записей, чем зарезервировал сервер.',
+      ['$.entries'],
+    )
+  }
+
+  const reservedIds = new Set(context.reservedJournalIds)
+  const eventIds = new Set(context.sourceEventIds)
+  const factIds = new Set(context.snapshot.confirmedFacts.map(fact => fact.id))
+  const itemIds = new Set(context.snapshot.inventory.map(item => item.id))
+  const entityIds = new Set(knownEntityCatalog(context.snapshot).map(entity => entity.id))
+  entityIds.add('player')
+
+  return entries.map((entry, index) => {
+    const entryId = String(entry.entry_id)
+    const eventRefs = entry.event_refs as string[]
+    const factRefs = entry.fact_refs as string[]
+    const itemRefs = entry.item_refs as string[]
+    const participantRefs = entry.participant_refs as string[]
+    const locationRef = String(entry.location_ref)
+    const invalidPaths: string[] = []
+    if (!reservedIds.has(entryId))
+      invalidPaths.push(`$.entries[${index}].entry_id`)
+    if (!eventRefs.length || eventRefs.some(eventId => !eventIds.has(eventId)))
+      invalidPaths.push(`$.entries[${index}].event_refs`)
+    if (factRefs.some(factId => !factIds.has(factId)))
+      invalidPaths.push(`$.entries[${index}].fact_refs`)
+    if (itemRefs.some(itemId => !itemIds.has(itemId)))
+      invalidPaths.push(`$.entries[${index}].item_refs`)
+    if (participantRefs.some(entityId => !entityIds.has(entityId)))
+      invalidPaths.push(`$.entries[${index}].participant_refs`)
+    if (locationRef !== context.snapshot.scene.location_id)
+      invalidPaths.push(`$.entries[${index}].location_ref`)
+    if (invalidPaths.length) {
+      throw new ContractError(
+        'MODEL_AUTHORITY_ERROR',
+        'Журнал сослался на неподтвержденные данные.',
+        invalidPaths,
+      )
+    }
+    return {
+      id: entryId,
+      entry_type: command.mode === 'exploration' ? 'clue' : 'event',
+      title: String(entry.title).trim(),
+      summary: String(entry.public_summary).trim(),
+      uncertainty: context.output.audit.unresolved_ambiguities.length ? 'suspected' : 'confirmed',
+      source_event_ids: [...eventRefs],
+      involved_entity_ids: [...new Set(['player', ...participantRefs, ...itemRefs])],
+      story_time: context.snapshot.scene.story_time,
+    }
+  })
 }
 
 function buildTurnPacket(

@@ -264,7 +264,7 @@ describe('turn engine model telemetry', () => {
       'fabula_turn_output_0_2',
     ])
     expect(requests[0]).toMatchObject({
-      model: 'deepseek/deepseek-v4-flash',
+      model: 'nvidia/nemotron-3-ultra-550b-a55b',
       timeoutMs: TURN_MODEL_TIMEOUTS.inventoryPrimaryMs,
       payload: {
         schema_version: 'inventory-input@1.0',
@@ -297,7 +297,7 @@ describe('turn engine model telemetry', () => {
     const result = await createPipelineEngine(client).execute(command, snapshot)
 
     expect(requests.map(request => request.model)).toEqual([
-      'deepseek/deepseek-v4-flash',
+      'nvidia/nemotron-3-ultra-550b-a55b',
       'mistralai/mistral-small-2603',
       'deepseek/deepseek-v4-flash',
     ])
@@ -485,6 +485,119 @@ describe('turn engine model telemetry', () => {
     }])
     expect(result.advisoryUsed).toBe(true)
     expect(result.fallbackUsed).toBe(false)
+  })
+
+  test('uses Aion 3.0 Mini as the dev story model without changing inventory routing', async () => {
+    const requests: ChatJsonRequest[] = []
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        requests.push(request)
+        return {
+          requestId: 'request:aion-story',
+          model: request.model,
+          output: successfulTurnOutput(),
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+
+    const result = await createEngine(client).execute(
+      command,
+      snapshot,
+      undefined,
+      undefined,
+      undefined,
+      'aion',
+    )
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toMatchObject({
+      model: 'aion-labs/aion-3.0-mini',
+      jsonMode: 'json-object',
+      schema: {
+        name: 'fabula_turn_output_0_2',
+      },
+      devAllowNonZdr: true,
+    })
+    expect(result.model).toBe('aion-labs/aion-3.0-mini')
+  })
+
+  test('projects the confirmed turn into the journal with Nemotron 3 Super', async () => {
+    const eventId = snapshot.reservedIds.events[0]!
+    const journalId = 'journal:reserved:0001'
+    const output = successfulTurnOutput()
+    const requests: ChatJsonRequest[] = []
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        requests.push(request)
+        return {
+          requestId: 'request:journal',
+          model: request.model,
+          output: {
+            module_version: 'journal-compiler@0.2',
+            entries: [{
+              entry_id: journalId,
+              event_refs: [eventId],
+              title: 'Проверка двери',
+              public_summary: 'Дверь осмотрена, и результат проверки подтвержден текущим событием.',
+              location_ref: snapshot.scene.location_id,
+              participant_refs: ['player'],
+              fact_refs: [],
+              item_refs: [],
+              relationship_changes_visible_to_player: [],
+              rumors: [],
+              open_threads: [],
+              tags: ['дверь'],
+            }],
+            character_index_updates: [],
+            location_index_updates: [],
+            quest_index_updates: [],
+            server_only_callback_hooks: [],
+          },
+          usage: { total_tokens: 12, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+    const engine = createEngine(client)
+
+    const result = await engine.projectJournal(command, {
+      snapshot: {
+        ...snapshot,
+        confirmedEvents: [{
+          id: eventId,
+          kind: 'door_inspected',
+          actorIds: ['player'],
+          targetIds: [],
+          itemIds: [],
+          locationId: snapshot.scene.location_id,
+          sourceTurnId: command.idempotency_key,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        }],
+      },
+      output,
+      sourceEventIds: [eventId],
+      reservedJournalIds: [journalId],
+    })
+
+    expect(requests[0]).toMatchObject({
+      model: 'nvidia/nemotron-3-super-120b-a12b',
+      jsonMode: 'json-schema',
+      schema: {
+        name: 'fabula_journal_compiler_0_2',
+      },
+    })
+    expect(result).toMatchObject({
+      fallbackUsed: false,
+      entries: [{
+        id: journalId,
+        title: 'Проверка двери',
+        source_event_ids: [eventId],
+      }],
+      modelRuns: [{
+        role: 'journal',
+        status: 'accepted',
+      }],
+    })
   })
 
   test('passes server-verified inventory state and Honcho recall to the only model call', async () => {

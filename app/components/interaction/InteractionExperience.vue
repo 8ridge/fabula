@@ -7,6 +7,7 @@ import type {
   InteractionDrawer,
   InteractionFontScale,
   InteractionQueuedTurn,
+  InteractionStoryModel,
   InteractionToolComposePayload,
   InteractionTurnDraft,
   InteractionToolName,
@@ -30,6 +31,8 @@ const game = useGameSession(sessionId)
 const input = ref('')
 const mode = ref<StoryMode>('action')
 const fontScale = ref<InteractionFontScale>('large')
+const devMode = import.meta.dev
+const devStoryModel = ref<InteractionStoryModel>('deepseek')
 const selectedSuggestionId = ref<string | null>(null)
 const selectedItemIds = ref<string[]>([])
 const selectedJournalEntryIds = ref<string[]>([])
@@ -93,6 +96,15 @@ function setFontScale(nextScale: InteractionFontScale) {
   if (import.meta.client)
     localStorage.setItem('fabula:font-scale', nextScale)
   showToast(nextScale === 'normal' ? 'Размер текста: 17 px' : nextScale === 'xlarge' ? 'Размер текста: 21 px' : 'Размер текста: 19 px')
+}
+
+function setDevStoryModel(nextModel: InteractionStoryModel) {
+  if (!devMode)
+    return
+  devStoryModel.value = nextModel
+  if (import.meta.client)
+    localStorage.setItem('fabula:dev-story-model', nextModel)
+  showToast(nextModel === 'aion' ? 'Сюжет: Aion 3.0 Mini' : 'Сюжет: DeepSeek V4 Flash')
 }
 
 async function chooseSuggestion(suggestion: SuggestedAction) {
@@ -260,6 +272,7 @@ async function executeTurn(turn: InteractionQueuedTurn): Promise<boolean> {
     selectedSuggestionId: turn.selectedSuggestionId,
     selectedItemIds: turn.selectedItemIds,
     selectedJournalEntryIds: turn.selectedJournalEntryIds,
+    devStoryModel: devStoryModel.value,
   })
   activeTurn.value = null
   if (!succeeded) {
@@ -426,6 +439,11 @@ onMounted(async () => {
   const savedFontScale = localStorage.getItem('fabula:font-scale') as InteractionFontScale | null
   if (savedFontScale && ['normal', 'large', 'xlarge'].includes(savedFontScale))
     fontScale.value = savedFontScale
+  if (devMode) {
+    const savedStoryModel = localStorage.getItem('fabula:dev-story-model') as InteractionStoryModel | null
+    if (savedStoryModel && ['deepseek', 'aion'].includes(savedStoryModel))
+      devStoryModel.value = savedStoryModel
+  }
   if (pageRoot.value)
     motionContext = gsap.context(() => {}, pageRoot.value)
   window.addEventListener('keydown', onKeydown)
@@ -613,10 +631,13 @@ onBeforeUnmount(() => {
         :active-tool="activeTool"
         :session="game.session.value"
         :font-scale="fontScale"
+        :dev-mode="devMode"
+        :dev-story-model="devStoryModel"
         @close="activeTool = null"
         @compose="composeFromTool"
         @open-tool="openTool"
         @set-font-scale="setFontScale"
+        @set-dev-story-model="setDevStoryModel"
       />
     </template>
 

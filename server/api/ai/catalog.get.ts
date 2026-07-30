@@ -53,6 +53,7 @@ export default defineEventHandler((event) => {
         enabled: available && invokable,
         cost_ceiling_usd: costCeilingUsd || null,
         fallback_model_id: module.fallbackModelId || null,
+        dev_alternative_model_id: module.devAlternativeModelId || null,
         fallback_policy: module.fallbackPolicy,
         blocked_reason: module.disabledReason || (!available ? 'OPENROUTER_KEY_REQUIRED' : null),
       }

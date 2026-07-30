@@ -29,6 +29,34 @@ export interface SessionTurnResult {
 
 export type TurnOutputValidator = (output: TurnOutput) => void
 
+export interface JournalProjectionDraft {
+  id: string
+  entry_type: JournalEntryProjection['entry_type']
+  title: string
+  summary: string
+  uncertainty: JournalEntryProjection['uncertainty']
+  source_event_ids: string[]
+  involved_entity_ids: string[]
+  story_time: string
+}
+
+export interface JournalProjectionContext {
+  snapshot: EngineSessionSnapshot
+  output: TurnOutput
+  sourceEventIds: string[]
+  reservedJournalIds: string[]
+}
+
+export interface JournalProjectionResult {
+  entries: JournalProjectionDraft[]
+  fallbackUsed: boolean
+  modelRuns: SafeModelRun[]
+}
+
+export type JournalProjector = (
+  context: JournalProjectionContext,
+) => Promise<JournalProjectionResult>
+
 export interface EngineSessionSnapshot {
   sessionId: string
   storyPackId: StoryPackId
@@ -164,6 +192,47 @@ function makeMessage(
     selected_journal_entries: clone(input.selected_journal_entries || []),
     id: `message:${globalThis.crypto.randomUUID()}`,
     created_at: nowIso(),
+  }
+}
+
+function defaultJournalProjection(
+  command: GameTurnCommand,
+  output: TurnOutput,
+  sourceEventIds: string[],
+  storyTime: string,
+): JournalProjectionDraft {
+  return {
+    id: `journal:${globalThis.crypto.randomUUID()}`,
+    entry_type: command.mode === 'exploration' ? 'clue' : 'event',
+    title: output.resolution.summary.slice(0, 80),
+    summary: output.resolution.summary,
+    uncertainty: output.audit.unresolved_ambiguities.length ? 'suspected' : 'confirmed',
+    source_event_ids: [...sourceEventIds],
+    involved_entity_ids: [...new Set([
+      'player',
+      ...output.intent.targets,
+      ...output.intent.referenced_entities,
+    ])],
+    story_time: storyTime,
+  }
+}
+
+function assertJournalProjection(
+  entries: JournalProjectionDraft[],
+  reservedJournalIds: string[],
+  sourceEventIds: string[],
+): void {
+  if (entries.length > reservedJournalIds.length)
+    throw new FabulaApiError('MODEL_AUTHORITY_ERROR', 'Журнал создал незарезервированную запись.', 502)
+  const reserved = new Set(reservedJournalIds)
+  const committedEvents = new Set(sourceEventIds)
+  for (const entry of entries) {
+    if (!reserved.has(entry.id))
+      throw new FabulaApiError('MODEL_AUTHORITY_ERROR', 'Журнал использовал незарезервированный ID.', 502)
+    if (!entry.source_event_ids.length || entry.source_event_ids.some(eventId => !committedEvents.has(eventId)))
+      throw new FabulaApiError('MODEL_AUTHORITY_ERROR', 'Журнал сослался на неподтвержденное событие.', 502)
+    if (!entry.title.trim() || entry.title.length > 160 || !entry.summary.trim() || entry.summary.length > 2_000)
+      throw new FabulaApiError('MODEL_CONTRACT_ERROR', 'Журнал вернул некорректный текст.', 502)
   }
 }
 
@@ -877,6 +946,7 @@ export class GameSessionRepository {
     command: GameTurnCommand,
     worker: (snapshot: EngineSessionSnapshot, validateOutput: TurnOutputValidator) => Promise<SessionTurnResult>,
     requestId: string,
+    journalProjector?: JournalProjector,
   ): Promise<GameTurnResponse> {
     const inFlightKey = `${ownerId}:${command.session_id}:${command.idempotency_key}`
     const commandFingerprint = fingerprint(command)
@@ -889,7 +959,7 @@ export class GameSessionRepository {
     }
 
     const promise = this.withSessionQueue(command.session_id, () =>
-      this.executeTurnLocked(ownerId, command, worker, requestId, commandFingerprint))
+      this.executeTurnLocked(ownerId, command, worker, requestId, commandFingerprint, journalProjector))
     this.inFlightTurns.set(inFlightKey, { fingerprint: commandFingerprint, promise })
     try {
       return await promise
@@ -909,6 +979,7 @@ export class GameSessionRepository {
     ) => Promise<SessionTurnResult>,
     requestId: string,
     commandFingerprint: string,
+    journalProjector?: JournalProjector,
   ): Promise<GameTurnResponse> {
     const session = await this.requireOwned(ownerId, command.session_id)
     const replay = session.idempotency.find(record => record.key === command.idempotency_key)
@@ -1002,22 +1073,40 @@ export class GameSessionRepository {
     if (nextSession.snapshot.messages.length > 80)
       nextSession.snapshot.messages.splice(0, nextSession.snapshot.messages.length - 80)
 
-    if (sourceEventIds.length) {
-      nextSession.snapshot.journal.unshift({
-        id: `journal:${globalThis.crypto.randomUUID()}`,
-        entry_type: command.mode === 'exploration' ? 'clue' : 'event',
-        title: result.output.resolution.summary.slice(0, 80),
-        summary: result.output.resolution.summary,
-        uncertainty: result.output.audit.unresolved_ambiguities.length ? 'suspected' : 'confirmed',
-        source_event_ids: sourceEventIds,
-        involved_entity_ids: [...new Set([
-          'player',
-          ...result.output.intent.targets,
-          ...result.output.intent.referenced_entities,
-        ])],
-        story_time: nextSession.snapshot.scene.story_time,
-        created_at: createdAt,
+    let journalProjection: JournalProjectionResult | null = null
+    if (sourceEventIds.length && journalProjector) {
+      const reservedJournalIds = [`journal:${globalThis.crypto.randomUUID()}`]
+      journalProjection = await journalProjector({
+        snapshot: {
+          ...engineSnapshot,
+          scene: clone(nextSession.snapshot.scene),
+          inventory: clone(nextSession.snapshot.inventory),
+          journal: clone(nextSession.snapshot.journal),
+          characters: clone(nextSession.snapshot.characters),
+          locations: clone(nextSession.snapshot.locations),
+          confirmedEvents: clone(nextSession.events.slice(-24)),
+          confirmedFacts: clone(nextSession.facts.slice(-32)),
+          knowledge: clone(nextSession.knowledge),
+        },
+        output: result.output,
+        sourceEventIds: [...sourceEventIds],
+        reservedJournalIds,
       })
+      assertJournalProjection(
+        journalProjection.entries,
+        reservedJournalIds,
+        sourceEventIds,
+      )
+    }
+
+    if (sourceEventIds.length) {
+      const projectedEntries = journalProjection?.entries.length
+        ? journalProjection.entries
+        : [defaultJournalProjection(command, result.output, sourceEventIds, nextSession.snapshot.scene.story_time)]
+      nextSession.snapshot.journal.unshift(...projectedEntries.map(entry => ({
+        ...entry,
+        created_at: createdAt,
+      })))
       if (nextSession.snapshot.journal.length > 80)
         nextSession.snapshot.journal.splice(80)
     }
@@ -1046,7 +1135,7 @@ export class GameSessionRepository {
       session_version: nextSession.snapshot.version,
       replayed: false,
       model: result.model,
-      fallback_used: result.fallbackUsed,
+      fallback_used: result.fallbackUsed || journalProjection?.fallbackUsed === true,
       advisory_used: result.advisoryUsed,
       session: clone(nextSession.snapshot),
     }

@@ -72,6 +72,31 @@ describe('OpenRouter transport', () => {
     await expect(promise).rejects.not.toThrow(/secret prompt/)
   })
 
+  test('allows the explicit dev Aion route without weakening data collection policy', async () => {
+    let capturedBody: Record<string, unknown> = {}
+    const fakeFetch = async (_url: string | URL | Request, init?: RequestInit) => {
+      capturedBody = JSON.parse(String(init?.body))
+      return new Response(JSON.stringify({
+        model: 'aion-labs/aion-3.0-mini',
+        choices: [{ message: { content: '{"ok":true}' } }],
+      }), { status: 200 })
+    }
+
+    await new OpenRouterClient(config, fakeFetch as typeof fetch).chatJson({
+      model: 'aion-labs/aion-3.0-mini',
+      system: 'system',
+      payload: {},
+      maxOutputTokens: 100,
+      devAllowNonZdr: true,
+      jsonMode: 'json-object',
+    })
+
+    expect(capturedBody.provider).toMatchObject({
+      data_collection: 'deny',
+    })
+    expect(capturedBody.provider).not.toHaveProperty('zdr')
+  })
+
   test('preserves billed usage when model JSON is invalid', async () => {
     const fakeFetch = async () => new Response(JSON.stringify({
       model: 'deepseek/deepseek-v4-flash',

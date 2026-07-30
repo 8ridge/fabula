@@ -1,5 +1,5 @@
 import type { H3Event } from 'h3'
-import { readBody, setHeader } from 'h3'
+import { getRequestHeader, readBody, setHeader } from 'h3'
 import type { GameTurnResponse } from '#shared/game'
 import { resolveAiConfig } from '../ai/config'
 import { parseTurnCommand } from '../ai/contracts'
@@ -11,6 +11,7 @@ import {
   HonchoMemoryError,
 } from '../memory/honcho'
 import { getOrCreatePlayerId } from './player'
+import { DEV_STORY_MODEL_HEADER, resolveDevStoryModel } from './dev-story-model'
 import { getGameSessionRepository } from './session-runtime'
 
 const MEMORY_RECALL_BUDGET_MS = 1_200
@@ -46,6 +47,9 @@ export async function handleGameTurn(event: H3Event, pathSessionId?: string) {
   event.node.res.once('close', abortTurn)
   try {
     const command = parseTurnCommand(await readBody(event))
+    const storyModel = resolveDevStoryModel(
+      getRequestHeader(event, DEV_STORY_MODEL_HEADER),
+    )
     if (pathSessionId && command.session_id !== pathSessionId)
       throw new FabulaApiError('SESSION_ID_MISMATCH', 'Идентификатор сессии в пути и команде не совпадает.', 400)
     event.context.fabulaTurnId = command.idempotency_key
@@ -80,9 +84,11 @@ export async function handleGameTurn(event: H3Event, pathSessionId?: string) {
             controller.signal,
             validateOutput,
             externalMemory,
+            storyModel,
           )
         },
         requestId,
+        context => engine.projectJournal(command, context, controller.signal),
       )
     }
     catch (error) {

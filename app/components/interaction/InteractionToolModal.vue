@@ -2,6 +2,7 @@
 import type { GameSessionSnapshot } from '#shared/game'
 import type {
   InteractionFontScale,
+  InteractionStoryModel,
   InteractionToolComposePayload,
   InteractionToolName,
 } from '~/types/interaction-ui'
@@ -10,6 +11,8 @@ const props = defineProps<{
   activeTool: InteractionToolName | null
   session: GameSessionSnapshot
   fontScale: InteractionFontScale
+  devMode: boolean
+  devStoryModel: InteractionStoryModel
 }>()
 
 const emit = defineEmits<{
@@ -17,6 +20,7 @@ const emit = defineEmits<{
   compose: [payload: InteractionToolComposePayload]
   openTool: [tool: InteractionToolName]
   setFontScale: [scale: InteractionFontScale]
+  setDevStoryModel: [model: InteractionStoryModel]
 }>()
 
 const dialog = ref<HTMLDialogElement | null>(null)
@@ -207,6 +211,27 @@ function closeOnBackdrop(event: MouseEvent) {
             >
               {{ option === 'normal' ? '17 px' : option === 'large' ? '19 px' : '21 px' }}
             </button>
+          </div>
+
+          <div v-if="devMode" class="mt-6 border-t border-white/10 pt-5">
+            <p class="font-display text-[17px] text-fabula-100">Модель создания сюжета</p>
+            <p class="mt-1 text-[13px] leading-relaxed text-[#9b9ba6]">Только dev-режим. У Aion нет ZDR-маршрута: OpenRouter получает запрет на сбор данных, но тестовые истории все равно не должны содержать личные сведения. Инвентарь и журнал продолжают обрабатываться своими Nemotron-моделями.</p>
+            <div class="mt-3 grid grid-cols-2 overflow-hidden rounded-xl border border-white/10">
+              <button
+                v-for="option in ([
+                  { id: 'deepseek', label: 'DeepSeek V4 Flash' },
+                  { id: 'aion', label: 'Aion 3.0 Mini' },
+                ] as Array<{ id: InteractionStoryModel, label: string }>)"
+                :key="option.id"
+                type="button"
+                class="min-h-12 border-r border-white/10 px-3 font-display text-[13px] last:border-r-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[var(--accent)]"
+                :class="devStoryModel === option.id ? 'bg-[var(--accent)] text-[#101114]' : 'text-fabula-300 hover:bg-white/5'"
+                :aria-pressed="devStoryModel === option.id"
+                @click="emit('setDevStoryModel', option.id)"
+              >
+                {{ option.label }}
+              </button>
+            </div>
           </div>
 
           <div class="mt-6 border-t border-white/10 pt-5">

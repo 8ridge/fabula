@@ -361,6 +361,53 @@ describe('game session repository', () => {
     expect(response.session.journal[0]?.source_event_ids).toHaveLength(1)
   })
 
+  test('builds the journal projection only from the post-operation snapshot', async () => {
+    const repository = new GameSessionRepository(new MemoryGameSessionStorage())
+    const session = await repository.create(ownerId, createRequest)
+    const command = makeCommand(session.id)
+    let projectedAfterCommit = false
+
+    const response = await repository.executeTurn(
+      ownerId,
+      command,
+      async snapshot => workerResult(snapshot, command),
+      'request:journal-projection',
+      async (context) => {
+        const eventId = context.sourceEventIds[0]!
+        projectedAfterCommit = context.snapshot.confirmedEvents.some(event => event.id === eventId)
+        return {
+          entries: [{
+            id: context.reservedJournalIds[0]!,
+            entry_type: 'clue',
+            title: 'Линии круга',
+            summary: 'Осмотр линий восьмого круга подтвержден и добавлен в журнал.',
+            uncertainty: 'confirmed',
+            source_event_ids: [eventId],
+            involved_entity_ids: ['player'],
+            story_time: context.snapshot.scene.story_time,
+          }],
+          fallbackUsed: false,
+          modelRuns: [{
+            role: 'journal',
+            model: 'nvidia/nemotron-3-super-120b-a12b',
+            request_id: 'request:nemotron-journal',
+            usage: { total_tokens: 12 },
+            status: 'accepted',
+            error_code: null,
+            validation_errors: [],
+          }],
+        }
+      },
+    )
+
+    expect(projectedAfterCommit).toBe(true)
+    expect(response.session.journal[0]).toMatchObject({
+      title: 'Линии круга',
+    })
+    expect(response.session.journal[0]?.source_event_ids[0]?.startsWith('event:')).toBe(true)
+    expect(response.fallback_used).toBe(false)
+  })
+
   test('rejects selecting an item the player no longer holds before calling a model', async () => {
     const repository = new GameSessionRepository(new MemoryGameSessionStorage())
     const session = await repository.create(ownerId, createRequest)

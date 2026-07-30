@@ -3,6 +3,7 @@ import type { StoryMode } from '#shared/storypacks'
 
 export type InteractionMode = StoryMode
 export type InteractionFontScale = 'normal' | 'large' | 'xlarge'
+export type InteractionStoryModel = 'deepseek' | 'aion'
 export type InteractionToolName = SharedInteractionToolName
 export type InteractionDrawer = 'threads' | null
 export type InteractionMessageData = GameMessage

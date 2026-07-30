@@ -7,6 +7,7 @@ import type {
   ListGameSessionsResponse,
 } from '#shared/game'
 import type { StoryMode } from '#shared/storypacks'
+import type { InteractionStoryModel } from '~/types/interaction-ui'
 
 interface PendingTurn {
   command: GameTurnCommand
@@ -28,6 +29,7 @@ interface SubmitTurnInput {
   selectedTargetIds?: string[]
   selectedItemIds?: string[]
   selectedJournalEntryIds?: string[]
+  devStoryModel?: InteractionStoryModel
 }
 
 const SESSION_ID = /^session:[0-9a-f-]{36}$/i
@@ -229,6 +231,9 @@ export function useGameSession(sessionId: Ref<string | null>) {
           method: 'POST',
           body: command,
           signal: controller.signal,
+          headers: import.meta.dev
+            ? { 'x-fabula-dev-story-model': input.devStoryModel || 'deepseek' }
+            : undefined,
         },
       )
       session.value = response.session

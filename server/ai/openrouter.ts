@@ -24,6 +24,7 @@ export interface ChatJsonRequest {
     schema: Record<string, unknown>
   }
   sanitizedFreeEndpoint?: boolean
+  devAllowNonZdr?: boolean
   jsonMode?: 'json-schema' | 'json-object' | 'prompt-only'
 }
 
@@ -249,7 +250,7 @@ export class OpenRouterClient {
       data_collection: request.sanitizedFreeEndpoint ? 'allow' : 'deny',
       max_price: request.maxPrice,
     }
-    if (!request.sanitizedFreeEndpoint)
+    if (!request.sanitizedFreeEndpoint && !request.devAllowNonZdr)
       provider.zdr = true
 
     const body: Record<string, unknown> = {
