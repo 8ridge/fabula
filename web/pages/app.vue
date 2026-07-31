@@ -160,7 +160,10 @@
               </div>
               <div class="cr-field">
                 <label>Идея героя — одна фраза для ИИ</label>
-                <textarea id="crPrompt"></textarea>
+                <div class="cr-ta-wrap">
+                  <textarea id="crPrompt"></textarea>
+                  <button type="button" class="cr-dice" data-dice="prompt" title="Случайная идея" aria-label="Случайная идея">🎲</button>
+                </div>
                 <div class="cr-gen"><button id="crGen">✦ Сгенерировать героя</button></div>
               </div>
               <div class="cr-field cr-grid" style="grid-template-columns:1fr 1fr;gap:12px">
@@ -170,7 +173,10 @@
               </div>
               <div class="cr-field">
                 <label>Биография</label>
-                <textarea id="crBio" placeholder="Пара строк о характере и прошлом — можно оставить ИИ"></textarea>
+                <div class="cr-ta-wrap">
+                  <textarea id="crBio" placeholder="Пара строк о характере и прошлом — можно оставить ИИ"></textarea>
+                  <button type="button" class="cr-dice" data-dice="bio" title="Случайная биография" aria-label="Случайная биография">🎲</button>
+                </div>
               </div>
               <div class="cr-stats-h"><b>Характеристики</b><button class="cr-reroll" id="crReroll">⟳ Перебросить</button></div>
               <div class="cr-stats" id="crStats"></div>
@@ -751,6 +757,34 @@ function crDDSet(opts){
   if(list) list.innerHTML=(opts||['—']).map(o=>'<div class="cr-dd-opt'+(o===val?' on':'')+'" data-v="'+o+'">'+o+'</div>').join('');
   dd.classList.remove('open');
 }
+const CR_IDEAS=[
+  'седой наёмник без имени, с холодным клинком и тёплым сердцем',
+  'беглый послушник, укравший запретную книгу',
+  'дитя пепла, что слышит голоса мёртвых',
+  'бывший палач, ищущий искупления',
+  'воровка теней с долгом перед древним богом',
+  'странник, потерявший имя, но не память о мести',
+  'алхимик, отдавший глаз за дар видеть ложь',
+  'последний страж павшей крепости'
+];
+const CR_BIOS=[
+  'Родился в год, когда небо потемнело. Не помнит лица матери — только запах гари. Идёт вперёд, потому что позади лишь пепел.',
+  'Когда-то носил цвета ордена, теперь — лишь шрамы под плащом. Верит, что один правильный выбор способен переписать всё.',
+  'Говорит мало, бьёт точно. За молчанием прячет клятву, которую боится нарушить.',
+  'Улыбается врагам и сомневается в друзьях. Прошлое стёрто, но руки помнят ремесло.',
+  'Ищет не славу, а имя — своё собственное, украденное много лет назад.'
+];
+function crDice(kind){
+  // ЗАГЛУШКА: пока случайный выбор из подборки. Позже здесь будет вызов нейронки (AI-эндпойнт),
+  // учитывающий класс/расу/имя — заменить только тело этой функции.
+  const el=document.getElementById(kind==='bio'?'crBio':'crPrompt'); if(!el) return;
+  const list=kind==='bio'?CR_BIOS:CR_IDEAS;
+  const btn=document.querySelector('.cr-dice[data-dice="'+kind+'"]');
+  if(btn) btn.classList.add('busy');
+  el.value=list[Math.floor(Math.random()*list.length)];
+  sfxClick();
+  setTimeout(()=>{ if(btn) btn.classList.remove('busy'); },250);
+}
 let crRole=null;
 function openCreator(key){
   crKey=key;
@@ -803,6 +837,7 @@ function crGenerate(){
   document.getElementById('crBack').addEventListener('click',()=>{ closeCreator(); sfxClick(); });
   document.getElementById('crReroll').addEventListener('click', crReroll);
   document.getElementById('crGen').addEventListener('click', crGenerate);
+  cr.querySelectorAll('.cr-dice').forEach(d=>d.addEventListener('click',()=>crDice(d.dataset.dice)));
   const crFile=document.getElementById('crFile');
   cr.querySelectorAll('.cr-pbtns button').forEach(b=>b.addEventListener('click',()=>{
     sfxClick();

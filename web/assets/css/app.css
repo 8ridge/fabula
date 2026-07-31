@@ -608,6 +608,15 @@
   .cr-dd-opt{padding:11px 14px;font-family:'Forum',serif;font-size:15px;color:var(--shell-dim);cursor:pointer;transition:.15s}
   .cr-dd-opt:hover{background:#ffffff08;color:var(--shell-ink)}
   .cr-dd-opt.on{color:var(--acc)}
+  /* кубик случайного описания (правый верх поля) — генерит нейронка */
+  .cr-ta-wrap{position:relative}
+  .cr-ta-wrap textarea{padding-right:46px}
+  .cr-dice{position:absolute;top:8px;right:8px;width:32px;height:32px;border-radius:9px;
+    border:1px solid var(--shell-line);background:#0d0d0f;color:var(--acc);font-size:14px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;transition:.18s;z-index:2}
+  .cr-dice:hover{border-color:var(--acc);background:#ffffff0a}
+  .cr-dice:active{transform:scale(.92)}
+  .cr-dice.busy{opacity:.5;pointer-events:none}
   /* роли и тематическое поле зависят от мира */
   .cr-roles{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
   .cr-role{font-family:'Forum',serif;font-size:13px;padding:9px 15px;border-radius:100px;cursor:pointer;
