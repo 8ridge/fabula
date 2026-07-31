@@ -43,3 +43,15 @@ def test_widget_missing_hash_rejected():
     v = RealTelegramVerifier(BOT_TOKEN, ttl=86400)
     with pytest.raises(ValueError):
         v.verify_widget({"id": 555, "auth_date": int(time.time())})
+
+
+def test_telegram_registration_token_roundtrip():
+    from app.security import (
+        create_telegram_registration_token,
+        decode_telegram_registration_token,
+        decode_registration_token,
+    )
+    t = create_telegram_registration_token("777", "neo")
+    assert decode_telegram_registration_token(t) == {"tg_id": "777", "tg_username": "neo"}
+    # google-декодер НЕ принимает telegram-токен (разный purpose)
+    assert decode_registration_token(t) is None

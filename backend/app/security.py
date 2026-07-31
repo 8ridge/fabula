@@ -64,3 +64,26 @@ def decode_registration_token(token: str) -> dict | None:
         return {"google_sub": payload["gsub"], "email": payload["email"]}
     except (jwt.PyJWTError, KeyError):
         return None
+
+
+def create_telegram_registration_token(tg_id: str, tg_username: str | None) -> str:
+    now = datetime.now(timezone.utc)
+    payload = {
+        "purpose": "telegram_register",
+        "tg_id": tg_id,
+        "tg_username": tg_username,
+        "iat": now,
+        "exp": now + timedelta(minutes=10),
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_alg)
+
+
+def decode_telegram_registration_token(token: str) -> dict | None:
+    """{'tg_id','tg_username'} из валидного telegram-токена регистрации или None."""
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_alg])
+        if payload.get("purpose") != "telegram_register":
+            return None
+        return {"tg_id": payload["tg_id"], "tg_username": payload.get("tg_username")}
+    except (jwt.PyJWTError, KeyError):
+        return None
