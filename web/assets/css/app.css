@@ -817,6 +817,8 @@
     .sheet2{align-items:flex-end}
     .sheet2-card{width:100%;max-width:none;max-height:88vh;border-radius:18px 18px 0 0;border-bottom:none;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
     .sheet2-card::before{content:"";display:block;width:36px;height:4px;border-radius:2px;background:rgba(255,255,255,.18);margin:-6px auto 14px}
+    /* фикс: кнопка звука (fixed, right:20px) перекрывала ⚙ настроек в p-actions — сдвигаем блок левее */
+    .scr[data-scr="profile"] .appbar .p-actions{margin-right:46px}
   }
   .set-grp{margin-top:16px}
   .set-lh{font-family:'Forum',serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#6d6d78;margin-bottom:8px}
