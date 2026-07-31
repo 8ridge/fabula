@@ -128,7 +128,7 @@
     font-size:10px;letter-spacing:.06em;color:#7a6f5a;text-decoration:none;cursor:pointer;transition:.18s}
   .nav a{color:var(--shell-mute)}
   .nav a .g{font-size:18px}.nav a.act{color:var(--shell-ink);transform:translateY(-1px)}
-  .side-brand{display:none;color:var(--shell-ink)}   /* нейтральный бренд в десктоп-сайдбаре */
+  .nav a.side-brand{display:none;color:var(--shell-ink)}   /* только десктоп-сайдбар; специфичность бьёт .nav a{display:flex}, иначе бренд протекал в мобильный навбар */
 
   /* ---- PACKS ---- */
   .search{display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:12px;
@@ -819,6 +819,9 @@
     .sheet2-card::before{content:"";display:block;width:36px;height:4px;border-radius:2px;background:rgba(255,255,255,.18);margin:-6px auto 14px}
     /* фикс: кнопка звука (fixed, right:20px) перекрывала ⚙ настроек в p-actions — сдвигаем блок левее */
     .scr[data-scr="profile"] .appbar .p-actions{margin-right:46px}
+    /* ачивки: 5 в один ряд (вместо переноса 4+1) */
+    .scr[data-scr="profile"] .ach{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+    .scr[data-scr="profile"] .badge{width:auto}
   }
   .set-grp{margin-top:16px}
   .set-lh{font-family:'Forum',serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#6d6d78;margin-bottom:8px}
