@@ -331,6 +331,7 @@
 import { onMounted } from 'vue'
 import '~/assets/css/main.css'
 const googleClientId = useRuntimeConfig().public.googleClientId || ''
+const telegramBotId = useRuntimeConfig().public.telegramBotId || ''
 onMounted(() => {
   document.querySelectorAll('.fabula-landing img').forEach(img => {
     img.addEventListener('error', () => { img.style.display = 'none' }, { once: true })
@@ -900,14 +901,30 @@ if('serviceWorker' in navigator){
     }
   });
 
-  // соцвход — пока не подключён (Telegram появится на бэкенде)
-  document.querySelectorAll('[data-soc]').forEach(b=>b.addEventListener('click',()=>{
-    fail('Вход через '+(b.dataset.soc==='google'?'Google':'Telegram')+' скоро — подключаем на бэкенде.');
+  // ===== вход через Telegram (Login Widget, popup-callback) =====
+  function loadTgWidget(){
+    return new Promise((res)=>{
+      if (window.Telegram && window.Telegram.Login) return res();
+      const s=document.createElement('script'); s.src='https://telegram.org/js/telegram-widget.js?22'; s.async=true; s.onload=()=>res(); document.head.appendChild(s);
+    });
+  }
+  async function onTelegramAuth(user){
+    if(!user){ fail('Вход через Telegram отменён'); return; }
+    const { r, data } = await apiPost('/auth/telegram', user);
+    if (!r.ok){ fail('Не удалось войти через Telegram.'); return; }
+    if (data.needs_username){ pendingRegToken = data.registration_token; pendingProvider = 'telegram'; showNickStep(); return; }
+    saveSession(data); markLoggedInNav(); ok('Готово! Открой «Профиль» или «Миры».'); close();
+  }
+  document.querySelectorAll('[data-soc="tg"]').forEach(b=>b.addEventListener('click', async ()=>{
+    if(!telegramBotId){ fail('Вход через Telegram скоро'); return; }
+    await loadTgWidget();
+    window.Telegram.Login.auth({ bot_id: telegramBotId, request_access: 'write' }, onTelegramAuth);
   }));
 
   // ===== вход через Google (GIS ID-token flow) =====
   const clientId = googleClientId;
   let pendingRegToken = '';
+  let pendingProvider = 'google';  // какой провайдер инициировал экран ника
 
   function loadGis(){
     return new Promise((res)=>{
@@ -919,7 +936,7 @@ if('serviceWorker' in navigator){
   async function onGoogleCredential(resp){
     const { r, data } = await apiPost('/auth/google', { id_token: resp.credential });
     if (!r.ok){ fail('Не удалось войти через Google.'); return; }
-    if (data.needs_username){ pendingRegToken = data.registration_token; showNickStep(); return; }
+    if (data.needs_username){ pendingRegToken = data.registration_token; pendingProvider = 'google'; showNickStep(); return; }
     saveSession(data); markLoggedInNav(); ok('Готово! Открой «Профиль» или «Миры».'); close();
   }
 
@@ -942,7 +959,8 @@ if('serviceWorker' in navigator){
     const nick=(document.getElementById('gNick').value||'').trim();
     const m=document.getElementById('gNickMsg');
     if(!/^[A-Za-z0-9_]{3,20}$/.test(nick)){ if(m) m.textContent='Ник: 3–20 символов, латиница, цифры, _'; return; }
-    const { r, data } = await apiPost('/auth/google/complete', { registration_token: pendingRegToken, username: nick });
+    const completeUrl = pendingProvider === 'telegram' ? '/auth/telegram/complete' : '/auth/google/complete';
+    const { r, data } = await apiPost(completeUrl, { registration_token: pendingRegToken, username: nick });
     if (r.ok){ saveSession(data); markLoggedInNav(); ok('Готово! Открой «Профиль» или «Миры».'); close(); }
     else if (m) m.textContent = r.status===409 ? 'Ник занят' : 'Проверь ник';
   });
