@@ -115,6 +115,7 @@
             <div class="setrow" data-act="password"><span class="l"><span class="g">⚿</span>Пароль</span><span class="chev">Изменить ›</span></div>
             <div class="setrow"><span class="l"><span class="g">✉</span>Почта</span><span class="chev" style="color:#7cc47f">подключена</span></div>
             <div class="setrow" data-act="google"><span class="l"><span class="g">G</span>Google</span><span class="chev" data-p="google">скоро</span></div>
+            <div class="setrow" data-act="telegram"><span class="l"><span class="g">✈</span>Telegram</span><span class="chev" data-p="telegram">скоро</span></div>
             <div class="setrow" data-act="devices"><span class="l"><span class="g">🛡</span>Безопасность · устройства</span><span class="chev">›</span></div>
             <div class="setrow" data-act="logout-all"><span class="l"><span class="g">⎇</span>Выйти со всех устройств</span><span class="chev">›</span></div>
           </div>
@@ -268,6 +269,7 @@ useHead({
 })
 
 const googleClientId = useRuntimeConfig().public.googleClientId || ''
+const telegramBotId = useRuntimeConfig().public.telegramBotId || ''
 
 onMounted(() => {
   /* ===== сессия: читаем JWT-токен, положенный лендингом ===== */
@@ -307,6 +309,8 @@ onMounted(() => {
     if (badge) badge.style.display = data.email_verified ? '' : 'none';
     const gp = document.querySelector('[data-p="google"]');
     if (gp) gp.textContent = data.providers.includes('google') ? 'привязан · отвязать' : 'привязать';
+    const tp = document.querySelector('[data-p="telegram"]');
+    if (tp) tp.textContent = data.providers.includes('telegram') ? 'привязан · отвязать' : 'привязать';
     const av=document.getElementById('avaImg'), fb=document.getElementById('avaFb');
     if(fb) fb.textContent=((data.username||'?').trim().charAt(0)||'?').toUpperCase();
     if(av){ if(data.has_avatar){ av.style.display=''; av.src=AUTH_API + '/auth/avatar/'+data.id+'?v='+(data.avatar_v||''); if(fb) fb.style.display='none'; } else { av.style.display='none'; av.removeAttribute('src'); if(fb) fb.style.display=''; } }
@@ -452,6 +456,22 @@ onMounted(() => {
         }});
         const holder = document.getElementById('pmGoogleBtn');
         if (holder) window.google.accounts.id.renderButton(holder, { theme:'filled_black', size:'large', text:'continue_with', shape:'pill', width: 280 });
+        return;
+      }
+      if (act === 'telegram') {
+        const u = window.__fabulaUser || {};
+        if ((u.providers||[]).includes('telegram')) {
+          const { res } = await apiAuth('/auth/link/telegram', 'DELETE');
+          if (res.status === 400) toast('Нужен другой способ входа'); else if (res.ok) { toast('Telegram отвязан'); loadProfile(); }
+          return;
+        }
+        if (!telegramBotId) { toast('Вход через Telegram скоро'); return; }
+        await new Promise((resolve)=>{ if(window.Telegram&&window.Telegram.Login) return resolve(); const s=document.createElement('script'); s.src='https://telegram.org/js/telegram-widget.js?22'; s.async=true; s.onload=()=>resolve(); document.head.appendChild(s); });
+        window.Telegram.Login.auth({ bot_id: telegramBotId, request_access: 'write' }, async (user)=>{
+          if(!user){ toast('Отменено'); return; }
+          const { res } = await apiAuth('/auth/link/telegram','POST', user);
+          if (res.status === 409) toast('Этот Telegram уже привязан к другому'); else if (res.ok) { toast('Telegram привязан'); loadProfile(); }
+        });
         return;
       }
       if (act === 'delete') {
