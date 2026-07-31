@@ -869,7 +869,7 @@
   .scr[data-scr="profile"] .lvl-top,
   .scr[data-scr="profile"] .story-row .pct,
   .dev-meta,.dev-cur{
-    font-family:'IBM Plex Mono',monospace;letter-spacing:.02em;
+    font-family:'Inter',system-ui,sans-serif;letter-spacing:.02em;
   }
-  .scr[data-scr="profile"] .lvl-top{font-size:12px}
-  .scr[data-scr="profile"] .s-meta{font-size:11px}
+  .scr[data-scr="profile"] .lvl-top{font-size:13px}
+  .scr[data-scr="profile"] .s-meta{font-size:12px}

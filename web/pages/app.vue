@@ -94,7 +94,7 @@
           </div>
           <div class="list-h" style="margin-top:14px">Уровень и достижения</div>
           <div class="p-card p-lvl">
-            <div class="lvl-top"><span>Уровень <b>7</b> · Хроникёр</span><span><b>1 840</b> / 2 800 XP</span></div>
+            <div class="lvl-top"><span>Уровень <b>7</b> · Сказитель</span><span><b>1 840</b> / 2 800 XP</span></div>
             <div class="lvl-bar"><i style="width:64%"></i></div>
             <div class="ach">
               <div class="badge"><span class="ic">🗝</span><span class="bl">Первый выбор</span></div>
@@ -235,9 +235,6 @@
           <div class="set-grp"><div class="set-lh">Оформление</div>
             <div class="set-seg" id="fontSeg"><button data-fs="s">S</button><button data-fs="m">M</button><button data-fs="l">L</button></div>
             <div class="set-hint">Размер шрифта в чтении</div>
-          </div>
-          <div class="set-grp"><div class="set-lh">Приложение</div>
-            <div class="set-row-soon" id="installRow" style="cursor:pointer"><span>Установить приложение</span><span class="soon">›</span></div>
           </div>
           <div class="set-grp"><div class="set-lh">Подписка</div>
             <div class="set-row-soon"><span>Подписка и грейды</span><span class="soon">Скоро</span></div>
@@ -417,6 +414,7 @@ onMounted(() => {
             if(res.ok){ toast('Ник обновлён'); loadProfile(); return false; }
             msg.textContent = res.status===409 ? 'Ник занят' : 'Проверь формат'; return true;
           });
+        requestAnimationFrame(()=>{ const ni=document.getElementById('pmNick'); if(ni){ ni.focus(); const L=ni.value.length; ni.setSelectionRange(L,L); } });
         return;
       }
       if (act === 'password') {
@@ -1099,7 +1097,6 @@ function toast(msg){ toastEl.textContent=msg; toastEl.classList.add('on'); clear
 /* ================= PWA (service worker + install) ================= */
 const pwaState=document.getElementById('pwaState');
 const installBtn=document.getElementById('installBtn');
-const installRow=document.getElementById('installRow');
 const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
 
 if(false /* SW отключён в Nuxt */ && 'serviceWorker' in navigator){
@@ -1137,7 +1134,6 @@ async function doInstall(){
   toast(outcome==='accepted'?'Устанавливаем…':'Установка отменена');
 }
 if(installBtn) installBtn.addEventListener('click',(e)=>{ e.stopPropagation(); doInstall(); });
-if(installRow) installRow.addEventListener('click',doInstall);
 window.addEventListener('appinstalled',()=>{ if(pwaState) pwaState.textContent='✓ установлено'; if(installBtn) installBtn.style.display='none'; });
 if(standalone && pwaState) pwaState.textContent='✓ запущено как приложение';
 
