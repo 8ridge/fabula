@@ -61,3 +61,29 @@ class GoogleAuthOut(BaseModel):
     user: UserOut | None = None
     needs_username: bool = False
     registration_token: str | None = None
+
+
+class TelegramWidgetIn(BaseModel):
+    # Поля виджета Telegram; id/auth_date/hash обязательны, прочее (first_name,
+    # username, photo_url, last_name) допускаем и учитываем при проверке подписи.
+    model_config = {"extra": "allow"}
+    id: int
+    auth_date: int
+    hash: str
+
+
+class TelegramCompleteIn(BaseModel):
+    registration_token: str
+    username: str = Field(pattern=USERNAME_PATTERN)
+
+
+class TelegramMiniAppIn(BaseModel):
+    init_data: str
+
+
+class TelegramAuthOut(BaseModel):
+    access_token: str | None = None
+    token_type: str | None = None
+    user: UserOut | None = None
+    needs_username: bool = False
+    registration_token: str | None = None
