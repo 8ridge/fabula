@@ -813,8 +813,16 @@
   .sheet2-x{background:none;border:none;color:#8a8a92;font-size:18px;cursor:pointer}
   .set-grp{margin-top:16px}
   .set-lh{font-family:'Forum',serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#6d6d78;margin-bottom:8px}
-  .set-tog{display:flex;align-items:center;justify-content:space-between;padding:12px 2px;border-bottom:1px solid rgba(255,255,255,.07);font-family:'Forum',serif;font-size:15px;color:#eaeaee}
-  .set-tog input{width:20px;height:20px;accent-color:#eaeaee}
+  .set-tog{display:flex;align-items:center;justify-content:space-between;padding:12px 2px;border-bottom:1px solid rgba(255,255,255,.07);font-family:'Inter',system-ui,sans-serif;font-size:15px;color:#eaeaee}
+  /* кастомный монохромный тумблер (нейтральный хром — цвет принадлежит мирам) */
+  .set-tog input{appearance:none;-webkit-appearance:none;cursor:pointer;flex:none;margin:0;
+    width:42px;height:24px;border-radius:100px;background:rgba(255,255,255,.10);
+    border:1px solid rgba(255,255,255,.14);position:relative;transition:background .2s,border-color .2s}
+  .set-tog input::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;
+    border-radius:50%;background:#6d6d78;transition:transform .2s,background .2s}
+  .set-tog input:checked{background:rgba(255,255,255,.92);border-color:transparent}
+  .set-tog input:checked::after{transform:translateX(18px);background:#141416}
+  .set-tog input:focus-visible{outline:2px solid #eaeaee;outline-offset:2px}
   .set-seg{display:inline-flex;border:1px solid rgba(255,255,255,.14);border-radius:10px;overflow:hidden}
   .set-seg button{padding:9px 20px;background:#0000;color:#a2a2ab;border:none;border-right:1px solid rgba(255,255,255,.14);font-family:'Forum',serif;cursor:pointer}
   .set-seg button:last-child{border-right:none}
