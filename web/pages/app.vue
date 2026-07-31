@@ -478,7 +478,17 @@ function blip(freq,dur,type,vol){
   g.gain.exponentialRampToValueAtTime(0.0001,AC.currentTime+dur);
   o.connect(g); g.connect(master); o.start(); o.stop(AC.currentTime+dur+0.02);
 }
-function sfxClick(){ if(window.__fabulaSfxOff) return; blip(1300,0.05,'triangle',0.22); blip(2600,0.03,'sine',0.09); }
+function sfxClick(){
+  if(window.__fabulaSfxOff || !canPlay()) return;
+  const now=AC.currentTime;
+  const o=AC.createOscillator(), g=AC.createGain(), lp=AC.createBiquadFilter();
+  o.type='sine'; o.frequency.setValueAtTime(380,now); o.frequency.exponentialRampToValueAtTime(165,now+0.045);
+  lp.type='lowpass'; lp.frequency.value=1200;
+  g.gain.setValueAtTime(0.0001,now);
+  g.gain.exponentialRampToValueAtTime(0.12,now+0.005);
+  g.gain.exponentialRampToValueAtTime(0.0001,now+0.075);
+  o.connect(lp); lp.connect(g); g.connect(master); o.start(now); o.stop(now+0.09);
+}
 function sfxRoll(){ if(window.__fabulaSfxOff) return; for(let i=0;i<6;i++) setTimeout(()=>blip(300+Math.random()*500,0.03,'square',0.06),i*70); }
 function sfxNav(){ if(window.__fabulaSfxOff) return; blip(560,0.09,'sine',0.24); setTimeout(()=>blip(840,0.10,'sine',0.17),55); }
 function sfxPage(){
