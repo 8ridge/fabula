@@ -67,7 +67,7 @@ class TelegramWidgetIn(BaseModel):
     # Поля виджета Telegram; id/auth_date/hash обязательны, прочее (first_name,
     # username, photo_url, last_name) допускаем и учитываем при проверке подписи.
     model_config = {"extra": "allow"}
-    id: int
+    id: int | str
     auth_date: int
     hash: str
 
