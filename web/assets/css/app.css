@@ -812,6 +812,13 @@
   .sheet2-h{display:flex;justify-content:space-between;align-items:center;font-family:'Forum',serif;font-size:19px;letter-spacing:.06em;color:#fff;margin-bottom:6px}
   .sheet2-x{background:none;border:none;color:#8a8a92;font-size:18px;cursor:pointer;width:40px;height:40px;display:flex;align-items:center;justify-content:center;margin:-8px -8px 0 0;border-radius:10px;transition:.2s}
   .sheet2-x:hover{color:#eaeaee;background:#ffffff0a}
+  /* строки аккаунта, переехавшие в шит настроек */
+  .sheet2 .setrow{padding:13px 2px;color:#eaeaee;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.07)}
+  .sheet2 .setrow .l{display:flex;align-items:center;gap:12px}
+  .sheet2 .setrow .l .g{color:var(--shell-mute);width:20px;text-align:center}
+  .sheet2 .setrow .chev{color:var(--shell-mute)}
+  .sheet2 .setrow:hover{background:#ffffff06}
+  .sheet2 .set-grp .setrow:last-child{border-bottom:none}
   /* мобилка: шиты — нижний лист (native bottom sheet) с «ручкой» и safe-area */
   @media (max-width:640px){
     .sheet2{align-items:flex-end}

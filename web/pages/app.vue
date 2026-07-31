@@ -109,18 +109,6 @@
             <div style="flex:1"><div class="st">Королевство Пепельных земель</div><div class="s-meta"><span>Глава 5 · 62%</span><span>Роль: Странник</span><span>2 дня назад</span></div><div class="sp"><i style="width:62%"></i></div></div></div>
           <div class="story-row" data-open="scifi"><div class="th pv-scifi"><img src="/assets/cover_scifi.png" onerror="this.style.display='none'"></div>
             <div style="flex:1"><div class="st">Станция «Кассандра»</div><div class="s-meta"><span>Глава 2 · 28%</span><span>Роль: Капитан</span><span>неделю назад</span></div><div class="sp"><i style="width:28%"></i></div></div></div>
-          <div class="list-h" style="margin-top:18px">Аккаунт</div>
-          <div class="p-card">
-            <div class="setrow" data-act="username"><span class="l"><span class="g">◈</span>Никнейм</span><span class="chev" data-p="username-mini"></span></div>
-            <div class="setrow" data-act="password"><span class="l"><span class="g">⚿</span>Пароль</span><span class="chev">Изменить ›</span></div>
-            <div class="setrow"><span class="l"><span class="g">✉</span>Почта</span><span class="chev" style="color:#7cc47f">подключена</span></div>
-            <div class="setrow" data-act="google"><span class="l"><span class="g">G</span>Google</span><span class="chev" data-p="google">скоро</span></div>
-            <div class="setrow" data-act="devices"><span class="l"><span class="g">🛡</span>Безопасность · устройства</span><span class="chev">›</span></div>
-            <div class="setrow" data-act="logout-all"><span class="l"><span class="g">⎇</span>Выйти со всех устройств</span><span class="chev">›</span></div>
-          </div>
-          <div class="p-card" style="margin-top:12px">
-            <div class="setrow" data-act="delete"><span class="l" style="color:#d9655f"><span class="g">🗑</span>Удалить аккаунт</span><span class="chev">›</span></div>
-          </div>
         </div>
       </section>
 
@@ -227,6 +215,14 @@
       <div class="sheet2" id="settingsSheet">
         <div class="sheet2-card">
           <div class="sheet2-h">Настройки <button class="sheet2-x" id="setClose">✕</button></div>
+          <div class="set-grp"><div class="set-lh">Аккаунт</div>
+            <div class="setrow" data-act="username"><span class="l"><span class="g">◈</span>Никнейм</span><span class="chev" data-p="username-mini"></span></div>
+            <div class="setrow" data-act="password"><span class="l"><span class="g">⚿</span>Пароль</span><span class="chev">Изменить ›</span></div>
+            <div class="setrow"><span class="l"><span class="g">✉</span>Почта</span><span class="chev" style="color:#7cc47f">подключена</span></div>
+            <div class="setrow" data-act="google"><span class="l"><span class="g">G</span>Google</span><span class="chev" data-p="google">скоро</span></div>
+            <div class="setrow" data-act="devices"><span class="l"><span class="g">🛡</span>Безопасность · устройства</span><span class="chev">›</span></div>
+            <div class="setrow" data-act="logout-all"><span class="l"><span class="g">⎇</span>Выйти со всех устройств</span><span class="chev">›</span></div>
+          </div>
           <div class="set-grp"><div class="set-lh">Звук и музыка</div>
             <label class="set-tog"><span>Общий звук</span><input type="checkbox" id="sndMaster"></label>
             <label class="set-tog"><span>Музыка / эмбиент</span><input type="checkbox" id="sndMusic"></label>
@@ -238,6 +234,9 @@
           </div>
           <div class="set-grp"><div class="set-lh">Подписка</div>
             <div class="set-row-soon"><span>Подписка и грейды</span><span class="soon">Скоро</span></div>
+          </div>
+          <div class="set-grp">
+            <div class="setrow" data-act="delete"><span class="l" style="color:#d9655f"><span class="g">🗑</span>Удалить аккаунт</span><span class="chev">›</span></div>
           </div>
         </div>
       </div>
@@ -393,7 +392,7 @@ onMounted(() => {
 
   function clearSession(){ try{ localStorage.removeItem('fabula-token'); localStorage.removeItem('fabula-user'); }catch(_){}; location.href='/'; }
 
-  document.querySelectorAll('[data-scr="profile"] [data-act]').forEach(row => {
+  document.querySelectorAll('[data-scr="profile"] [data-act], #settingsSheet [data-act]').forEach(row => {
     row.addEventListener('click', async () => {
       const act = row.dataset.act;
       if (act === 'logout') { clearSession(); return; }
