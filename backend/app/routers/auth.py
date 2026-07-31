@@ -408,6 +408,56 @@ async def telegram_complete(request: Request, data: TelegramCompleteIn, db: Asyn
     return TokenOut(access_token=token, user=await _user_out(db, user))
 
 
+@router.post("/link/telegram", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/minute")
+async def link_telegram(
+    request: Request,
+    data: TelegramWidgetIn,
+    user: User = Depends(get_current_user),
+    verifier: TelegramVerifier = Depends(get_telegram_verifier),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        info = verifier.verify_widget(data.model_dump())
+    except Exception:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Недействительные данные Telegram")
+    tg_id = info["tg_id"]
+    existing = (
+        await db.execute(
+            select(OAuthAccount).where(
+                OAuthAccount.provider == "telegram", OAuthAccount.provider_user_id == tg_id
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        if existing.user_id != user.id:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Этот Telegram уже привязан к другому аккаунту")
+        return  # идемпотентно
+    db.add(OAuthAccount(user_id=user.id, provider="telegram", provider_user_id=tg_id))
+    await db.commit()
+
+
+@router.delete("/link/telegram", status_code=status.HTTP_204_NO_CONTENT)
+async def unlink_telegram(
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    has_google = (
+        await db.execute(
+            select(OAuthAccount.id).where(
+                OAuthAccount.user_id == user.id, OAuthAccount.provider == "google"
+            )
+        )
+    ).first() is not None
+    if user.password_hash is None and not has_google:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Нужен другой способ входа (пароль или Google)")
+    await db.execute(
+        delete(OAuthAccount).where(
+            OAuthAccount.user_id == user.id, OAuthAccount.provider == "telegram"
+        )
+    )
+    await db.commit()
+
+
 MAX_AVATAR_BYTES = 3 * 1024 * 1024
 MAX_AVATAR_DIM = 6000
 

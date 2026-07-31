@@ -59,3 +59,28 @@ def test_telegram_complete_bad_token(client):
 def test_telegram_registration_token_not_access(client):
     rt = client.post("/auth/telegram", json=telegram_widget("tg_c")).json()["registration_token"]
     assert client.get("/auth/me", headers=auth_headers(rt)).status_code == 401
+
+
+def test_link_and_unlink_telegram(client, creds):
+    data = register(client, creds)  # email+пароль аккаунт
+    h = auth_headers(data["access_token"])
+    assert client.post("/auth/link/telegram", json=telegram_widget("tg_link_me"), headers=h).status_code == 204
+    assert set(client.get("/auth/me", headers=h).json()["providers"]) == {"email", "telegram"}
+    # пароль есть -> отвязка ок
+    assert client.delete("/auth/link/telegram", headers=h).status_code == 204
+    assert client.get("/auth/me", headers=h).json()["providers"] == ["email"]
+
+
+def test_link_telegram_already_on_other_account(client, creds):
+    a = register(client, creds)
+    rt = client.post("/auth/telegram", json=telegram_widget("tg_shared")).json()["registration_token"]
+    client.post("/auth/telegram/complete", json={"registration_token": rt, "username": "tgsharednick"})
+    r = client.post("/auth/link/telegram", json=telegram_widget("tg_shared"), headers=auth_headers(a["access_token"]))
+    assert r.status_code == 409
+
+
+def test_unlink_telegram_only_login_blocked(client):
+    rt = client.post("/auth/telegram", json=telegram_widget("tg_only")).json()["registration_token"]
+    data = client.post("/auth/telegram/complete", json={"registration_token": rt, "username": "tgonlynick"}).json()
+    r = client.delete("/auth/link/telegram", headers=auth_headers(data["access_token"]))
+    assert r.status_code == 400
