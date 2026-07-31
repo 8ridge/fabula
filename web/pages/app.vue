@@ -150,6 +150,8 @@
                 <button data-p="gen">✦ Сгенерировать</button>
                 <button data-p="upload">↥ Загрузить</button>
               </div>
+              <input type="file" id="crFile" accept="image/*" style="display:none">
+              <div class="cr-portrait-note" id="crPortNote"></div>
             </div>
             <div>
               <div class="cr-field">
@@ -157,18 +159,18 @@
                 <div class="cr-roles" id="crRoles"></div>
               </div>
               <div class="cr-field">
-                <label>Опиши своего героя</label>
+                <label>Идея героя — одна фраза для ИИ</label>
                 <textarea id="crPrompt"></textarea>
                 <div class="cr-gen"><button id="crGen">✦ Сгенерировать героя</button></div>
               </div>
               <div class="cr-field cr-grid" style="grid-template-columns:1fr 1fr;gap:12px">
                 <div><label>Имя</label><input type="text" id="crName" placeholder="Безымянный"></div>
                 <div><label id="crFieldLabel">Раса</label>
-                  <select class="cr-sel" id="crField"></select></div>
+                  <div class="cr-dd" id="crField"><button type="button" class="cr-dd-trig"><span class="cr-dd-val"></span><span class="cr-dd-arr">▾</span></button><div class="cr-dd-list"></div></div></div>
               </div>
               <div class="cr-field">
-                <label>Кратко о герое</label>
-                <textarea id="crBio" placeholder="Пара строк о характере и прошлом"></textarea>
+                <label>Биография</label>
+                <textarea id="crBio" placeholder="Пара строк о характере и прошлом — можно оставить ИИ"></textarea>
               </div>
               <div class="cr-stats-h"><b>Характеристики</b><button class="cr-reroll" id="crReroll">⟳ Перебросить</button></div>
               <div class="cr-stats" id="crStats"></div>
@@ -734,12 +736,21 @@ function crRenderStats(bump){
   const el=document.getElementById('crStats'); if(!el) return;
   el.innerHTML=ABIL.map((a,i)=>{
     const st=crStats[i];
-    return '<div class="cr-stat'+(bump?' bump':'')+'"><div class="k">'+a.k.toUpperCase()+'</div>'+
+    return '<div class="cr-stat'+(bump?' bump':'')+'"><div class="k">'+a.name+'</div>'+
       '<div class="v">'+st.v+'</div><div class="m">'+fmtMod(st.m)+'</div></div>';
   }).join('');
   if(bump) setTimeout(()=>el.querySelectorAll('.cr-stat').forEach(x=>x.classList.remove('bump')),320);
 }
 function crReroll(){ crStats=ABIL.map(()=>rollStat()); crRenderStats(true); sfxClick(); }
+function crDDSet(opts){
+  const dd=document.getElementById('crField'); if(!dd) return;
+  const val=(opts&&opts[0])||'—';
+  dd.dataset.value=val;
+  const v=dd.querySelector('.cr-dd-val'); if(v) v.textContent=val;
+  const list=dd.querySelector('.cr-dd-list');
+  if(list) list.innerHTML=(opts||['—']).map(o=>'<div class="cr-dd-opt'+(o===val?' on':'')+'" data-v="'+o+'">'+o+'</div>').join('');
+  dd.classList.remove('open');
+}
 let crRole=null;
 function openCreator(key){
   crKey=key;
@@ -761,7 +772,7 @@ function openCreator(key){
   }));
   // тематическое поле
   document.getElementById('crFieldLabel').textContent=c.fieldLabel||'Происхождение';
-  document.getElementById('crField').innerHTML=(c.fieldOpts||['—']).map(o=>'<option>'+o+'</option>').join('');
+  crDDSet(c.fieldOpts||['—']);
   document.getElementById('crName').value='';
   document.getElementById('crBio').value='';
   document.getElementById('crPrompt').value='';
@@ -792,10 +803,32 @@ function crGenerate(){
   document.getElementById('crBack').addEventListener('click',()=>{ closeCreator(); sfxClick(); });
   document.getElementById('crReroll').addEventListener('click', crReroll);
   document.getElementById('crGen').addEventListener('click', crGenerate);
+  const crFile=document.getElementById('crFile');
   cr.querySelectorAll('.cr-pbtns button').forEach(b=>b.addEventListener('click',()=>{
-    if(b.dataset.p==='gen') crGenerate(); else toast('Загрузка портрета — на бэкенде');
     sfxClick();
+    if(b.dataset.p==='gen'){ crGenerate(); return; }
+    if(b.dataset.p==='upload' && crFile) crFile.click();
   }));
+  if(crFile) crFile.addEventListener('change',()=>{
+    const f=crFile.files&&crFile.files[0]; if(!f) return;
+    const rd=new FileReader();
+    rd.onload=()=>{ const img=document.querySelector('#crPortrait img'); if(img) img.src=rd.result; };
+    rd.readAsDataURL(f);
+  });
+  const crDD=document.getElementById('crField');
+  if(crDD){
+    const trig=crDD.querySelector('.cr-dd-trig');
+    if(trig) trig.addEventListener('click',(e)=>{ e.stopPropagation(); crDD.classList.toggle('open'); sfxClick(); });
+    const list=crDD.querySelector('.cr-dd-list');
+    if(list) list.addEventListener('click',(e)=>{
+      const o=e.target.closest('.cr-dd-opt'); if(!o) return;
+      crDD.dataset.value=o.dataset.v;
+      const v=crDD.querySelector('.cr-dd-val'); if(v) v.textContent=o.dataset.v;
+      crDD.querySelectorAll('.cr-dd-opt').forEach(x=>x.classList.toggle('on',x===o));
+      crDD.classList.remove('open'); sfxClick();
+    });
+    document.addEventListener('click',()=>crDD.classList.remove('open'));
+  }
   document.getElementById('crGo').addEventListener('click',()=>{
     const name=document.getElementById('crName').value.trim()||'Безымянный';
     CHAR.name=name;

@@ -588,11 +588,26 @@
   .cr-reroll:hover{border-color:var(--acc)}
   .cr-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
   .cr-stat{text-align:center;padding:13px 4px;border-radius:12px;border:1px solid var(--shell-line);background:#ffffff05}
-  .cr-stat .k{font-family:'Forum',serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--acc)}
+  .cr-stat .k{font-family:'Forum',serif;font-size:11px;letter-spacing:.01em;text-transform:none;color:var(--acc);line-height:1.15;min-height:2.3em;display:flex;align-items:center;justify-content:center}
   .cr-stat .v{font-family:var(--display);font-size:24px;color:var(--shell-ink);line-height:1.1;margin:2px 0;
     transition:transform .3s}
   .cr-stat .m{font-family:'Forum',serif;font-size:11px;color:var(--shell-dim)}
   .cr-stat.bump .v{transform:scale(1.25)}
+  /* кастомный дропдаун (раса) — под тёмную тему истории */
+  .cr-dd{position:relative}
+  .cr-dd-trig{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:12px 14px;border-radius:11px;border:1px solid var(--shell-line);background:#0d0d0f;
+    color:var(--shell-ink);font-family:'Forum',serif;font-size:15px;cursor:pointer;transition:border-color .2s}
+  .cr-dd-trig:hover,.cr-dd.open .cr-dd-trig{border-color:var(--acc)}
+  .cr-dd-arr{color:var(--shell-mute);font-size:12px;transition:transform .2s}
+  .cr-dd.open .cr-dd-arr{transform:rotate(180deg)}
+  .cr-dd-list{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:40;
+    background:#141416;border:1px solid var(--shell-line);border-radius:11px;overflow:hidden;
+    box-shadow:0 14px 34px #000b;display:none}
+  .cr-dd.open .cr-dd-list{display:block}
+  .cr-dd-opt{padding:11px 14px;font-family:'Forum',serif;font-size:15px;color:var(--shell-dim);cursor:pointer;transition:.15s}
+  .cr-dd-opt:hover{background:#ffffff08;color:var(--shell-ink)}
+  .cr-dd-opt.on{color:var(--acc)}
   /* роли и тематическое поле зависят от мира */
   .cr-roles{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
   .cr-role{font-family:'Forum',serif;font-size:13px;padding:9px 15px;border-radius:100px;cursor:pointer;
