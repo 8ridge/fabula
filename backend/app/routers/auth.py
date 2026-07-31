@@ -17,6 +17,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..config import settings
 from ..database import get_db
 from ..deps import get_current_user
 from ..google_auth import GoogleVerifier, get_google_verifier
@@ -456,6 +457,39 @@ async def unlink_telegram(
         )
     )
     await db.commit()
+
+
+@router.post("/telegram/miniapp", response_model=TelegramAuthOut)
+@limiter.limit("20/minute")
+async def telegram_miniapp(
+    request: Request,
+    data: TelegramMiniAppIn,
+    verifier: TelegramVerifier = Depends(get_telegram_verifier),
+    db: AsyncSession = Depends(get_db),
+):
+    if not settings.telegram_miniapp_enabled:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+    try:
+        info = verifier.verify_miniapp(data.init_data)
+    except Exception:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Недействительный initData")
+    tg_id, tg_username = info["tg_id"], info.get("tg_username")
+    acc = (
+        await db.execute(
+            select(OAuthAccount).where(
+                OAuthAccount.provider == "telegram", OAuthAccount.provider_user_id == tg_id
+            )
+        )
+    ).scalar_one_or_none()
+    if acc:
+        user = await db.get(User, acc.user_id)
+        token = await _issue_session(db, user, request)
+        await db.commit()
+        return TelegramAuthOut(access_token=token, token_type="bearer", user=await _user_out(db, user))
+    return TelegramAuthOut(
+        needs_username=True,
+        registration_token=create_telegram_registration_token(tg_id, tg_username),
+    )
 
 
 MAX_AVATAR_BYTES = 3 * 1024 * 1024

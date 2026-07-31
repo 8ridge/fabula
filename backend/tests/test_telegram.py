@@ -84,3 +84,26 @@ def test_unlink_telegram_only_login_blocked(client):
     data = client.post("/auth/telegram/complete", json={"registration_token": rt, "username": "tgonlynick"}).json()
     r = client.delete("/auth/link/telegram", headers=auth_headers(data["access_token"]))
     assert r.status_code == 400
+
+
+from tests.conftest import telegram_miniapp
+
+
+def test_telegram_miniapp_login(client, monkeypatch):
+    from app import config
+    monkeypatch.setattr(config.settings, "telegram_miniapp_enabled", True)
+    r = client.post("/auth/telegram/miniapp", json={"init_data": telegram_miniapp("tg_mini1", "neo")})
+    assert r.status_code == 200, r.text
+    assert r.json()["needs_username"] is True
+
+
+def test_telegram_miniapp_bad(client, monkeypatch):
+    from app import config
+    monkeypatch.setattr(config.settings, "telegram_miniapp_enabled", True)
+    assert client.post("/auth/telegram/miniapp", json={"init_data": "BAD"}).status_code == 401
+
+
+def test_telegram_miniapp_disabled_404(client, monkeypatch):
+    from app import config
+    monkeypatch.setattr(config.settings, "telegram_miniapp_enabled", False)
+    assert client.post("/auth/telegram/miniapp", json={"init_data": telegram_miniapp("tg_mini2")}).status_code == 404
