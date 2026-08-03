@@ -12,6 +12,7 @@ describe('game session create contract', () => {
         role_label: '  Волонтер штаба  ',
         competence: '  Знает дворы   и соседей  ',
         limitation: '  Не бросает знакомых в беде  ',
+        attributes: { str: 10, dex: 12, con: 9, int: 11, wis: 10, cha: 11 },
         motivation: '  Найти брата до рассвета  ',
         background: '  Раньше развозила продукты по району.  ',
         embodiment_note: '',
@@ -24,6 +25,7 @@ describe('game session create contract', () => {
       role_label: 'Волонтер штаба',
       competence: 'Знает дворы и соседей',
       limitation: 'Не бросает знакомых в беде',
+      attributes: { str: 10, dex: 12, con: 9, int: 11, wis: 10, cha: 11 },
       motivation: 'Найти брата до рассвета',
       background: 'Раньше развозила продукты по району.',
       narration_density: 'rich',
@@ -63,5 +65,20 @@ describe('game session create contract', () => {
         narration_density: 'balanced',
       },
     })).toThrow('Для свободного воплощения')
+  })
+
+  test('rejects characteristics that exceed the point budget', () => {
+    expect(() => parseCreateGameSessionRequest({
+      schema_version: 'session-create@1.0',
+      story_pack_id: 'zero-line',
+      persona: {
+        name: 'Мира',
+        role_id: 'zero-line:courier',
+        attributes: { str: 18, dex: 18, con: 18, int: 18, wis: 18, cha: 18 },
+        motivation: 'Найти брата',
+        embodiment_note: '',
+        narration_density: 'balanced',
+      },
+    })).toThrow('не больше 15 очков')
   })
 })

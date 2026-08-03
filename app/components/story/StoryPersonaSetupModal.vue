@@ -1,7 +1,17 @@
 <script setup lang="ts">
+import {
+  PLAYER_ATTRIBUTE_BASE_SCORES,
+  PLAYER_ATTRIBUTE_DEFINITIONS,
+  PLAYER_ATTRIBUTE_MAX,
+  PLAYER_ATTRIBUTE_MIN,
+  PLAYER_ATTRIBUTE_POINT_BUDGET,
+  playerAttributeModifier,
+} from '#shared/game'
 import type {
   CreateGameSessionRequest,
   CreateGameSessionResponse,
+  PlayerAttributeKey,
+  PlayerAttributeScores,
   PlayerPersonaInput,
 } from '#shared/game'
 import type { StoryPack, StoryRole } from '#shared/storypacks'
@@ -26,6 +36,7 @@ const competence = ref('')
 const limitation = ref('')
 const motivation = ref('')
 const background = ref('')
+const attributes = reactive<PlayerAttributeScores>({ ...PLAYER_ATTRIBUTE_BASE_SCORES })
 const narrationDensity = ref<PlayerPersonaInput['narration_density']>('balanced')
 const submitting = ref(false)
 const errorMessage = ref('')
@@ -49,6 +60,10 @@ const abilitiesComplete = computed(() =>
   && limitation.value.trim().length >= 8,
 )
 const storyComplete = computed(() => motivation.value.trim().length >= 3)
+const attributePointsRemaining = computed(() => PLAYER_ATTRIBUTE_POINT_BUDGET - PLAYER_ATTRIBUTE_DEFINITIONS.reduce(
+  (total, { key }) => total + attributes[key] - PLAYER_ATTRIBUTE_MIN,
+  0,
+))
 const canAdvance = computed(() => {
   if (step.value === 1)
     return Boolean(selectedRole.value)
@@ -125,6 +140,24 @@ function applyIdea(field: 'role' | 'competence' | 'limitation', item: string) {
     limitation.value = item
 }
 
+function adjustAttribute(key: PlayerAttributeKey, delta: -1 | 1) {
+  const score = attributes[key]
+  if (delta > 0 && (score >= PLAYER_ATTRIBUTE_MAX || attributePointsRemaining.value <= 0))
+    return
+  if (delta < 0 && score <= PLAYER_ATTRIBUTE_MIN)
+    return
+  attributes[key] = score + delta
+}
+
+function resetAttributes() {
+  Object.assign(attributes, PLAYER_ATTRIBUTE_BASE_SCORES)
+}
+
+function formatModifier(score: number) {
+  const modifier = playerAttributeModifier(score)
+  return modifier >= 0 ? `+${modifier}` : String(modifier)
+}
+
 function focusStepTitle() {
   nextTick(() => {
     if (contentPanel.value)
@@ -169,6 +202,7 @@ async function createSession() {
       role_label: roleLabel.value.trim(),
       competence: competence.value.trim(),
       limitation: limitation.value.trim(),
+      attributes: { ...attributes },
       motivation: motivation.value.trim(),
       background: background.value.trim(),
       embodiment_note: '',
@@ -449,6 +483,55 @@ function handleKeydown(event: KeyboardEvent) {
               </div>
             </div>
           </div>
+
+          <section class="mt-6 rounded-2xl border border-white/8 bg-white/[.018] p-4 sm:p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 class="font-display text-[16px] text-fabula-100">На что ты способен?</h3>
+                <p class="mt-1 text-[12px] leading-relaxed text-fabula-500">Реши, на что герой сможет положиться, когда привычный мир даст трещину.</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="rounded-full border border-[rgb(var(--pack-accent-rgb)/.25)] bg-[rgb(var(--pack-accent-rgb)/.07)] px-3 py-1.5 font-interface text-[10px] uppercase tracking-[.08em] text-[var(--pack-accent-light)]">
+                  Свободно: {{ attributePointsRemaining }}
+                </span>
+                <button
+                  type="button"
+                  class="rounded-full border border-white/10 px-3 py-1.5 text-[11px] text-fabula-500 transition hover:border-white/20 hover:text-fabula-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--pack-accent)]"
+                  @click="resetAttributes"
+                >
+                  Сбросить
+                </button>
+              </div>
+            </div>
+
+            <div class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <article
+                v-for="attribute in PLAYER_ATTRIBUTE_DEFINITIONS"
+                :key="attribute.key"
+                class="rounded-xl border border-white/8 bg-black/15 p-3"
+              >
+                <p class="text-center font-interface text-[10px] uppercase tracking-[.08em] text-[var(--pack-accent-light)]">{{ attribute.label }}</p>
+                <div class="mt-2 flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    :aria-label="`Уменьшить: ${attribute.label}`"
+                    :disabled="attributes[attribute.key] <= PLAYER_ATTRIBUTE_MIN"
+                    class="grid size-8 place-items-center rounded-lg border border-white/10 text-[17px] text-fabula-300 transition hover:border-[var(--pack-accent)] disabled:cursor-not-allowed disabled:opacity-25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--pack-accent)]"
+                    @click="adjustAttribute(attribute.key, -1)"
+                  >−</button>
+                  <strong class="min-w-8 text-center font-display text-[22px] font-normal text-fabula-100">{{ attributes[attribute.key] }}</strong>
+                  <button
+                    type="button"
+                    :aria-label="`Увеличить: ${attribute.label}`"
+                    :disabled="attributes[attribute.key] >= PLAYER_ATTRIBUTE_MAX || attributePointsRemaining <= 0"
+                    class="grid size-8 place-items-center rounded-lg border border-white/10 text-[17px] text-fabula-300 transition hover:border-[var(--pack-accent)] disabled:cursor-not-allowed disabled:opacity-25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--pack-accent)]"
+                    @click="adjustAttribute(attribute.key, 1)"
+                  >+</button>
+                </div>
+                <p class="mt-1 text-center text-[11px] text-fabula-500">{{ formatModifier(attributes[attribute.key]) }}</p>
+              </article>
+            </div>
+          </section>
         </div>
 
         <div v-else class="mx-auto grid max-w-[920px] gap-6 lg:grid-cols-[.9fr_1.1fr]">

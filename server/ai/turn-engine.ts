@@ -1,5 +1,6 @@
 import { STORY_PACKS } from '../../shared/storypacks'
 import type { StoryPackId } from '../../shared/storypacks'
+import { PLAYER_ATTRIBUTE_DEFINITIONS, playerAttributeModifier } from '../../shared/game'
 import { AI_MODELS } from './catalog'
 import type { FabulaAiConfig } from './config'
 import type { JsonValue, TurnCommand, TurnOperation, TurnOutput } from './contracts'
@@ -1120,6 +1121,14 @@ function buildTurnPacket(
         role: snapshot.persona.role_label,
         competence: snapshot.persona.competence,
         limitation: snapshot.persona.limitation,
+        attributes: snapshot.persona.attributes
+          ? PLAYER_ATTRIBUTE_DEFINITIONS.map(({ key, label }) => ({
+              key,
+              label,
+              score: snapshot.persona.attributes![key],
+              modifier: playerAttributeModifier(snapshot.persona.attributes![key]),
+            }))
+          : [],
         motivation: snapshot.persona.motivation,
         background: snapshot.persona.background,
         embodiment_note: snapshot.persona.embodiment_note,

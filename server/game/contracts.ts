@@ -1,4 +1,10 @@
-import type { CreateGameSessionRequest, PlayerPersonaInput } from '../../shared/game'
+import {
+  PLAYER_ATTRIBUTE_DEFINITIONS,
+  PLAYER_ATTRIBUTE_MAX,
+  PLAYER_ATTRIBUTE_MIN,
+  PLAYER_ATTRIBUTE_POINT_BUDGET,
+} from '../../shared/game'
+import type { CreateGameSessionRequest, PlayerAttributeScores, PlayerPersonaInput } from '../../shared/game'
 import { isStoryPackId, STORY_PACKS } from '../../shared/storypacks'
 import type { StoryPackId } from '../../shared/storypacks'
 import { ContractError } from '../ai/contracts'
@@ -35,6 +41,41 @@ function optionalCleanString(value: unknown, path: string, min: number, max: num
   return value === undefined ? undefined : cleanString(value, path, min, max)
 }
 
+function parseAttributes(value: unknown): PlayerAttributeScores | undefined {
+  if (value === undefined)
+    return undefined
+  if (!isRecord(value))
+    throw new ContractError('INVALID_FIELD', 'Некорректные характеристики героя.', ['$.persona.attributes'])
+
+  const keys = PLAYER_ATTRIBUTE_DEFINITIONS.map(attribute => attribute.key)
+  exactKeys(value, keys, '$.persona.attributes')
+  requiredKeys(value, keys, '$.persona.attributes')
+
+  const attributes = Object.fromEntries(PLAYER_ATTRIBUTE_DEFINITIONS.map(({ key }) => {
+    const score = value[key]
+    if (typeof score !== 'number' || !Number.isInteger(score) || score < PLAYER_ATTRIBUTE_MIN || score > PLAYER_ATTRIBUTE_MAX) {
+      throw new ContractError(
+        'INVALID_FIELD',
+        `Характеристика должна быть целым числом от ${PLAYER_ATTRIBUTE_MIN} до ${PLAYER_ATTRIBUTE_MAX}.`,
+        [`$.persona.attributes.${key}`],
+      )
+    }
+    return [key, score]
+  })) as PlayerAttributeScores
+  const spent = PLAYER_ATTRIBUTE_DEFINITIONS.reduce(
+    (total, { key }) => total + attributes[key] - PLAYER_ATTRIBUTE_MIN,
+    0,
+  )
+  if (spent > PLAYER_ATTRIBUTE_POINT_BUDGET) {
+    throw new ContractError(
+      'INVALID_FIELD',
+      `На характеристики можно потратить не больше ${PLAYER_ATTRIBUTE_POINT_BUDGET} очков.`,
+      ['$.persona.attributes'],
+    )
+  }
+  return attributes
+}
+
 function parsePersona(value: unknown, storyPackId: StoryPackId): PlayerPersonaInput {
   if (!isRecord(value))
     throw new ContractError('INVALID_FIELD', 'Некорректное воплощение игрока.', ['$.persona'])
@@ -44,6 +85,7 @@ function parsePersona(value: unknown, storyPackId: StoryPackId): PlayerPersonaIn
     'role_label',
     'competence',
     'limitation',
+    'attributes',
     'motivation',
     'background',
     'embodiment_note',
@@ -70,6 +112,7 @@ function parsePersona(value: unknown, storyPackId: StoryPackId): PlayerPersonaIn
     role_label: roleLabel,
     competence,
     limitation,
+    attributes: parseAttributes(value.attributes),
     motivation: cleanString(value.motivation, '$.persona.motivation', 3, 600),
     background,
     embodiment_note: embodimentNote,

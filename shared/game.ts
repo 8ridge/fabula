@@ -5,12 +5,41 @@ export type MessageRole = 'narrator' | 'character' | 'player' | 'system'
 export type JournalEntryType = 'event' | 'character' | 'location' | 'item' | 'clue' | 'promise' | 'objective'
 export type JournalUncertainty = 'confirmed' | 'reported' | 'suspected' | 'contradicted'
 
+export const PLAYER_ATTRIBUTE_DEFINITIONS = [
+  { key: 'str', label: 'Сила' },
+  { key: 'dex', label: 'Ловкость' },
+  { key: 'con', label: 'Телосложение' },
+  { key: 'int', label: 'Разум' },
+  { key: 'wis', label: 'Мудрость' },
+  { key: 'cha', label: 'Харизма' },
+] as const
+
+export type PlayerAttributeKey = (typeof PLAYER_ATTRIBUTE_DEFINITIONS)[number]['key']
+export type PlayerAttributeScores = Record<PlayerAttributeKey, number>
+
+export const PLAYER_ATTRIBUTE_MIN = 8
+export const PLAYER_ATTRIBUTE_MAX = 18
+export const PLAYER_ATTRIBUTE_POINT_BUDGET = 15
+export const PLAYER_ATTRIBUTE_BASE_SCORES: PlayerAttributeScores = {
+  str: PLAYER_ATTRIBUTE_MIN,
+  dex: PLAYER_ATTRIBUTE_MIN,
+  con: PLAYER_ATTRIBUTE_MIN,
+  int: PLAYER_ATTRIBUTE_MIN,
+  wis: PLAYER_ATTRIBUTE_MIN,
+  cha: PLAYER_ATTRIBUTE_MIN,
+}
+
+export function playerAttributeModifier(score: number): number {
+  return Math.floor((score - 10) / 2)
+}
+
 export interface PlayerPersonaInput {
   name: string
   role_id: string
   role_label?: string
   competence?: string
   limitation?: string
+  attributes?: PlayerAttributeScores
   motivation: string
   background?: string
   embodiment_note: string

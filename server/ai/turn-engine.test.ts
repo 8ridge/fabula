@@ -38,6 +38,7 @@ const snapshot: EngineSessionSnapshot = {
     role_label: 'Инженерное мышление',
     competence: 'Разбирает задачу на этапы',
     limitation: 'Нужны материалы и время',
+    attributes: { str: 8, dex: 9, con: 10, int: 15, wis: 12, cha: 9 },
     motivation: 'Понять восьмой круг',
     background: '',
     embodiment_note: '',
@@ -575,6 +576,16 @@ describe('turn engine model telemetry', () => {
         fact_id: 'canon:eighth-seal:1',
         claim: storyPackSource.hardCanon[0],
       }],
+      player: {
+        attributes: [
+          { key: 'str', label: 'Сила', score: 8, modifier: -1 },
+          { key: 'dex', label: 'Ловкость', score: 9, modifier: -1 },
+          { key: 'con', label: 'Телосложение', score: 10, modifier: 0 },
+          { key: 'int', label: 'Разум', score: 15, modifier: 2 },
+          { key: 'wis', label: 'Мудрость', score: 12, modifier: 1 },
+          { key: 'cha', label: 'Харизма', score: 9, modifier: -1 },
+        ],
+      },
       per_character_knowledge: [{
         character_id: 'character:maelis',
         fact_id: 'fact:previous',

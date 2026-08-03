@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { GameSessionSnapshot } from '#shared/game'
+import { PLAYER_ATTRIBUTE_DEFINITIONS, playerAttributeModifier } from '#shared/game'
+import type { GameSessionSnapshot, PlayerAttributeKey } from '#shared/game'
 import type {
   InteractionFontScale,
   InteractionStoryModel,
@@ -48,6 +49,15 @@ const uncertaintyLabels = {
   reported: 'Со слов',
   suspected: 'Предположение',
   contradicted: 'Противоречие',
+}
+
+function attributeScore(key: PlayerAttributeKey) {
+  return props.session.persona.attributes?.[key] ?? 0
+}
+
+function attributeModifier(key: PlayerAttributeKey) {
+  const modifier = playerAttributeModifier(attributeScore(key))
+  return modifier >= 0 ? `+${modifier}` : String(modifier)
 }
 
 watch(() => props.activeTool, async (tool) => {
@@ -163,6 +173,19 @@ function closeOnBackdrop(event: MouseEvent) {
               <span class="font-interface text-[10px] uppercase text-[#9b9ba6]">Ограничение</span>
               <p class="mt-1 text-[14px] leading-relaxed text-fabula-100">{{ session.persona.limitation }}</p>
             </div>
+          </div>
+          <div v-if="session.persona.attributes" class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <article
+              v-for="attribute in PLAYER_ATTRIBUTE_DEFINITIONS"
+              :key="attribute.key"
+              class="rounded-xl border border-white/8 bg-white/[.02] px-3 py-2.5 text-center"
+            >
+              <span class="font-interface text-[9px] uppercase tracking-[.08em] text-[#9b9ba6]">{{ attribute.label }}</span>
+              <p class="mt-1 font-display text-[20px] text-fabula-100">
+                {{ attributeScore(attribute.key) }}
+                <small class="ml-1 font-interface text-[10px] text-[var(--accent-light)]">{{ attributeModifier(attribute.key) }}</small>
+              </p>
+            </article>
           </div>
         </section>
 
