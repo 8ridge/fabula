@@ -64,3 +64,27 @@ def decode_registration_token(token: str) -> dict | None:
         return {"google_sub": payload["gsub"], "email": payload["email"]}
     except (jwt.PyJWTError, KeyError):
         return None
+
+
+def create_discord_registration_token(discord_id: str, email: str, username: str | None) -> str:
+    now = datetime.now(timezone.utc)
+    payload = {
+        "purpose": "discord_register",
+        "did": discord_id,
+        "email": email,
+        "username": username,
+        "iat": now,
+        "exp": now + timedelta(minutes=10),
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_alg)
+
+
+def decode_discord_registration_token(token: str) -> dict | None:
+    """{'discord_id','email','username'} из валидного discord-токена регистрации или None."""
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_alg])
+        if payload.get("purpose") != "discord_register":
+            return None
+        return {"discord_id": payload["did"], "email": payload["email"], "username": payload.get("username")}
+    except (jwt.PyJWTError, KeyError):
+        return None
