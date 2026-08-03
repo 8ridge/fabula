@@ -61,3 +61,21 @@ class GoogleAuthOut(BaseModel):
     user: UserOut | None = None
     needs_username: bool = False
     registration_token: str | None = None
+
+
+class DiscordIn(BaseModel):
+    code: str
+    redirect_uri: str
+
+
+class DiscordCompleteIn(BaseModel):
+    registration_token: str
+    username: str = Field(pattern=USERNAME_PATTERN)
+
+
+class DiscordAuthOut(BaseModel):
+    access_token: str | None = None
+    token_type: str | None = None
+    user: UserOut | None = None
+    needs_username: bool = False
+    registration_token: str | None = None
