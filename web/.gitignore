@@ -1,0 +1,11 @@
+node_modules
+.nuxt
+.output
+dist
+.data
+*.log
+.DS_Store
+gen_log.txt
+
+# lockfile генерится на Windows и ломает npm ci на Linux (нативные optional-деп)
+package-lock.json
