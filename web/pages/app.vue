@@ -181,7 +181,6 @@
               <div class="cr-stats-h"><b>Характеристики</b><button class="cr-reroll" id="crReroll">⟳ Перебросить</button></div>
               <div class="cr-stats" id="crStats"></div>
               <button class="cr-go" id="crGo">Начать приключение</button>
-              <div class="cr-note">Героя можно будет докрутить в любой момент</div>
             </div>
           </div>
         </div>

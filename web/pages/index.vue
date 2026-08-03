@@ -30,7 +30,7 @@
       по чужим мирам, а наш ИИ поможет в этом приключении. Тебя ждет интересная история и неожиданные
       сюжетные повороты в сопровождении ярких иллюстраций. Будущее твоего мира зависит только от тебя</p>
     <div class="hero-cta">
-      <a href="/app" class="btn btn-solid" style="padding:18px 36px;font-size:14px">Начать историю</a>
+      <a href="/app" data-start="1" class="btn btn-solid" style="padding:18px 36px;font-size:14px">Начать историю</a>
       <a href="#packs" class="btn btn-ghost" style="padding:18px 32px;font-size:14px">Смотреть миры</a>
     </div>
   </div>
@@ -107,8 +107,8 @@
   </div>
 </section>
 
-<div class="dock" id="dock"><i>Первые главы бесплатно</i>
-  <a href="/app" class="btn btn-solid" style="padding:13px 26px;font-size:12px">Начать</a></div>
+<div class="dock" id="dock"><i>Твоя история ждёт</i>
+  <a href="/app" data-start="1" class="btn btn-solid" style="padding:13px 26px;font-size:12px">Начать</a></div>
 
 <section class="sec" id="feats">
   <div class="wrap">
@@ -267,7 +267,7 @@
       <div class="sec-kicker"><br></div>
       <h2 style="margin-bottom:16px">Ваша история начинается здесь<br></h2>
       <p class="sec-sub" style="margin-bottom:30px"><br></p>
-      <a href="/app" class="btn btn-solid" style="padding:18px 42px;font-size:14px">Начать историю</a>
+      <a href="/app" data-start="1" class="btn btn-solid" style="padding:18px 42px;font-size:14px">Начать историю</a>
     </div>
   </div>
 </section>
@@ -841,6 +841,11 @@ if('serviceWorker' in navigator){
 
   // открытие по «Войти»
   document.querySelectorAll('[data-auth]').forEach(a=>a.addEventListener('click',e=>{ if(!a.dataset.auth) return; e.preventDefault(); open(a.dataset.auth); }));
+  // «Начать» без входа → предложить регистрацию (а не кидать в /app и обратно на 401)
+  document.querySelectorAll('[data-start]').forEach(a=>a.addEventListener('click',e=>{
+    if(localStorage.getItem('fabula-token')) return;  // залогинен — идёт в /app
+    e.preventDefault(); open('reg');
+  }));
   $('authClose').addEventListener('click', close);
   scrim.addEventListener('click', e=>{ if(e.target===scrim) close(); });
   addEventListener('keydown', e=>{ if(e.key==='Escape' && scrim.classList.contains('on')) close(); });
