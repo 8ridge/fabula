@@ -17,13 +17,18 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..config import settings
 from ..database import get_db
 from ..deps import get_current_user
+from ..discord_auth import DiscordVerifier, get_discord_verifier
 from ..google_auth import GoogleVerifier, get_google_verifier
 from ..models import OAuthAccount, User, UserSession
 from ..ratelimit import limiter
 from ..schemas import (
     ChangePasswordIn,
+    DiscordAuthOut,
+    DiscordCompleteIn,
+    DiscordIn,
     GoogleAuthOut,
     GoogleCompleteIn,
     GoogleIn,
@@ -35,7 +40,9 @@ from ..schemas import (
 )
 from ..security import (
     create_access_token,
+    create_discord_registration_token,
     create_registration_token,
+    decode_discord_registration_token,
     decode_registration_token,
     hash_password,
     verify_password,
@@ -61,13 +68,11 @@ async def _providers(db: AsyncSession, user: User) -> list[str]:
     p = []
     if user.password_hash is not None:
         p.append("email")
-    res = await db.execute(
-        select(OAuthAccount.id).where(
-            OAuthAccount.user_id == user.id, OAuthAccount.provider == "google"
-        )
-    )
-    if res.first() is not None:
-        p.append("google")
+    res = await db.execute(select(OAuthAccount.provider).where(OAuthAccount.user_id == user.id))
+    have = {row[0] for row in res.all()}
+    for prov in ("google", "telegram", "discord"):
+        if prov in have:
+            p.append(prov)
     return p
 
 
@@ -332,6 +337,102 @@ async def unlink_google(
         )
     )
     await db.commit()
+
+
+def _check_discord_redirect(redirect_uri: str) -> None:
+    allow = settings.discord_redirect_list
+    if allow and redirect_uri not in allow:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Недопустимый redirect_uri")
+
+
+@router.post("/discord", response_model=DiscordAuthOut)
+@limiter.limit("20/minute")
+async def discord_auth(
+    request: Request,
+    data: DiscordIn,
+    verifier: DiscordVerifier = Depends(get_discord_verifier),
+    db: AsyncSession = Depends(get_db),
+):
+    _check_discord_redirect(data.redirect_uri)
+    try:
+        info = verifier.exchange(data.code, data.redirect_uri)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Не удалось войти через Discord")
+    did = info["discord_id"]
+    email = info.get("email")
+    ev = bool(info.get("email_verified"))
+
+    acc = (
+        await db.execute(
+            select(OAuthAccount).where(
+                OAuthAccount.provider == "discord", OAuthAccount.provider_user_id == did
+            )
+        )
+    ).scalar_one_or_none()
+    if acc:
+        user = await db.get(User, acc.user_id)
+        token = await _issue_session(db, user, request)
+        await db.commit()
+        return DiscordAuthOut(access_token=token, token_type="bearer", user=await _user_out(db, user))
+
+    if email:
+        user = await _get_by_email(db, email)
+        if user is not None:
+            if not ev:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    "Discord не подтвердил эту почту. Войди другим способом и привяжи Discord в профиле.",
+                )
+            db.add(OAuthAccount(user_id=user.id, provider="discord", provider_user_id=did))
+            try:
+                await db.commit()
+            except IntegrityError:
+                await db.rollback()
+            token = await _issue_session(db, user, request)
+            await db.commit()
+            return DiscordAuthOut(access_token=token, token_type="bearer", user=await _user_out(db, user))
+
+    return DiscordAuthOut(
+        needs_username=True,
+        registration_token=create_discord_registration_token(did, email or "", info.get("username")),
+    )
+
+
+@router.post("/discord/complete", response_model=TokenOut)
+@limiter.limit("10/minute")
+async def discord_complete(request: Request, data: DiscordCompleteIn, db: AsyncSession = Depends(get_db)):
+    payload = decode_discord_registration_token(data.registration_token)
+    if payload is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Ссылка регистрации недействительна")
+    did, email = payload["discord_id"], (payload.get("email") or None)
+    if await _username_taken(db, data.username):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ник занят")
+    if email and await _get_by_email(db, email):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Аккаунт с этой почтой уже есть")
+    user = User(email=email, username=data.username, password_hash=None, email_verified=bool(email))
+    db.add(user)
+    try:
+        await db.flush()
+        db.add(OAuthAccount(user_id=user.id, provider="discord", provider_user_id=did))
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        acc = (
+            await db.execute(
+                select(OAuthAccount).where(
+                    OAuthAccount.provider == "discord", OAuthAccount.provider_user_id == did
+                )
+            )
+        ).scalar_one_or_none()
+        if acc is None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Ник или аккаунт уже заняты")
+        user = await db.get(User, acc.user_id)
+    await db.refresh(user)
+    token = await _issue_session(db, user, request)
+    await db.commit()
+    return TokenOut(access_token=token, user=await _user_out(db, user))
 
 
 MAX_AVATAR_BYTES = 3 * 1024 * 1024

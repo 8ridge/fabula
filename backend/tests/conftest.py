@@ -5,6 +5,7 @@ import uuid
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test.db"
 os.environ["JWT_SECRET"] = "test-secret"
 os.environ["RATE_LIMIT_ENABLED"] = "false"
+os.environ["DISCORD_REDIRECT_URIS"] = "http://localhost:3000/app"
 
 import pytest
 from fastapi.testclient import TestClient
@@ -32,6 +33,23 @@ def client():
 
     app.dependency_overrides[get_google_verifier] = lambda: _FakeGoogleVerifier()
 
+    from app.discord_auth import get_discord_verifier
+
+    class _FakeDiscordVerifier:
+        def exchange(self, code: str, redirect_uri: str) -> dict:
+            if code == "BAD":
+                raise ValueError("bad code")
+            import json
+            d = json.loads(code)  # тест кодирует данные прямо в "code"
+            return {
+                "discord_id": str(d["discord_id"]),
+                "email": (d.get("email") or "").lower() or None,
+                "email_verified": bool(d.get("email_verified", True)) and bool(d.get("email")),
+                "username": d.get("username"),
+            }
+
+    app.dependency_overrides[get_discord_verifier] = lambda: _FakeDiscordVerifier()
+
     with TestClient(app) as c:  # lifespan создаёт таблицы (init_db)
         yield c
     if os.path.exists("test.db"):
@@ -57,3 +75,8 @@ def auth_headers(token):
 def google_token(sub: str, email: str, email_verified: bool = True) -> str:
     import json
     return json.dumps({"sub": sub, "email": email, "email_verified": email_verified})
+
+
+def discord_code(discord_id, email=None, email_verified=True, username=None):
+    import json
+    return json.dumps({"discord_id": discord_id, "email": email, "email_verified": email_verified, "username": username})
