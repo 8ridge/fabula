@@ -178,7 +178,7 @@
                   <button type="button" class="cr-dice" data-dice="bio" title="Случайная биография" aria-label="Случайная биография">🎲</button>
                 </div>
               </div>
-              <div class="cr-stats-h"><b>Характеристики</b><button class="cr-reroll" id="crReroll">⟳ Перебросить</button></div>
+              <div class="cr-stats-h"><b>Характеристики</b><div class="cr-points">Очков: <b id="crPoints">15</b></div><button class="cr-reroll" id="crReset">↺ Сбросить</button></div>
               <div class="cr-stats" id="crStats"></div>
               <button class="cr-go" id="crGo">Начать приключение</button>
             </div>
@@ -820,20 +820,38 @@ function advance(){
 /* ===== СОЗДАНИЕ ГЕРОЯ ===== */
 const PACK_ACC={fant:'#d9a94a', scifi:'#54e6d0', hist:'#c9a865', post:'#9bbf3a'};
 let crKey='fant', crStats=[];
-function rollStat(){ // 3d6-подобно, мод из значения
-  const v=8+Math.floor(Math.random()*11); // 8..18
-  return {v, m:Math.floor((v-10)/2)};
+const CR_POOL=15, CR_MIN=8, CR_MAX=18;
+function crStatInit(){ crStats=ABIL.map(()=>({v:CR_MIN, m:-1})); }
+function crRemaining(){
+  const spent=crStats.reduce((s,st)=>s+(st.v-CR_MIN),0);
+  return CR_POOL-spent;
+}
+function crAdjust(i, delta){
+  const st=crStats[i]; if(!st) return;
+  const rem=crRemaining();
+  if(delta>0){ if(st.v>=CR_MAX || rem<=0) return; st.v++; }
+  else { if(st.v<=CR_MIN) return; st.v--; }
+  st.m=Math.floor((st.v-10)/2);
+  crRenderStats(true);
+  sfxClick();
 }
 function crRenderStats(bump){
   const el=document.getElementById('crStats'); if(!el) return;
+  const rem=crRemaining();
   el.innerHTML=ABIL.map((a,i)=>{
     const st=crStats[i];
+    const minusOff=st.v<=CR_MIN, plusOff=st.v>=CR_MAX||rem<=0;
     return '<div class="cr-stat'+(bump?' bump':'')+'"><div class="k">'+a.name+'</div>'+
-      '<div class="v">'+st.v+'</div><div class="m">'+fmtMod(st.m)+'</div></div>';
+      '<div class="cr-stat-ctrl"><button type="button" class="cr-pm cr-minus" data-i="'+i+'"'+(minusOff?' disabled':'')+'>−</button>'+
+      '<div class="v">'+st.v+'</div>'+
+      '<button type="button" class="cr-pm cr-plus" data-i="'+i+'"'+(plusOff?' disabled':'')+'>+</button></div>'+
+      '<div class="m">'+fmtMod(st.m)+'</div></div>';
   }).join('');
+  const pts=document.getElementById('crPoints'); if(pts) pts.textContent=rem;
+  el.querySelectorAll('.cr-minus').forEach(b=>b.addEventListener('click',()=>crAdjust(+b.dataset.i,-1)));
+  el.querySelectorAll('.cr-plus').forEach(b=>b.addEventListener('click',()=>crAdjust(+b.dataset.i,1)));
   if(bump) setTimeout(()=>el.querySelectorAll('.cr-stat').forEach(x=>x.classList.remove('bump')),320);
 }
-function crReroll(){ crStats=ABIL.map(()=>rollStat()); crRenderStats(true); sfxClick(); }
 function crDDSet(opts){
   const dd=document.getElementById('crField'); if(!dd) return;
   const val=(opts&&opts[0])||'—';
@@ -896,10 +914,14 @@ function openCreator(key){
   document.getElementById('crName').value='';
   document.getElementById('crBio').value='';
   document.getElementById('crPrompt').value='';
-  crReroll();
+  crStatInit(); crRenderStats();
   cr.classList.add('on'); document.getElementById('nav').style.display='none'; sfxNav();
 }
-function closeCreator(){ document.getElementById('creator').classList.remove('on'); document.getElementById('nav').style.display=''; }
+function closeCreator(){
+  document.getElementById('creator').classList.remove('on'); document.getElementById('nav').style.display='';
+  if(typeof closeSheet==='function') closeSheet();
+  else { document.getElementById('scrim')?.classList.remove('on'); document.getElementById('sheet')?.classList.remove('on'); }
+}
 /* мокап генерации: заполняем поля по промту (реальную модель подключим на бэкенде) */
 const GEN_NAMES=['Кель','Ворон','Сайла','Древ','Мирра','Аскет','Тень','Ольвен'];
 function crGenerate(){
@@ -911,7 +933,6 @@ function crGenerate(){
     document.getElementById('crBio').value = prompt
       ? prompt.charAt(0).toUpperCase()+prompt.slice(1)+'. '+(crRole?crRole+' по призванию.':'')
       : 'По роду — '+roleTxt+'но прошлое скрыто в тумане. Каждый выбор пишет, кем он станет.';
-    crReroll();
     // «портрет обновился»
     const pt=document.getElementById('crPortrait'); pt.style.opacity=.3;
     setTimeout(()=>{ pt.style.transition='opacity .5s'; pt.style.opacity=1; },350);
@@ -921,7 +942,7 @@ function crGenerate(){
 (function(){
   const cr=document.getElementById('creator'); if(!cr) return;
   document.getElementById('crBack').addEventListener('click',()=>{ closeCreator(); sfxClick(); });
-  document.getElementById('crReroll').addEventListener('click', crReroll);
+  document.getElementById('crReset').addEventListener('click',()=>{ crStatInit(); crRenderStats(); sfxClick(); });
   document.getElementById('crGen').addEventListener('click', crGenerate);
   cr.querySelectorAll('.cr-dice').forEach(d=>d.addEventListener('click',()=>crDice(d.dataset.dice)));
   const crFile=document.getElementById('crFile');
@@ -1018,7 +1039,7 @@ function scenarioHTML(k){ const s=stories[k];
     <h2 class="sc-title">${s.title}</h2>
     <p class="sc-syn">${s.synopsis}</p>
     <div class="gthread"></div>
-    <div class="sc-grid">${cell('❦','Глав',s.chapters)}${cell('⚔','Сложность',s.difficulty)}${cell('☾','Тон',s.tone)}${cell('⧗','Время',s.time)}${cell('☗','Роль',s.role)}${cell('★','Рейтинг',s.rating)}</div>
+    <div class="sc-grid">${cell('❦','Глав',s.chapters)}${cell('⚔','Сложность',s.difficulty)}${cell('☾','Тон',s.tone)}${cell('⧗','Время',s.time)}${cell('★','Рейтинг',s.rating)}</div>
     <div class="sc-tags">${s.tags.map(t=>`<span>#${t}</span>`).join('')}</div>
     <button class="rbtn solid sc-start" data-start="${k}">Начать историю ⚔</button>`;
 }
