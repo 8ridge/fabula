@@ -228,6 +228,7 @@
             <div class="setrow" data-act="password"><span class="l"><span class="g">⚿</span>Пароль</span><span class="chev">Изменить ›</span></div>
             <div class="setrow"><span class="l"><span class="g">✉</span>Почта</span><span class="chev" style="color:#7cc47f">подключена</span></div>
             <div class="setrow" data-act="google"><span class="l"><span class="g">G</span>Google</span><span class="chev" data-p="google">скоро</span></div>
+            <div class="setrow" data-act="discord"><span class="l"><span class="g">◐</span>Discord</span><span class="chev" data-p="discord">привязать</span></div>
             <div class="setrow" data-act="devices"><span class="l"><span class="g">🛡</span>Безопасность · устройства</span><span class="chev">›</span></div>
             <div class="setrow" data-act="logout-all"><span class="l"><span class="g">⎇</span>Выйти со всех устройств</span><span class="chev">›</span></div>
           </div>
@@ -272,6 +273,7 @@ useHead({
 })
 
 const googleClientId = useRuntimeConfig().public.googleClientId || ''
+const discordClientId = useRuntimeConfig().public.discordClientId || ''
 
 onMounted(() => {
   /* ===== сессия: читаем JWT-токен, положенный лендингом ===== */
@@ -311,11 +313,60 @@ onMounted(() => {
     if (badge) badge.style.display = data.email_verified ? '' : 'none';
     const gp = document.querySelector('[data-p="google"]');
     if (gp) gp.textContent = data.providers.includes('google') ? 'привязан · отвязать' : 'привязать';
+    const dc = document.querySelector('[data-p="discord"]');
+    if (dc) dc.textContent = data.providers.includes('discord') ? 'привязан · отвязать' : 'привязать';
     const av=document.getElementById('avaImg'), fb=document.getElementById('avaFb');
     if(fb) fb.textContent=((data.username||'?').trim().charAt(0)||'?').toUpperCase();
     if(av){ if(data.has_avatar){ av.style.display=''; av.src=AUTH_API + '/auth/avatar/'+data.id+'?v='+(data.avatar_v||''); if(fb) fb.style.display='none'; } else { av.style.display='none'; av.removeAttribute('src'); if(fb) fb.style.display=''; } }
   }
-  loadProfile();
+  function saveSessionFromData(data){
+    try{
+      localStorage.setItem('fabula-token', data.access_token);
+      localStorage.setItem('fabula-user', JSON.stringify(data.user));
+    }catch(_){}
+    window.__fabulaUser = data.user;
+  }
+
+  function openDiscordNick(){
+    openModal('Придумай ник',
+      `<label class="pm-l">Ник</label><input id="pmDiscordNick" placeholder="3–20, латиница/цифры/_">`,
+      async (msg)=>{
+        const v = (document.getElementById('pmDiscordNick').value||'').trim();
+        if(!/^[A-Za-z0-9_]{3,20}$/.test(v)){ msg.textContent='Ник: 3–20, латиница, цифры, _'; return true; }
+        const { res, data } = await apiAuth('/auth/discord/complete','POST',{ registration_token: window.__discordReg, username: v });
+        if(res.ok){ saveSessionFromData(data); loadProfile(); toast('Готово!'); return false; }
+        msg.textContent = res.status===409 ? 'Ник занят' : 'Проверь ник'; return true;
+      });
+    requestAnimationFrame(()=>{ const ni=document.getElementById('pmDiscordNick'); if(ni) ni.focus(); });
+  }
+
+  async function handleDiscordReturn(code, err, q){
+    const clean = location.origin + location.pathname;
+    history.replaceState(null, '', clean);
+    if (err) { toast('Вход через Discord отменён'); loadProfile(); return; }
+    let saved='', link='';
+    try{ saved=sessionStorage.getItem('discord_state')||''; link=sessionStorage.getItem('discord_link')||''; sessionStorage.removeItem('discord_state'); sessionStorage.removeItem('discord_link'); }catch(_){}
+    const state = q.get('state');
+    if (!state || state !== saved) { toast('Discord: проверка безопасности не пройдена'); loadProfile(); return; }
+    const redirect_uri = location.origin + '/app';
+    if (link) {
+      const { res } = await apiAuth('/auth/link/discord', 'POST', { code, redirect_uri });
+      if (res.status === 409) toast('Этот Discord уже привязан к другому');
+      else if (res.ok) toast('Discord привязан');
+      loadProfile();
+      return;
+    }
+    const { res, data } = await apiAuth('/auth/discord', 'POST', { code, redirect_uri });
+    if (!res.ok || !data) { toast('Не удалось войти через Discord'); loadProfile(); return; }
+    if (data.needs_username) { window.__discordReg = data.registration_token; openDiscordNick(); return; }
+    saveSessionFromData(data);
+    loadProfile();
+  }
+
+  const _dq = new URLSearchParams(location.search);
+  const _discordCode = _dq.get('code'), _discordErr = _dq.get('error');
+  if (_discordCode || _discordErr) { handleDiscordReturn(_discordCode, _discordErr, _dq); }
+  else { loadProfile(); }
 
   const avaBtn=document.getElementById('avaBtn'), avaFile=document.getElementById('avaFile');
   if(avaBtn&&avaFile){
@@ -457,6 +508,22 @@ onMounted(() => {
         }});
         const holder = document.getElementById('pmGoogleBtn');
         if (holder) window.google.accounts.id.renderButton(holder, { theme:'filled_black', size:'large', text:'continue_with', shape:'pill', width: 280 });
+        return;
+      }
+      if (act === 'discord') {
+        const u = window.__fabulaUser || {};
+        if ((u.providers||[]).includes('discord')) {
+          const { res } = await apiAuth('/auth/link/discord', 'DELETE');
+          if (res.status === 400) toast('Нужен другой способ входа'); else if (res.ok) { toast('Discord отвязан'); loadProfile(); }
+          return;
+        }
+        if (!discordClientId) { toast('Вход через Discord скоро'); return; }
+        const redirect = location.origin + '/app';
+        const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
+        try { sessionStorage.setItem('discord_state', state); sessionStorage.setItem('discord_link','1'); } catch(e){}
+        location.href = 'https://discord.com/api/oauth2/authorize?client_id=' + encodeURIComponent(discordClientId)
+          + '&redirect_uri=' + encodeURIComponent(redirect) + '&response_type=code&scope=' + encodeURIComponent('identify email')
+          + '&state=' + encodeURIComponent(state);
         return;
       }
       if (act === 'delete') {
