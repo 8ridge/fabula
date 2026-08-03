@@ -129,7 +129,7 @@ export const inventoryConditionMeta = {
     className: 'border-emerald-400/35 bg-emerald-300/[.08] text-emerald-200',
   },
   usable: {
-    label: 'Исправно',
+    label: 'В порядке',
     className: 'border-sky-400/35 bg-sky-300/[.08] text-sky-200',
   },
   worn: {

@@ -446,7 +446,7 @@ describe('turn engine model telemetry', () => {
     expect(requests.map(request => request.model)).toEqual([
       'nvidia/nemotron-3-ultra-550b-a55b:free',
       'nvidia/nemotron-3-ultra-550b-a55b',
-      'deepseek/deepseek-v4-flash',
+      'deepseek/deepseek-v4-flash-0731',
     ])
     expect(requests[1]?.timeoutMs).toBe(TURN_MODEL_TIMEOUTS.inventoryFallbackMs)
     expect(result.fallbackUsed).toBe(true)
@@ -486,7 +486,7 @@ describe('turn engine model telemetry', () => {
 
     expect(requests.map(request => request.model)).toEqual([
       'nvidia/nemotron-3-ultra-550b-a55b:free',
-      'deepseek/deepseek-v4-flash',
+      'deepseek/deepseek-v4-flash-0731',
     ])
     expect(result.modelRuns.map(run => run.status)).toEqual(['accepted', 'accepted'])
   })
@@ -510,7 +510,7 @@ describe('turn engine model telemetry', () => {
       history: [],
     })
 
-    expect(requests.map(request => request.model)).toEqual(['deepseek/deepseek-v4-flash'])
+    expect(requests.map(request => request.model)).toEqual(['deepseek/deepseek-v4-flash-0731'])
     expect(requests[0]).toMatchObject({
       timeoutMs: TURN_MODEL_TIMEOUTS.primaryMs,
       maxOutputTokens: 2000,
@@ -644,10 +644,10 @@ describe('turn engine model telemetry', () => {
   })
 
   test('runs the authoritative model once with a bounded timeout', async () => {
-    const calls: Array<Pick<ChatJsonRequest, 'model' | 'timeoutMs'>> = []
+    const calls: Array<Pick<ChatJsonRequest, 'model' | 'timeoutMs' | 'reasoning'>> = []
     const client = {
       chatJson: async (request: ChatJsonRequest) => {
-        calls.push({ model: request.model, timeoutMs: request.timeoutMs })
+        calls.push({ model: request.model, timeoutMs: request.timeoutMs, reasoning: request.reasoning })
         return {
           requestId: 'request:primary',
           model: request.model,
@@ -661,8 +661,9 @@ describe('turn engine model telemetry', () => {
     const result = await engine.execute(command, snapshot)
 
     expect(calls).toEqual([{
-      model: 'deepseek/deepseek-v4-flash',
+      model: 'deepseek/deepseek-v4-flash-0731',
       timeoutMs: TURN_MODEL_TIMEOUTS.primaryMs,
+      reasoning: { effort: 'low', exclude: true },
     }])
     expect(result.advisoryUsed).toBe(true)
     expect(result.fallbackUsed).toBe(false)
@@ -699,6 +700,7 @@ describe('turn engine model telemetry', () => {
         name: 'fabula_turn_output_0_2',
       },
       devAllowNonZdr: true,
+      reasoning: { effort: 'low', exclude: true },
     })
     expect(result.model).toBe('aion-labs/aion-3.0-mini')
   })
@@ -875,7 +877,7 @@ describe('turn engine model telemetry', () => {
 
     expect(requests.map(request => request.schema?.name)).toEqual(['fabula_turn_output_0_2'])
     expect(requests[0]).toMatchObject({
-      model: 'deepseek/deepseek-v4-flash',
+      model: 'deepseek/deepseek-v4-flash-0731',
       payload: {
         inventory_advisory: {
           module_version: 'inventory-advisory@1.1',
@@ -914,7 +916,7 @@ describe('turn engine model telemetry', () => {
     const bottleCommand: TurnCommand = {
       ...command,
       mode: 'action',
-      text: 'Я взял бутылку в инвентарь',
+      text: 'Взял бутылку к себе в инвентарь',
     }
     const bottleSnapshot: EngineSessionSnapshot = {
       ...snapshot,
@@ -1035,7 +1037,7 @@ describe('turn engine model telemetry', () => {
     const bottleCommand: TurnCommand = {
       ...command,
       mode: 'action',
-      text: 'Я взял бутылку в инвентарь',
+      text: 'Я взял бутылку к себе в свой инвентарь',
     }
     const bottleSnapshot: EngineSessionSnapshot = {
       ...snapshot,
@@ -1074,7 +1076,7 @@ describe('turn engine model telemetry', () => {
             ? new OpenRouterError('UPSTREAM_TIMEOUT', 'timeout', 504, true)
             : new OpenRouterError('UPSTREAM_RATE_LIMITED', 'limited', 429, true)
         }
-        if (request.model === 'deepseek/deepseek-v4-flash')
+        if (request.model === 'deepseek/deepseek-v4-flash-0731')
           throw new OpenRouterError('UPSTREAM_TIMEOUT', 'timeout', 504, true)
         return {
           requestId: 'request:quick-story-after-local-inventory',
@@ -1095,7 +1097,7 @@ describe('turn engine model telemetry', () => {
     expect(requests.map(request => request.model)).toEqual([
       'nvidia/nemotron-3-ultra-550b-a55b:free',
       'nvidia/nemotron-3-ultra-550b-a55b',
-      'deepseek/deepseek-v4-flash',
+      'deepseek/deepseek-v4-flash-0731',
       'mistralai/mistral-small-2603',
     ])
     expect((requests[2]!.payload.inventory_advisory as Record<string, any>).reason_codes)
@@ -1104,6 +1106,7 @@ describe('turn engine model telemetry', () => {
       operation.type === 'inventory.create_instance')).toMatchObject({
       item_id: bottleItemId,
       name: 'Бутылка',
+      description: 'Липкая бутылка с темной жидкостью остается в руках игрока.',
       holder_id: 'player',
     })
     expect(result.modelRuns.map(run => run.role)).toEqual([
@@ -1291,7 +1294,7 @@ describe('turn engine model telemetry', () => {
     ])
     expect(calls.map(({ model, timeoutMs }) => ({ model, timeoutMs }))).toEqual([
       {
-        model: 'deepseek/deepseek-v4-flash',
+        model: 'deepseek/deepseek-v4-flash-0731',
         timeoutMs: TURN_MODEL_TIMEOUTS.primaryMs,
       },
       {
@@ -1344,7 +1347,7 @@ describe('turn engine model telemetry', () => {
     const result = await engine.execute(command, snapshot)
 
     expect(calls).toEqual([
-      'deepseek/deepseek-v4-flash',
+      'deepseek/deepseek-v4-flash-0731',
       'mistralai/mistral-small-2603',
     ])
     expect(result.fallbackUsed).toBe(true)

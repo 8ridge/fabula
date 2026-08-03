@@ -45,25 +45,25 @@ const emit = defineEmits<{
       </div>
 
       <dl class="mt-5 grid grid-cols-2 gap-x-3 gap-y-4 border-y border-white/[.08] py-4">
-        <div class="min-w-0">
+        <div v-if="item.owner_id !== item.holder_id" class="min-w-0">
           <dt class="font-interface text-[9px] uppercase tracking-[.09em] text-[#77747a]">
-            Владелец
+            Кому принадлежит
           </dt>
           <dd class="mt-1 truncate text-[13px] text-fabula-100" :title="item.owner_name">
-            {{ item.owner_name }}
+            {{ item.owner_id === 'player' ? 'Тебе' : item.owner_name }}
           </dd>
         </div>
         <div class="min-w-0">
           <dt class="font-interface text-[9px] uppercase tracking-[.09em] text-[#77747a]">
-            Держатель
+            Сейчас
           </dt>
           <dd class="mt-1 truncate text-[13px] text-fabula-100" :title="item.holder_name">
-            {{ item.holder_name }}
+            {{ item.holder_id === 'player' ? 'У тебя' : `У персонажа «${item.holder_name}»` }}
           </dd>
         </div>
         <div class="min-w-0">
           <dt class="font-interface text-[9px] uppercase tracking-[.09em] text-[#77747a]">
-            Размещение
+            Где лежит
           </dt>
           <dd class="mt-1 truncate text-[13px] text-fabula-100">
             {{ item.slotLabel }}
@@ -71,7 +71,7 @@ const emit = defineEmits<{
         </div>
         <div class="min-w-0">
           <dt class="font-interface text-[9px] uppercase tracking-[.09em] text-[#77747a]">
-            Место
+            Локация
           </dt>
           <dd class="mt-1 truncate text-[13px] text-fabula-100" :title="item.location_name">
             {{ item.location_name }}
@@ -91,7 +91,7 @@ const emit = defineEmits<{
         </div>
         <div class="col-span-2 min-w-0">
           <dt class="font-interface text-[9px] uppercase tracking-[.09em] text-[#77747a]">
-            Происхождение
+            История предмета
           </dt>
           <dd class="mt-1 text-[13px] leading-relaxed text-fabula-100">
             {{ item.provenance.summary }}
@@ -120,7 +120,7 @@ const emit = defineEmits<{
         <span aria-hidden="true" class="font-display text-4xl text-[#9f8c69]">◇</span>
         <p class="mt-3 font-display text-[20px] text-fabula-100">Выбери предмет</p>
         <p class="mt-1 text-[13px] leading-relaxed text-[#908b8b]">
-          Здесь появятся его состояние, размещение и доступное действие.
+          Здесь можно рассмотреть предмет и добавить его к следующему действию.
         </p>
       </div>
     </div>

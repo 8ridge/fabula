@@ -27,7 +27,9 @@ export interface ChatJsonRequest {
   devAllowNonZdr?: boolean
   jsonMode?: 'json-schema' | 'json-object' | 'tool-call' | 'prompt-only'
   reasoning?: {
-    enabled: boolean
+    enabled?: boolean
+    effort?: 'max' | 'xhigh' | 'high' | 'medium' | 'low' | 'minimal' | 'none'
+    max_tokens?: number
     exclude?: boolean
   }
 }

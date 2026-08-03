@@ -20,6 +20,11 @@ import type {
 import { getStoryPackContext } from '../game/storypack-context'
 import type { RuntimeStoryPackSource } from '../game/storypack-source'
 import { loadRuntimeStoryPack } from '../game/storypack-source'
+import {
+  acquisitionDescription,
+  acquisitionDisplayName,
+  stripAcquisitionDestination,
+} from '../game/inventory-copy'
 
 export interface TurnEngineResult extends SessionTurnResult {
   modelRuns: SafeModelRun[]
@@ -43,6 +48,9 @@ export const TURN_MODEL_TIMEOUTS = {
   fallbackMs: 8_000,
   journalMs: 10_000,
 } as const
+
+const LOW_REASONING = { effort: 'low', exclude: true } as const
+const NO_REASONING = { enabled: false, exclude: true } as const
 
 const QUICK_TURN_PROMPT = `Ты создаешь короткое безопасное продолжение интерактивной истории.
 Верни только JSON по переданной схеме.
@@ -232,6 +240,7 @@ export class TurnEngine {
         maxPrice: { prompt: 0.25, completion: 0.8 },
         schema: getStandaloneContract('journal'),
         jsonMode: AI_MODELS.mistral.jsonMode,
+        reasoning: NO_REASONING,
       })
       const output = parseStandaloneOutput('journal', result.output)
       const entries = journalDraftsFromOutput(output, command, context)
@@ -296,6 +305,7 @@ export class TurnEngine {
           name: 'fabula_quick_turn_1_0',
           schema: QUICK_TURN_JSON_SCHEMA,
         },
+        reasoning: NO_REASONING,
       })
       const proposal = guardQuickActionAlignment(parseQuickTurnProposal(result.output), command)
       const output = quickProposalToTurnOutput(proposal, command, snapshot, inventoryAdvisory)
@@ -372,7 +382,7 @@ export class TurnEngine {
           schema: contract,
           jsonMode: attempt.jsonMode,
           sanitizedFreeEndpoint: attempt.sanitizedFreeEndpoint,
-          reasoning: { enabled: false, exclude: true },
+          reasoning: NO_REASONING,
         })
         const advisory = requireExplicitAcquisitionCandidate(
           parseStandaloneOutput(
@@ -450,6 +460,7 @@ export class TurnEngine {
         },
         devAllowNonZdr: model.id === 'aion',
         jsonMode: model.jsonMode,
+        reasoning: LOW_REASONING,
       })
       const output = parseTurnOutput(
         withServerEnvelope(result.output, command, snapshot, storyPackSource),
@@ -640,7 +651,7 @@ function buildLocalInventoryAdvisory(
         template_id: `item-template:scene:${templateFragment}`,
         name,
         category: 'resource',
-        description: `Переносимый предмет из текущей сцены. Подтверждение: ${evidence!.slice(0, 700)}`,
+        description: acquisitionDescription(evidence!),
         owner_id: 'player',
         holder_id: 'player',
         location_id: snapshot.scene.location_id,
@@ -795,11 +806,10 @@ function explicitAcquisitionReference(command: TurnCommand): string | null {
   )
   if (!match?.[1])
     return null
-  const reference = match[1]
+  const reference = stripAcquisitionDestination(match[1]
     .replace(/^(?:себе\s+)?(?:эту?|этот|это|тот|ту|данн\p{L}+|лежащ\p{L}+|стоящ\p{L}+)\s+/iu, '')
-    .replace(/\s+(?:к\s+себе|с\s+собой|себе|в\s+руки|(?:как\s+предмет\s+)?в\s+инвентарь)\s*[.!?]*$/iu, '')
     .replace(/[.!?]+$/g, '')
-    .trim()
+    .trim())
   return reference.length >= 2 && reference.length <= 120 ? reference : null
 }
 
@@ -830,22 +840,6 @@ function localAcquisitionEvidence(
       return sentence
   }
   return null
-}
-
-function acquisitionDisplayName(reference: string): string {
-  const words = reference.split(/\s+/)
-  const first = words[0]!.toLocaleLowerCase('ru')
-  const normalizedFirst = first.endsWith('ку')
-    ? `${first.slice(0, -2)}ка`
-    : first.endsWith('гу')
-      ? `${first.slice(0, -2)}га`
-      : first.endsWith('ю')
-        ? `${first.slice(0, -1)}я`
-        : first.endsWith('у')
-          ? `${first.slice(0, -1)}а`
-          : first
-  const normalized = [normalizedFirst, ...words.slice(1)].join(' ').slice(0, 160)
-  return normalized.charAt(0).toLocaleUpperCase('ru') + normalized.slice(1)
 }
 
 function buildJournalPacket(

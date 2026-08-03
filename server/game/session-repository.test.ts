@@ -70,7 +70,7 @@ function workerResult(snapshot: EngineSessionSnapshot, command: GameTurnCommand,
   }) as unknown as TurnOutput
   return {
     output,
-    model: 'deepseek/deepseek-v4-flash',
+    model: 'deepseek/deepseek-v4-flash-0731',
     fallbackUsed: false,
     advisoryUsed: false,
   }
@@ -89,6 +89,7 @@ describe('game session repository', () => {
     expect(session.inventory[0]?.provenance).toMatchObject({
       kind: 'starting_equipment',
       source_event_id: null,
+      summary: 'Это часть твоего привычного снаряжения.',
     })
     expect(session.journal[0]?.title).toBe('Восьмой круг')
     expect(session.suggestions).toHaveLength(6)
@@ -175,6 +176,59 @@ describe('game session repository', () => {
 
     expect(restored.scene.present_character_ids).toEqual([])
     expect(restored.characters.map(character => character.id)).toEqual(['character:nina-gromova'])
+  })
+
+  test('repairs technical copy and destination tails on an existing generated item', async () => {
+    const storage = new ReferenceGameSessionStorage()
+    const repository = new GameSessionRepository(storage)
+    const session = await repository.create(ownerId, {
+      schema_version: 'session-create@1.0',
+      story_pack_id: 'zero-line',
+      persona: {
+        name: 'Грег',
+        role_id: 'zero-line:courier',
+        motivation: 'Добыть лекарство',
+        embodiment_note: '',
+        narration_density: 'balanced',
+      },
+    })
+    const key = `sessions:${session.id}`
+    const stored = await storage.getItem<Record<string, any>>(key)
+    stored!.snapshot.inventory.push({
+      id: 'item:legacy-local-bottle',
+      template_id: 'item-template:scene:бутылку-в-свой-инвентарь',
+      name: 'Бутылка в свой инвентарь',
+      category: 'resource',
+      description: 'Переносимый предмет из текущей сцены. Подтверждение: Ты заворачиваешь бутылку в старую газету.',
+      quantity: 1,
+      charges: null,
+      condition: 'usable',
+      owner_id: 'player',
+      owner_name: 'Грег',
+      holder_id: 'player',
+      holder_name: 'Грег',
+      location_id: session.scene.location_id,
+      location_name: session.scene.location_name,
+      slot: 'hand',
+      version: 0,
+      provenance: {
+        kind: 'world_event',
+        source_event_id: 'event:legacy-bottle',
+        summary: 'Появление предмета подтверждено событием в локации «Квартира в Велинске».',
+      },
+    })
+    await storage.setItem(key, stored)
+
+    const restored = await repository.get(ownerId, session.id)
+    const item = restored.inventory.find(candidate => candidate.id === 'item:legacy-local-bottle')
+
+    expect(item).toMatchObject({
+      name: 'Бутылка',
+      description: 'Ты заворачиваешь бутылку в старую газету.',
+      provenance: {
+        summary: 'Ты забрал этот предмет с собой в локации «Квартира в Велинске».',
+      },
+    })
   })
 
   test('isolates started stories by the server-owned player id', async () => {
@@ -784,7 +838,7 @@ describe('game session repository', () => {
         ]),
         modelRuns: [{
           role: 'primary',
-          model: 'deepseek/deepseek-v4-flash',
+          model: 'deepseek/deepseek-v4-flash-0731',
           request_id: 'request:model-authority',
           usage: { total_tokens: 10 },
           status: 'accepted',

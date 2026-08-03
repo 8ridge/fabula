@@ -17,6 +17,7 @@ import type { StoryPackId } from '../../shared/storypacks'
 import type { SafeModelRun } from '../ai/http'
 import { AiExecutionError, FabulaApiError } from '../ai/http'
 import type { ExpectedInventoryState, TurnOperation, TurnOutput } from '../ai/contracts'
+import { normalizeInventoryItemCopy, startingEquipmentItemStory, worldEventItemStory } from './inventory-copy'
 import { ALLOWED_TURN_OPERATION_TYPES, getStoryPackContext } from './storypack-context'
 
 export interface SessionTurnResult {
@@ -345,7 +346,7 @@ function makeStartingInventory(request: CreateGameSessionRequest, persona: Playe
     provenance: {
       kind: 'starting_equipment',
       source_event_id: null,
-      summary: `Начальный предмет роли «${persona.role_label}» в истории «${pack.title}».`,
+      summary: startingEquipmentItemStory(),
     },
   }]
 }
@@ -409,6 +410,7 @@ function normalizeStoredSession(value: StoredGameSession): StoredGameSession {
   }
   session.snapshot.inventory.forEach((item) => {
     normalizeItemProvenance(item)
+    normalizeInventoryItemCopy(item)
     if (item.location_name === pack.opening.location && item.location_id !== session.snapshot.scene.location_id)
       item.location_id = session.snapshot.scene.location_id
   })
@@ -421,7 +423,7 @@ function normalizeItemProvenance(item: InventoryItemProjection): void {
   item.provenance = {
     kind: 'legacy_snapshot',
     source_event_id: null,
-    summary: 'Предмет уже находился в инвентаре до включения учета происхождения.',
+    summary: 'Этот предмет был у тебя с самого начала.',
   }
 }
 
@@ -780,7 +782,7 @@ function applyOperations(
         provenance: {
           kind: 'world_event',
           source_event_id: operation.source_event_id,
-          summary: `Появление предмета подтверждено событием в локации «${entityName(session, operation.location_id)}».`,
+          summary: worldEventItemStory(entityName(session, operation.location_id)),
         },
       })
       createdItemIds.add(operation.item_id)

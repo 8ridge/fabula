@@ -89,7 +89,7 @@ describe('non-authoritative module service', () => {
           usage: { total_tokens: 12, cost: 0.001 },
         },
         {
-          model: 'deepseek/deepseek-v4-flash',
+          model: 'deepseek/deepseek-v4-flash-0731',
           status: 'discarded',
           error_code: 'MODEL_CONTRACT_ERROR',
           usage: { total_tokens: 12, cost: 0.001 },

@@ -37,8 +37,8 @@ export interface AiModuleDefinition {
 export const AI_MODELS = {
   deepseek: {
     id: 'deepseek',
-    label: 'DeepSeek V4 Flash',
-    slug: 'deepseek/deepseek-v4-flash',
+    label: 'DeepSeek V4 Flash 0731',
+    slug: 'deepseek/deepseek-v4-flash-0731',
     role: 'Авторитетный ход и структурные модули',
     modality: 'text',
     jsonMode: 'json-schema',
