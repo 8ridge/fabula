@@ -9,7 +9,7 @@ USERNAME_PATTERN = r"^[A-Za-z0-9_]{3,20}$"
 class RegisterIn(BaseModel):
     username: str = Field(pattern=USERNAME_PATTERN)
     email: EmailStr
-    password: str = Field(min_length=6, max_length=128)
+    password: str = Field(min_length=8, max_length=128)
 
 
 class LoginIn(BaseModel):
@@ -23,13 +23,13 @@ class UsernameIn(BaseModel):
 
 class ChangePasswordIn(BaseModel):
     current_password: str | None = None
-    new_password: str = Field(min_length=6, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
 
 
 class UserOut(BaseModel):
     id: int
     username: str
-    email: EmailStr
+    email: EmailStr | None = None
     email_verified: bool
     avatar_url: str | None = None
     created_at: datetime
@@ -56,6 +56,50 @@ class GoogleCompleteIn(BaseModel):
 
 
 class GoogleAuthOut(BaseModel):
+    access_token: str | None = None
+    token_type: str | None = None
+    user: UserOut | None = None
+    needs_username: bool = False
+    registration_token: str | None = None
+
+
+class DiscordIn(BaseModel):
+    code: str
+    redirect_uri: str
+
+
+class DiscordCompleteIn(BaseModel):
+    registration_token: str
+    username: str = Field(pattern=USERNAME_PATTERN)
+
+
+class DiscordAuthOut(BaseModel):
+    access_token: str | None = None
+    token_type: str | None = None
+    user: UserOut | None = None
+    needs_username: bool = False
+    registration_token: str | None = None
+
+
+class TelegramWidgetIn(BaseModel):
+    # Поля виджета Telegram; id/auth_date/hash обязательны, прочее (first_name,
+    # username, photo_url, last_name) допускаем и учитываем при проверке подписи.
+    model_config = {"extra": "allow"}
+    id: int | str
+    auth_date: int
+    hash: str
+
+
+class TelegramCompleteIn(BaseModel):
+    registration_token: str
+    username: str = Field(pattern=USERNAME_PATTERN)
+
+
+class TelegramMiniAppIn(BaseModel):
+    init_data: str
+
+
+class TelegramAuthOut(BaseModel):
     access_token: str | None = None
     token_type: str | None = None
     user: UserOut | None = None

@@ -1,4 +1,6 @@
 """Настройки приложения. Всё читается из переменных окружения (.env)."""
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,11 +19,30 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     google_client_id: str = ""
+    telegram_bot_token: str = ""
+    telegram_auth_ttl: int = 86400  # макс. возраст auth_date, сек (антиреплей)
+    telegram_miniapp_enabled: bool = False
     rate_limit_enabled: bool = True
+
+    discord_client_id: str = ""
+    discord_client_secret: str = ""
+    discord_redirect_uris: str = ""  # через запятую; allowlist для redirect_uri
 
     @property
     def cors_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
+    @property
+    def discord_redirect_list(self) -> list[str]:
+        return [u.strip() for u in self.discord_redirect_uris.split(",") if u.strip()]
+
 
 settings = Settings()
+
+if settings.jwt_secret == "dev-secret-change-me" and os.getenv("FABULA_ALLOW_DEV_SECRET") != "1":
+    import warnings
+
+    warnings.warn(
+        "JWT_SECRET is the insecure dev default — set a strong JWT_SECRET in production.",
+        stacklevel=2,
+    )

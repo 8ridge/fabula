@@ -24,24 +24,20 @@ def test_google_complete_creates_user(client):
     assert r2.status_code == 200 and r2.json().get("access_token")
 
 
-def test_google_autolink_to_existing_email(client, creds):
+def test_google_no_autolink_onto_password_account(client, creds):
     register(client, creds)  # email/password юзер
     tok = google_token("g_link1", creds["email"], email_verified=True)
     r = client.post("/auth/google", json={"id_token": tok})
-    assert r.status_code == 200 and r.json().get("access_token"), r.text
-    me = client.get("/auth/me", headers=auth_headers(r.json()["access_token"])).json()
-    assert set(me["providers"]) == {"email", "google"}
+    # почта уже занята паролем -> Google не должен авто-привязываться и выдавать сессию
+    assert r.status_code == 400, r.text
 
 
-def test_google_autolink_idempotent(client, creds):
+def test_google_no_autolink_onto_password_account_repeated(client, creds):
     register(client, creds)
     tok = google_token("g_link_idem", creds["email"], email_verified=True)
     r1 = client.post("/auth/google", json={"id_token": tok})
     r2 = client.post("/auth/google", json={"id_token": tok})
-    assert r1.status_code == 200 and r2.status_code == 200
-    assert r2.json().get("access_token")
-    me = client.get("/auth/me", headers=auth_headers(r2.json()["access_token"])).json()
-    assert set(me["providers"]) == {"email", "google"}
+    assert r1.status_code == 400 and r2.status_code == 400
 
 
 def test_google_unverified_email_existing_rejected(client, creds):

@@ -5,6 +5,7 @@ import uuid
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test.db"
 os.environ["JWT_SECRET"] = "test-secret"
 os.environ["RATE_LIMIT_ENABLED"] = "false"
+os.environ["DISCORD_REDIRECT_URIS"] = "http://localhost:3000/app"
 
 import pytest
 from fastapi.testclient import TestClient
@@ -32,6 +33,40 @@ def client():
 
     app.dependency_overrides[get_google_verifier] = lambda: _FakeGoogleVerifier()
 
+    from app.discord_auth import get_discord_verifier
+
+    class _FakeDiscordVerifier:
+        def exchange(self, code: str, redirect_uri: str) -> dict:
+            if code == "BAD":
+                raise ValueError("bad code")
+            import json
+            d = json.loads(code)  # тест кодирует данные прямо в "code"
+            return {
+                "discord_id": str(d["discord_id"]),
+                "email": (d.get("email") or "").lower() or None,
+                "email_verified": bool(d.get("email_verified", True)) and bool(d.get("email")),
+                "username": d.get("username"),
+            }
+
+    app.dependency_overrides[get_discord_verifier] = lambda: _FakeDiscordVerifier()
+
+    from app.telegram_auth import get_telegram_verifier
+
+    class _FakeTelegramVerifier:
+        def verify_widget(self, data: dict) -> dict:
+            if data.get("hash") == "BAD":
+                raise ValueError("bad token")
+            return {"tg_id": str(data["id"]), "tg_username": data.get("username")}
+
+        def verify_miniapp(self, init_data: str) -> dict:
+            if init_data == "BAD":
+                raise ValueError("bad init_data")
+            import json
+            d = json.loads(init_data)
+            return {"tg_id": str(d["id"]), "tg_username": d.get("username")}
+
+    app.dependency_overrides[get_telegram_verifier] = lambda: _FakeTelegramVerifier()
+
     with TestClient(app) as c:  # lifespan создаёт таблицы (init_db)
         yield c
     if os.path.exists("test.db"):
@@ -41,7 +76,7 @@ def client():
 @pytest.fixture
 def creds():
     u = uuid.uuid4().hex[:8]
-    return {"username": f"user_{u}", "email": f"{u}@t.io", "password": "secret1"}
+    return {"username": f"user_{u}", "email": f"{u}@t.io", "password": "secret12"}
 
 
 def register(client, creds):
@@ -57,3 +92,20 @@ def auth_headers(token):
 def google_token(sub: str, email: str, email_verified: bool = True) -> str:
     import json
     return json.dumps({"sub": sub, "email": email, "email_verified": email_verified})
+
+
+def discord_code(discord_id, email=None, email_verified=True, username=None):
+    import json
+    return json.dumps({"discord_id": discord_id, "email": email, "email_verified": email_verified, "username": username})
+
+
+def telegram_widget(tg_id: str, username: str | None = None) -> dict:
+    d = {"id": tg_id, "auth_date": 1, "hash": "ok"}
+    if username:
+        d["username"] = username
+    return d
+
+
+def telegram_miniapp(tg_id: str, username: str | None = None) -> str:
+    import json
+    return json.dumps({"id": tg_id, "username": username})

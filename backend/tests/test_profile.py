@@ -12,7 +12,7 @@ def test_change_username_ok(client, creds):
 def test_change_username_taken(client, creds):
     a = register(client, creds)
     import uuid
-    b_creds = {"username": "u" + uuid.uuid4().hex[:7], "email": "b" + creds["email"], "password": "secret1"}
+    b_creds = {"username": "u" + uuid.uuid4().hex[:7], "email": "b" + creds["email"], "password": "secret12"}
     register(client, b_creds)
     r = client.patch("/auth/username", json={"username": b_creds["username"]},
                      headers=auth_headers(a["access_token"]))

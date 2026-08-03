@@ -30,7 +30,7 @@
       по чужим мирам, а наш ИИ поможет в этом приключении. Тебя ждет интересная история и неожиданные
       сюжетные повороты в сопровождении ярких иллюстраций. Будущее твоего мира зависит только от тебя</p>
     <div class="hero-cta">
-      <a href="/app" class="btn btn-solid" style="padding:18px 36px;font-size:14px">Начать историю</a>
+      <a href="/app" data-start="1" class="btn btn-solid" style="padding:18px 36px;font-size:14px">Начать историю</a>
       <a href="#packs" class="btn btn-ghost" style="padding:18px 32px;font-size:14px">Смотреть миры</a>
     </div>
   </div>
@@ -107,8 +107,8 @@
   </div>
 </section>
 
-<div class="dock" id="dock"><i>Первые главы бесплатно</i>
-  <a href="/app" class="btn btn-solid" style="padding:13px 26px;font-size:12px">Начать</a></div>
+<div class="dock" id="dock"><i>Твоя история ждёт</i>
+  <a href="/app" data-start="1" class="btn btn-solid" style="padding:13px 26px;font-size:12px">Начать</a></div>
 
 <section class="sec" id="feats">
   <div class="wrap">
@@ -267,7 +267,7 @@
       <div class="sec-kicker"><br></div>
       <h2 style="margin-bottom:16px">Ваша история начинается здесь<br></h2>
       <p class="sec-sub" style="margin-bottom:30px"><br></p>
-      <a href="/app" class="btn btn-solid" style="padding:18px 42px;font-size:14px">Начать историю</a>
+      <a href="/app" data-start="1" class="btn btn-solid" style="padding:18px 42px;font-size:14px">Начать историю</a>
     </div>
   </div>
 </section>
@@ -315,6 +315,7 @@
     <div class="auth-soc">
       <div id="googleBtnHolder" style="display:flex;justify-content:center;overflow:hidden"></div>
       <button data-soc="tg"><svg class="ic" viewBox="0 0 24 24" fill="#2AABEE"><path d="M21.9 4.3l-3.3 15.6c-.25 1.1-.9 1.37-1.83.85l-5.05-3.72-2.44 2.35c-.27.27-.5.5-1 .5l.36-5.13L18 6.36c.4-.36-.09-.56-.62-.2L6.98 13.02l-4.7-1.47c-1.02-.32-1.04-1.02.22-1.5l18.36-7.08c.85-.31 1.6.2 1.32 1.33z"/></svg>Продолжить с Telegram</button>
+      <button data-soc="discord"><svg class="ic" viewBox="0 0 24 24" fill="#5865F2"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.25.5a18.3 18.3 0 0 1 4.32 1.35 16.6 16.6 0 0 0-14.94 0A18.3 18.3 0 0 1 8.85 3.5L8.6 3a19.8 19.8 0 0 0-4.9 1.4C.6 9 .17 13.5.35 17.95a19.9 19.9 0 0 0 6.06 3.06l.75-1.03a13 13 0 0 1-2.05-.98l.5-.37a14.2 14.2 0 0 0 12.1 0l.5.37c-.65.38-1.34.71-2.05.98l.75 1.03a19.9 19.9 0 0 0 6.06-3.06c.26-5.2-.44-9.65-2.92-13.55ZM8.3 15.4c-1.18 0-2.15-1.09-2.15-2.42S7.1 10.56 8.3 10.56s2.17 1.1 2.15 2.42c0 1.33-.96 2.42-2.15 2.42Zm7.4 0c-1.18 0-2.15-1.09-2.15-2.42s.96-2.42 2.15-2.42 2.17 1.1 2.15 2.42c0 1.33-.96 2.42-2.15 2.42Z"/></svg>Войти через Discord</button>
     </div>
     <div id="nickStep" style="display:none;margin-top:14px">
       <div class="auth-field"><label>Придумай ник</label>
@@ -331,6 +332,8 @@
 import { onMounted } from 'vue'
 import '~/assets/css/main.css'
 const googleClientId = useRuntimeConfig().public.googleClientId || ''
+const discordClientId = useRuntimeConfig().public.discordClientId || ''
+const telegramBotId = useRuntimeConfig().public.telegramBotId || ''
 onMounted(() => {
   document.querySelectorAll('.fabula-landing img').forEach(img => {
     img.addEventListener('error', () => { img.style.display = 'none' }, { once: true })
@@ -839,6 +842,11 @@ if('serviceWorker' in navigator){
 
   // открытие по «Войти»
   document.querySelectorAll('[data-auth]').forEach(a=>a.addEventListener('click',e=>{ if(!a.dataset.auth) return; e.preventDefault(); open(a.dataset.auth); }));
+  // «Начать» без входа → предложить регистрацию (а не кидать в /app и обратно на 401)
+  document.querySelectorAll('[data-start]').forEach(a=>a.addEventListener('click',e=>{
+    if(localStorage.getItem('fabula-token')) return;  // залогинен — идёт в /app
+    e.preventDefault(); open('reg');
+  }));
   $('authClose').addEventListener('click', close);
   scrim.addEventListener('click', e=>{ if(e.target===scrim) close(); });
   addEventListener('keydown', e=>{ if(e.key==='Escape' && scrim.classList.contains('on')) close(); });
@@ -900,14 +908,50 @@ if('serviceWorker' in navigator){
     }
   });
 
-  // соцвход — пока не подключён (Telegram появится на бэкенде)
-  document.querySelectorAll('[data-soc]').forEach(b=>b.addEventListener('click',()=>{
+  // соцвход — Google/Telegram/Discord обрабатываются отдельно ниже
+  document.querySelectorAll('[data-soc]:not([data-soc="discord"]):not([data-soc="tg"])').forEach(b=>b.addEventListener('click',()=>{
     fail('Вход через '+(b.dataset.soc==='google'?'Google':'Telegram')+' скоро — подключаем на бэкенде.');
   }));
+
+  // ===== вход через Telegram (Login Widget, popup-callback) =====
+  function loadTgWidget(){
+    return new Promise((res)=>{
+      if (window.Telegram && window.Telegram.Login) return res();
+      const s=document.createElement('script'); s.src='https://telegram.org/js/telegram-widget.js?22'; s.async=true; s.onload=()=>res(); document.head.appendChild(s);
+    });
+  }
+  async function onTelegramAuth(user){
+    if(!user){ fail('Вход через Telegram отменён'); return; }
+    const { r, data } = await apiPost('/auth/telegram', user);
+    if (!r.ok){ fail('Не удалось войти через Telegram.'); return; }
+    if (data.needs_username){ pendingRegToken = data.registration_token; pendingProvider = 'telegram'; showNickStep(); return; }
+    saveSession(data); markLoggedInNav(); ok('Готово! Открой «Профиль» или «Миры».'); close();
+  }
+  document.querySelectorAll('[data-soc="tg"]').forEach(b=>b.addEventListener('click', async ()=>{
+    if(!telegramBotId){ fail('Вход через Telegram скоро'); return; }
+    await loadTgWidget();
+    window.Telegram.Login.auth({ bot_id: telegramBotId, request_access: 'write' }, onTelegramAuth);
+  }));
+
+  // ===== вход через Discord (OAuth2 redirect flow) =====
+  function discordStart(linkMode){
+    if(!discordClientId){ fail('Вход через Discord скоро'); return; }
+    const redirect = location.origin + '/app';
+    const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    try { sessionStorage.setItem('discord_state', state); sessionStorage.setItem('discord_link', linkMode?'1':''); } catch(e){}
+    const url = 'https://discord.com/api/oauth2/authorize'
+      + '?client_id=' + encodeURIComponent(discordClientId)
+      + '&redirect_uri=' + encodeURIComponent(redirect)
+      + '&response_type=code&scope=' + encodeURIComponent('identify email')
+      + '&state=' + encodeURIComponent(state);
+    location.href = url;
+  }
+  document.querySelectorAll('[data-soc="discord"]').forEach(b=>b.addEventListener('click',()=>discordStart(false)));
 
   // ===== вход через Google (GIS ID-token flow) =====
   const clientId = googleClientId;
   let pendingRegToken = '';
+  let pendingProvider = 'google';  // какой провайдер инициировал экран ника
 
   function loadGis(){
     return new Promise((res)=>{
@@ -919,7 +963,7 @@ if('serviceWorker' in navigator){
   async function onGoogleCredential(resp){
     const { r, data } = await apiPost('/auth/google', { id_token: resp.credential });
     if (!r.ok){ fail('Не удалось войти через Google.'); return; }
-    if (data.needs_username){ pendingRegToken = data.registration_token; showNickStep(); return; }
+    if (data.needs_username){ pendingRegToken = data.registration_token; pendingProvider = 'google'; showNickStep(); return; }
     saveSession(data); markLoggedInNav(); ok('Готово! Открой «Профиль» или «Миры».'); close();
   }
 
@@ -942,7 +986,8 @@ if('serviceWorker' in navigator){
     const nick=(document.getElementById('gNick').value||'').trim();
     const m=document.getElementById('gNickMsg');
     if(!/^[A-Za-z0-9_]{3,20}$/.test(nick)){ if(m) m.textContent='Ник: 3–20 символов, латиница, цифры, _'; return; }
-    const { r, data } = await apiPost('/auth/google/complete', { registration_token: pendingRegToken, username: nick });
+    const completeUrl = pendingProvider === 'telegram' ? '/auth/telegram/complete' : '/auth/google/complete';
+    const { r, data } = await apiPost(completeUrl, { registration_token: pendingRegToken, username: nick });
     if (r.ok){ saveSession(data); markLoggedInNav(); ok('Готово! Открой «Профиль» или «Миры».'); close(); }
     else if (m) m.textContent = r.status===409 ? 'Ник занят' : 'Проверь ник';
   });

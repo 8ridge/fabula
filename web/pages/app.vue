@@ -178,10 +178,9 @@
                   <button type="button" class="cr-dice" data-dice="bio" title="Случайная биография" aria-label="Случайная биография">🎲</button>
                 </div>
               </div>
-              <div class="cr-stats-h"><b>Характеристики</b><button class="cr-reroll" id="crReroll">⟳ Перебросить</button></div>
+              <div class="cr-stats-h"><b>Характеристики</b><div class="cr-points">Очков: <b id="crPoints">15</b></div><button class="cr-reroll" id="crReset">↺ Сбросить</button></div>
               <div class="cr-stats" id="crStats"></div>
               <button class="cr-go" id="crGo">Начать приключение</button>
-              <div class="cr-note">Героя можно будет докрутить в любой момент</div>
             </div>
           </div>
         </div>
@@ -228,6 +227,8 @@
             <div class="setrow" data-act="password"><span class="l"><span class="g">⚿</span>Пароль</span><span class="chev">Изменить ›</span></div>
             <div class="setrow"><span class="l"><span class="g">✉</span>Почта</span><span class="chev" style="color:#7cc47f">подключена</span></div>
             <div class="setrow" data-act="google"><span class="l"><span class="g">G</span>Google</span><span class="chev" data-p="google">скоро</span></div>
+            <div class="setrow" data-act="discord"><span class="l"><span class="g">◐</span>Discord</span><span class="chev" data-p="discord">привязать</span></div>
+            <div class="setrow" data-act="telegram"><span class="l"><span class="g">✈</span>Telegram</span><span class="chev" data-p="telegram">привязать</span></div>
             <div class="setrow" data-act="devices"><span class="l"><span class="g">🛡</span>Безопасность · устройства</span><span class="chev">›</span></div>
             <div class="setrow" data-act="logout-all"><span class="l"><span class="g">⎇</span>Выйти со всех устройств</span><span class="chev">›</span></div>
           </div>
@@ -272,6 +273,8 @@ useHead({
 })
 
 const googleClientId = useRuntimeConfig().public.googleClientId || ''
+const discordClientId = useRuntimeConfig().public.discordClientId || ''
+const telegramBotId = useRuntimeConfig().public.telegramBotId || ''
 
 onMounted(() => {
   /* ===== сессия: читаем JWT-токен, положенный лендингом ===== */
@@ -311,11 +314,62 @@ onMounted(() => {
     if (badge) badge.style.display = data.email_verified ? '' : 'none';
     const gp = document.querySelector('[data-p="google"]');
     if (gp) gp.textContent = data.providers.includes('google') ? 'привязан · отвязать' : 'привязать';
+    const dc = document.querySelector('[data-p="discord"]');
+    if (dc) dc.textContent = data.providers.includes('discord') ? 'привязан · отвязать' : 'привязать';
+    const tp = document.querySelector('[data-p="telegram"]');
+    if (tp) tp.textContent = data.providers.includes('telegram') ? 'привязан · отвязать' : 'привязать';
     const av=document.getElementById('avaImg'), fb=document.getElementById('avaFb');
     if(fb) fb.textContent=((data.username||'?').trim().charAt(0)||'?').toUpperCase();
     if(av){ if(data.has_avatar){ av.style.display=''; av.src=AUTH_API + '/auth/avatar/'+data.id+'?v='+(data.avatar_v||''); if(fb) fb.style.display='none'; } else { av.style.display='none'; av.removeAttribute('src'); if(fb) fb.style.display=''; } }
   }
-  loadProfile();
+  function saveSessionFromData(data){
+    try{
+      localStorage.setItem('fabula-token', data.access_token);
+      localStorage.setItem('fabula-user', JSON.stringify(data.user));
+    }catch(_){}
+    window.__fabulaUser = data.user;
+  }
+
+  function openDiscordNick(){
+    openModal('Придумай ник',
+      `<label class="pm-l">Ник</label><input id="pmDiscordNick" placeholder="3–20, латиница/цифры/_">`,
+      async (msg)=>{
+        const v = (document.getElementById('pmDiscordNick').value||'').trim();
+        if(!/^[A-Za-z0-9_]{3,20}$/.test(v)){ msg.textContent='Ник: 3–20, латиница, цифры, _'; return true; }
+        const { res, data } = await apiAuth('/auth/discord/complete','POST',{ registration_token: window.__discordReg, username: v });
+        if(res.ok){ saveSessionFromData(data); loadProfile(); toast('Готово!'); return false; }
+        msg.textContent = res.status===409 ? 'Ник занят' : 'Проверь ник'; return true;
+      });
+    requestAnimationFrame(()=>{ const ni=document.getElementById('pmDiscordNick'); if(ni) ni.focus(); });
+  }
+
+  async function handleDiscordReturn(code, err, q){
+    const clean = location.origin + location.pathname;
+    history.replaceState(null, '', clean);
+    if (err) { toast('Вход через Discord отменён'); loadProfile(); return; }
+    let saved='', link='';
+    try{ saved=sessionStorage.getItem('discord_state')||''; link=sessionStorage.getItem('discord_link')||''; sessionStorage.removeItem('discord_state'); sessionStorage.removeItem('discord_link'); }catch(_){}
+    const state = q.get('state');
+    if (!state || state !== saved) { toast('Discord: проверка безопасности не пройдена'); loadProfile(); return; }
+    const redirect_uri = location.origin + '/app';
+    if (link) {
+      const { res } = await apiAuth('/auth/link/discord', 'POST', { code, redirect_uri });
+      if (res.status === 409) toast('Этот Discord уже привязан к другому');
+      else if (res.ok) toast('Discord привязан');
+      loadProfile();
+      return;
+    }
+    const { res, data } = await apiAuth('/auth/discord', 'POST', { code, redirect_uri });
+    if (!res.ok || !data) { toast('Не удалось войти через Discord'); loadProfile(); return; }
+    if (data.needs_username) { window.__discordReg = data.registration_token; openDiscordNick(); return; }
+    saveSessionFromData(data);
+    loadProfile();
+  }
+
+  const _dq = new URLSearchParams(location.search);
+  const _discordCode = _dq.get('code'), _discordErr = _dq.get('error');
+  if (_discordCode || _discordErr) { handleDiscordReturn(_discordCode, _discordErr, _dq); }
+  else { loadProfile(); }
 
   const avaBtn=document.getElementById('avaBtn'), avaFile=document.getElementById('avaFile');
   if(avaBtn&&avaFile){
@@ -457,6 +511,38 @@ onMounted(() => {
         }});
         const holder = document.getElementById('pmGoogleBtn');
         if (holder) window.google.accounts.id.renderButton(holder, { theme:'filled_black', size:'large', text:'continue_with', shape:'pill', width: 280 });
+        return;
+      }
+      if (act === 'discord') {
+        const u = window.__fabulaUser || {};
+        if ((u.providers||[]).includes('discord')) {
+          const { res } = await apiAuth('/auth/link/discord', 'DELETE');
+          if (res.status === 400) toast('Нужен другой способ входа'); else if (res.ok) { toast('Discord отвязан'); loadProfile(); }
+          return;
+        }
+        if (!discordClientId) { toast('Вход через Discord скоро'); return; }
+        const redirect = location.origin + '/app';
+        const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
+        try { sessionStorage.setItem('discord_state', state); sessionStorage.setItem('discord_link','1'); } catch(e){}
+        location.href = 'https://discord.com/api/oauth2/authorize?client_id=' + encodeURIComponent(discordClientId)
+          + '&redirect_uri=' + encodeURIComponent(redirect) + '&response_type=code&scope=' + encodeURIComponent('identify email')
+          + '&state=' + encodeURIComponent(state);
+        return;
+      }
+      if (act === 'telegram') {
+        const u = window.__fabulaUser || {};
+        if ((u.providers||[]).includes('telegram')) {
+          const { res } = await apiAuth('/auth/link/telegram', 'DELETE');
+          if (res.status === 400) toast('Нужен другой способ входа'); else if (res.ok) { toast('Telegram отвязан'); loadProfile(); }
+          return;
+        }
+        if (!telegramBotId) { toast('Вход через Telegram скоро'); return; }
+        await new Promise((resolve)=>{ if(window.Telegram&&window.Telegram.Login) return resolve(); const s=document.createElement('script'); s.src='https://telegram.org/js/telegram-widget.js?22'; s.async=true; s.onload=()=>resolve(); document.head.appendChild(s); });
+        window.Telegram.Login.auth({ bot_id: telegramBotId, request_access: 'write' }, async (user)=>{
+          if(!user){ toast('Отменено'); return; }
+          const { res } = await apiAuth('/auth/link/telegram','POST', user);
+          if (res.status === 409) toast('Этот Telegram уже привязан к другому'); else if (res.ok) { toast('Telegram привязан'); loadProfile(); }
+        });
         return;
       }
       if (act === 'delete') {
@@ -734,20 +820,38 @@ function advance(){
 /* ===== СОЗДАНИЕ ГЕРОЯ ===== */
 const PACK_ACC={fant:'#d9a94a', scifi:'#54e6d0', hist:'#c9a865', post:'#9bbf3a'};
 let crKey='fant', crStats=[];
-function rollStat(){ // 3d6-подобно, мод из значения
-  const v=8+Math.floor(Math.random()*11); // 8..18
-  return {v, m:Math.floor((v-10)/2)};
+const CR_POOL=15, CR_MIN=8, CR_MAX=18;
+function crStatInit(){ crStats=ABIL.map(()=>({v:CR_MIN, m:-1})); }
+function crRemaining(){
+  const spent=crStats.reduce((s,st)=>s+(st.v-CR_MIN),0);
+  return CR_POOL-spent;
+}
+function crAdjust(i, delta){
+  const st=crStats[i]; if(!st) return;
+  const rem=crRemaining();
+  if(delta>0){ if(st.v>=CR_MAX || rem<=0) return; st.v++; }
+  else { if(st.v<=CR_MIN) return; st.v--; }
+  st.m=Math.floor((st.v-10)/2);
+  crRenderStats(true);
+  sfxClick();
 }
 function crRenderStats(bump){
   const el=document.getElementById('crStats'); if(!el) return;
+  const rem=crRemaining();
   el.innerHTML=ABIL.map((a,i)=>{
     const st=crStats[i];
+    const minusOff=st.v<=CR_MIN, plusOff=st.v>=CR_MAX||rem<=0;
     return '<div class="cr-stat'+(bump?' bump':'')+'"><div class="k">'+a.name+'</div>'+
-      '<div class="v">'+st.v+'</div><div class="m">'+fmtMod(st.m)+'</div></div>';
+      '<div class="cr-stat-ctrl"><button type="button" class="cr-pm cr-minus" data-i="'+i+'"'+(minusOff?' disabled':'')+'>−</button>'+
+      '<div class="v">'+st.v+'</div>'+
+      '<button type="button" class="cr-pm cr-plus" data-i="'+i+'"'+(plusOff?' disabled':'')+'>+</button></div>'+
+      '<div class="m">'+fmtMod(st.m)+'</div></div>';
   }).join('');
+  const pts=document.getElementById('crPoints'); if(pts) pts.textContent=rem;
+  el.querySelectorAll('.cr-minus').forEach(b=>b.addEventListener('click',()=>crAdjust(+b.dataset.i,-1)));
+  el.querySelectorAll('.cr-plus').forEach(b=>b.addEventListener('click',()=>crAdjust(+b.dataset.i,1)));
   if(bump) setTimeout(()=>el.querySelectorAll('.cr-stat').forEach(x=>x.classList.remove('bump')),320);
 }
-function crReroll(){ crStats=ABIL.map(()=>rollStat()); crRenderStats(true); sfxClick(); }
 function crDDSet(opts){
   const dd=document.getElementById('crField'); if(!dd) return;
   const val=(opts&&opts[0])||'—';
@@ -810,10 +914,14 @@ function openCreator(key){
   document.getElementById('crName').value='';
   document.getElementById('crBio').value='';
   document.getElementById('crPrompt').value='';
-  crReroll();
+  crStatInit(); crRenderStats();
   cr.classList.add('on'); document.getElementById('nav').style.display='none'; sfxNav();
 }
-function closeCreator(){ document.getElementById('creator').classList.remove('on'); document.getElementById('nav').style.display=''; }
+function closeCreator(){
+  document.getElementById('creator').classList.remove('on'); document.getElementById('nav').style.display='';
+  if(typeof closeSheet==='function') closeSheet();
+  else { document.getElementById('scrim')?.classList.remove('on'); document.getElementById('sheet')?.classList.remove('on'); }
+}
 /* мокап генерации: заполняем поля по промту (реальную модель подключим на бэкенде) */
 const GEN_NAMES=['Кель','Ворон','Сайла','Древ','Мирра','Аскет','Тень','Ольвен'];
 function crGenerate(){
@@ -825,7 +933,6 @@ function crGenerate(){
     document.getElementById('crBio').value = prompt
       ? prompt.charAt(0).toUpperCase()+prompt.slice(1)+'. '+(crRole?crRole+' по призванию.':'')
       : 'По роду — '+roleTxt+'но прошлое скрыто в тумане. Каждый выбор пишет, кем он станет.';
-    crReroll();
     // «портрет обновился»
     const pt=document.getElementById('crPortrait'); pt.style.opacity=.3;
     setTimeout(()=>{ pt.style.transition='opacity .5s'; pt.style.opacity=1; },350);
@@ -835,7 +942,7 @@ function crGenerate(){
 (function(){
   const cr=document.getElementById('creator'); if(!cr) return;
   document.getElementById('crBack').addEventListener('click',()=>{ closeCreator(); sfxClick(); });
-  document.getElementById('crReroll').addEventListener('click', crReroll);
+  document.getElementById('crReset').addEventListener('click',()=>{ crStatInit(); crRenderStats(); sfxClick(); });
   document.getElementById('crGen').addEventListener('click', crGenerate);
   cr.querySelectorAll('.cr-dice').forEach(d=>d.addEventListener('click',()=>crDice(d.dataset.dice)));
   const crFile=document.getElementById('crFile');
@@ -932,7 +1039,7 @@ function scenarioHTML(k){ const s=stories[k];
     <h2 class="sc-title">${s.title}</h2>
     <p class="sc-syn">${s.synopsis}</p>
     <div class="gthread"></div>
-    <div class="sc-grid">${cell('❦','Глав',s.chapters)}${cell('⚔','Сложность',s.difficulty)}${cell('☾','Тон',s.tone)}${cell('⧗','Время',s.time)}${cell('☗','Роль',s.role)}${cell('★','Рейтинг',s.rating)}</div>
+    <div class="sc-grid">${cell('❦','Глав',s.chapters)}${cell('⚔','Сложность',s.difficulty)}${cell('☾','Тон',s.tone)}${cell('⧗','Время',s.time)}${cell('★','Рейтинг',s.rating)}</div>
     <div class="sc-tags">${s.tags.map(t=>`<span>#${t}</span>`).join('')}</div>
     <button class="rbtn solid sc-start" data-start="${k}">Начать историю ⚔</button>`;
 }
