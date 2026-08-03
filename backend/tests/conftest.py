@@ -59,7 +59,7 @@ def client():
 @pytest.fixture
 def creds():
     u = uuid.uuid4().hex[:8]
-    return {"username": f"user_{u}", "email": f"{u}@t.io", "password": "secret1"}
+    return {"username": f"user_{u}", "email": f"{u}@t.io", "password": "secret12"}
 
 
 def register(client, creds):

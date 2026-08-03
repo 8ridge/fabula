@@ -9,7 +9,7 @@ USERNAME_PATTERN = r"^[A-Za-z0-9_]{3,20}$"
 class RegisterIn(BaseModel):
     username: str = Field(pattern=USERNAME_PATTERN)
     email: EmailStr
-    password: str = Field(min_length=6, max_length=128)
+    password: str = Field(min_length=8, max_length=128)
 
 
 class LoginIn(BaseModel):
@@ -23,7 +23,7 @@ class UsernameIn(BaseModel):
 
 class ChangePasswordIn(BaseModel):
     current_password: str | None = None
-    new_password: str = Field(min_length=6, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
 
 
 class UserOut(BaseModel):
