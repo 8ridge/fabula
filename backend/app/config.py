@@ -1,4 +1,6 @@
 """Настройки приложения. Всё читается из переменных окружения (.env)."""
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,3 +35,11 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+if settings.jwt_secret == "dev-secret-change-me" and os.getenv("FABULA_ALLOW_DEV_SECRET") != "1":
+    import warnings
+
+    warnings.warn(
+        "JWT_SECRET is the insecure dev default — set a strong JWT_SECRET in production.",
+        stacklevel=2,
+    )
