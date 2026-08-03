@@ -30,13 +30,12 @@ def test_discord_complete_and_returning(client):
     assert r2.status_code == 200 and r2.json().get("access_token")
 
 
-def test_discord_autolink_verified_email(client, creds):
+def test_discord_no_autolink_onto_password_account(client, creds):
     register(client, creds)
     code = discord_code("d_link1", creds["email"], email_verified=True)
     r = client.post("/auth/discord", json={"code": code, "redirect_uri": "http://localhost:3000/app"})
-    assert r.status_code == 200 and r.json().get("access_token"), r.text
-    me = client.get("/auth/me", headers=auth_headers(r.json()["access_token"])).json()
-    assert set(me["providers"]) == {"email", "discord"}
+    # почта уже занята паролем -> Discord не должен авто-привязываться и выдавать сессию
+    assert r.status_code == 400, r.text
 
 
 def test_discord_unverified_email_existing_rejected(client, creds):

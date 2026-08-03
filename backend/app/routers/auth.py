@@ -186,7 +186,8 @@ async def change_username(data: UsernameIn, user: User = Depends(get_current_use
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
-async def change_password(data: ChangePasswordIn, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/minute")
+async def change_password(request: Request, data: ChangePasswordIn, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     if user.password_hash is not None:
         if not data.current_password or not verify_password(data.current_password, user.password_hash):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Неверный текущий пароль")
@@ -239,6 +240,11 @@ async def google_auth(
 
     user = await _get_by_email(db, email)
     if user is not None:
+        if user.password_hash is not None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Эта почта уже зарегистрирована с паролем. Войди паролем и привяжи Google в профиле.",
+            )
         if not ev:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
@@ -341,7 +347,7 @@ async def unlink_google(
 
 def _check_discord_redirect(redirect_uri: str) -> None:
     allow = settings.discord_redirect_list
-    if allow and redirect_uri not in allow:
+    if not allow or redirect_uri not in allow:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Недопустимый redirect_uri")
 
 
@@ -380,6 +386,11 @@ async def discord_auth(
     if email:
         user = await _get_by_email(db, email)
         if user is not None:
+            if user.password_hash is not None:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    "Эта почта уже зарегистрирована с паролем. Войди паролем и привяжи Discord в профиле.",
+                )
             if not ev:
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST,
