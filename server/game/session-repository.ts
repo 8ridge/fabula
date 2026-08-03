@@ -23,6 +23,7 @@ import {
   confirmsIrreversibleItemLoss,
   explicitlyLosesSelectedItem,
 } from './inventory-consumption'
+import { filterContextualSuggestions } from './suggestion-context'
 
 export interface SessionTurnResult {
   output: TurnOutput
@@ -426,6 +427,11 @@ function normalizeStoredSession(value: StoredGameSession): StoredGameSession {
     if (item.location_name === pack.opening.location && item.location_id !== session.snapshot.scene.location_id)
       item.location_id = session.snapshot.scene.location_id
   })
+  session.snapshot.suggestions = filterContextualSuggestions(
+    session.snapshot.suggestions,
+    session.snapshot.inventory,
+    session.snapshot.messages,
+  )
   return session
 }
 
@@ -1148,7 +1154,11 @@ export class GameSessionRepository {
         nextSession.snapshot.journal.splice(80)
     }
 
-    nextSession.snapshot.suggestions = makeSuggestions(result.output.suggested_actions, command.idempotency_key)
+    nextSession.snapshot.suggestions = filterContextualSuggestions(
+      makeSuggestions(result.output.suggested_actions, command.idempotency_key),
+      nextSession.snapshot.inventory,
+      nextSession.snapshot.messages,
+    )
     nextSession.snapshot.version += 1
     nextSession.snapshot.updated_at = createdAt
     nextSession.turns.push({

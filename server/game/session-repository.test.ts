@@ -295,6 +295,38 @@ describe('game session repository', () => {
         selected_journal_entries: [],
       },
     )
+    stored!.snapshot.suggestions = [
+      {
+        id: 'suggestion:legacy-conversation',
+        label: 'Подойти к двери, прислушаться к разговору соседей',
+        mode: 'action',
+        intent_hint: 'listen_to_neighbors_conversation',
+      },
+      {
+        id: 'suggestion:legacy-peephole',
+        label: 'Включить свет и выглянуть в глазок',
+        mode: 'action',
+        intent_hint: 'look_through_peephole',
+      },
+      {
+        id: 'suggestion:legacy-shards',
+        label: 'Проверить, не осталось ли осколков на полу',
+        mode: 'action',
+        intent_hint: 'inspect_shards_on_floor',
+      },
+      {
+        id: 'suggestion:legacy-bottle',
+        label: 'Надеть куртку и приготовить бутылку в кармане',
+        mode: 'action',
+        intent_hint: 'prepare_bottle',
+      },
+      {
+        id: 'suggestion:legacy-journal',
+        label: 'Записать в дневник услышанное',
+        mode: 'speech',
+        intent_hint: 'record_heard_events',
+      },
+    ]
     stored!.stateRevisions = { zeroLineOpeningPresence: 1 }
     await storage.setItem(key, stored)
 
@@ -306,6 +338,10 @@ describe('game session repository', () => {
       condition: 'spent',
       version: 1,
     })
+    expect(restored.suggestions.map(suggestion => suggestion.label)).toEqual([
+      'Включить свет и выглянуть в глазок',
+      'Записать в дневник услышанное',
+    ])
   })
 
   test('isolates started stories by the server-owned player id', async () => {
@@ -371,6 +407,74 @@ describe('game session repository', () => {
       intent_hint: suggestion.intent_hint,
     }))).toEqual(modelActions)
     expect(response.session.suggestions.map(suggestion => suggestion.label)).not.toContain('Сменить позицию')
+  })
+
+  test('filters generated actions against the committed inventory and narrative', async () => {
+    const repository = new GameSessionRepository(new MemoryGameSessionStorage())
+    const session = await repository.create(ownerId, createRequest)
+    const item = session.inventory[0]!
+    const command = makeCommand(session.id, {
+      mode: 'action',
+      text: 'Я выброшу карандаш из окна.',
+      selected_item_ids: [item.id],
+    })
+    const response = await repository.executeTurn(ownerId, command, async (snapshot) => {
+      const eventId = snapshot.reservedIds.events[0]!
+      const result = workerResult(snapshot, command, [
+        {
+          type: 'event.create',
+          operation_index: 0,
+          event_id: eventId,
+          event_kind: 'pencil_thrown_outside',
+          actor_ids: ['player'],
+          target_ids: [],
+          item_ids: [item.id],
+          location_id: snapshot.scene.location_id,
+          source_turn_id: command.idempotency_key,
+        },
+        {
+          type: 'inventory.consume',
+          operation_index: 1,
+          source_event_id: eventId,
+          item_id: item.id,
+          amount: item.charges!,
+          expected: {
+            owner_id: item.owner_id,
+            holder_id: item.holder_id,
+            location_id: item.location_id,
+            container_id: null,
+            quantity: item.quantity,
+            charges: item.charges,
+            condition: item.condition,
+            version: item.version,
+          },
+        },
+      ])
+      result.output.narrative_text = 'Ты выбрасываешь карандаш из окна. Он ломается снаружи.'
+      result.output.suggested_actions = [
+        {
+          label: 'Поднять карандаш с пола',
+          mode: 'action',
+          intent_hint: 'pick_up_pencil',
+        },
+        {
+          label: 'Осмотреть дверь',
+          mode: 'exploration',
+          intent_hint: 'inspect_door',
+        },
+        {
+          label: 'Записать произошедшее',
+          mode: 'speech',
+          intent_hint: 'record_event',
+        },
+      ]
+      return result
+    }, 'request:contextual-suggestions')
+
+    expect(response.session.suggestions.map(suggestion => suggestion.label)).toEqual([
+      'Осмотреть дверь',
+      'Записать произошедшее',
+    ])
   })
 
   test('does not let another player join an in-flight turn', async () => {
