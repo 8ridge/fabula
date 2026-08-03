@@ -19,6 +19,7 @@ export default defineNuxtConfig({
     public: {
       googleClientId: process.env.NUXT_PUBLIC_GOOGLE_CLIENT_ID || '',
       discordClientId: process.env.NUXT_PUBLIC_DISCORD_CLIENT_ID || '',
+      telegramBotId: process.env.NUXT_PUBLIC_TELEGRAM_BOT_ID || '',
     },
   },
 })

@@ -228,6 +228,7 @@
             <div class="setrow"><span class="l"><span class="g">✉</span>Почта</span><span class="chev" style="color:#7cc47f">подключена</span></div>
             <div class="setrow" data-act="google"><span class="l"><span class="g">G</span>Google</span><span class="chev" data-p="google">скоро</span></div>
             <div class="setrow" data-act="discord"><span class="l"><span class="g">◐</span>Discord</span><span class="chev" data-p="discord">привязать</span></div>
+            <div class="setrow" data-act="telegram"><span class="l"><span class="g">✈</span>Telegram</span><span class="chev" data-p="telegram">привязать</span></div>
             <div class="setrow" data-act="devices"><span class="l"><span class="g">🛡</span>Безопасность · устройства</span><span class="chev">›</span></div>
             <div class="setrow" data-act="logout-all"><span class="l"><span class="g">⎇</span>Выйти со всех устройств</span><span class="chev">›</span></div>
           </div>
@@ -273,6 +274,7 @@ useHead({
 
 const googleClientId = useRuntimeConfig().public.googleClientId || ''
 const discordClientId = useRuntimeConfig().public.discordClientId || ''
+const telegramBotId = useRuntimeConfig().public.telegramBotId || ''
 
 onMounted(() => {
   /* ===== сессия: читаем JWT-токен, положенный лендингом ===== */
@@ -314,6 +316,8 @@ onMounted(() => {
     if (gp) gp.textContent = data.providers.includes('google') ? 'привязан · отвязать' : 'привязать';
     const dc = document.querySelector('[data-p="discord"]');
     if (dc) dc.textContent = data.providers.includes('discord') ? 'привязан · отвязать' : 'привязать';
+    const tp = document.querySelector('[data-p="telegram"]');
+    if (tp) tp.textContent = data.providers.includes('telegram') ? 'привязан · отвязать' : 'привязать';
     const av=document.getElementById('avaImg'), fb=document.getElementById('avaFb');
     if(fb) fb.textContent=((data.username||'?').trim().charAt(0)||'?').toUpperCase();
     if(av){ if(data.has_avatar){ av.style.display=''; av.src=AUTH_API + '/auth/avatar/'+data.id+'?v='+(data.avatar_v||''); if(fb) fb.style.display='none'; } else { av.style.display='none'; av.removeAttribute('src'); if(fb) fb.style.display=''; } }
@@ -523,6 +527,22 @@ onMounted(() => {
         location.href = 'https://discord.com/api/oauth2/authorize?client_id=' + encodeURIComponent(discordClientId)
           + '&redirect_uri=' + encodeURIComponent(redirect) + '&response_type=code&scope=' + encodeURIComponent('identify email')
           + '&state=' + encodeURIComponent(state);
+        return;
+      }
+      if (act === 'telegram') {
+        const u = window.__fabulaUser || {};
+        if ((u.providers||[]).includes('telegram')) {
+          const { res } = await apiAuth('/auth/link/telegram', 'DELETE');
+          if (res.status === 400) toast('Нужен другой способ входа'); else if (res.ok) { toast('Telegram отвязан'); loadProfile(); }
+          return;
+        }
+        if (!telegramBotId) { toast('Вход через Telegram скоро'); return; }
+        await new Promise((resolve)=>{ if(window.Telegram&&window.Telegram.Login) return resolve(); const s=document.createElement('script'); s.src='https://telegram.org/js/telegram-widget.js?22'; s.async=true; s.onload=()=>resolve(); document.head.appendChild(s); });
+        window.Telegram.Login.auth({ bot_id: telegramBotId, request_access: 'write' }, async (user)=>{
+          if(!user){ toast('Отменено'); return; }
+          const { res } = await apiAuth('/auth/link/telegram','POST', user);
+          if (res.status === 409) toast('Этот Telegram уже привязан к другому'); else if (res.ok) { toast('Telegram привязан'); loadProfile(); }
+        });
         return;
       }
       if (act === 'delete') {

@@ -79,6 +79,18 @@ def create_discord_registration_token(discord_id: str, email: str, username: str
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_alg)
 
 
+def create_telegram_registration_token(tg_id: str, tg_username: str | None) -> str:
+    now = datetime.now(timezone.utc)
+    payload = {
+        "purpose": "telegram_register",
+        "tg_id": tg_id,
+        "tg_username": tg_username,
+        "iat": now,
+        "exp": now + timedelta(minutes=10),
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_alg)
+
+
 def decode_discord_registration_token(token: str) -> dict | None:
     """{'discord_id','email','username'} из валидного discord-токена регистрации или None."""
     try:
@@ -86,5 +98,16 @@ def decode_discord_registration_token(token: str) -> dict | None:
         if payload.get("purpose") != "discord_register":
             return None
         return {"discord_id": payload["did"], "email": payload["email"], "username": payload.get("username")}
+    except (jwt.PyJWTError, KeyError):
+        return None
+
+
+def decode_telegram_registration_token(token: str) -> dict | None:
+    """{'tg_id','tg_username'} из валидного telegram-токена регистрации или None."""
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_alg])
+        if payload.get("purpose") != "telegram_register":
+            return None
+        return {"tg_id": payload["tg_id"], "tg_username": payload.get("tg_username")}
     except (jwt.PyJWTError, KeyError):
         return None

@@ -22,6 +22,7 @@ from ..database import get_db
 from ..deps import get_current_user
 from ..discord_auth import DiscordVerifier, get_discord_verifier
 from ..google_auth import GoogleVerifier, get_google_verifier
+from ..telegram_auth import TelegramVerifier, get_telegram_verifier
 from ..models import OAuthAccount, User, UserSession
 from ..ratelimit import limiter
 from ..schemas import (
@@ -34,6 +35,10 @@ from ..schemas import (
     GoogleIn,
     LoginIn,
     RegisterIn,
+    TelegramAuthOut,
+    TelegramCompleteIn,
+    TelegramMiniAppIn,
+    TelegramWidgetIn,
     TokenOut,
     UserOut,
     UsernameIn,
@@ -42,8 +47,10 @@ from ..security import (
     create_access_token,
     create_discord_registration_token,
     create_registration_token,
+    create_telegram_registration_token,
     decode_discord_registration_token,
     decode_registration_token,
+    decode_telegram_registration_token,
     hash_password,
     verify_password,
 )
@@ -497,6 +504,156 @@ async def unlink_discord(
         )
     )
     await db.commit()
+
+
+@router.post("/telegram", response_model=TelegramAuthOut)
+@limiter.limit("20/minute")
+async def telegram_auth(
+    request: Request,
+    data: TelegramWidgetIn,
+    verifier: TelegramVerifier = Depends(get_telegram_verifier),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        info = verifier.verify_widget(data.model_dump())
+    except Exception:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Недействительные данные Telegram")
+    tg_id, tg_username = info["tg_id"], info.get("tg_username")
+
+    acc = (
+        await db.execute(
+            select(OAuthAccount).where(
+                OAuthAccount.provider == "telegram", OAuthAccount.provider_user_id == tg_id
+            )
+        )
+    ).scalar_one_or_none()
+    if acc:
+        user = await db.get(User, acc.user_id)
+        token = await _issue_session(db, user, request)
+        await db.commit()
+        return TelegramAuthOut(access_token=token, token_type="bearer", user=await _user_out(db, user))
+
+    return TelegramAuthOut(
+        needs_username=True,
+        registration_token=create_telegram_registration_token(tg_id, tg_username),
+    )
+
+
+@router.post("/telegram/complete", response_model=TokenOut)
+@limiter.limit("10/minute")
+async def telegram_complete(request: Request, data: TelegramCompleteIn, db: AsyncSession = Depends(get_db)):
+    payload = decode_telegram_registration_token(data.registration_token)
+    if payload is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Ссылка регистрации недействительна")
+    tg_id = payload["tg_id"]
+    if await _username_taken(db, data.username):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ник занят")
+    user = User(email=None, username=data.username, password_hash=None, email_verified=False)
+    db.add(user)
+    try:
+        await db.flush()
+        db.add(OAuthAccount(user_id=user.id, provider="telegram", provider_user_id=tg_id))
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        # гонка: tg_id уже создан — логиним существующего
+        acc = (
+            await db.execute(
+                select(OAuthAccount).where(
+                    OAuthAccount.provider == "telegram", OAuthAccount.provider_user_id == tg_id
+                )
+            )
+        ).scalar_one_or_none()
+        if acc is None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Ник или аккаунт уже заняты")
+        user = await db.get(User, acc.user_id)
+    await db.refresh(user)
+    token = await _issue_session(db, user, request)
+    await db.commit()
+    return TokenOut(access_token=token, user=await _user_out(db, user))
+
+
+@router.post("/link/telegram", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/minute")
+async def link_telegram(
+    request: Request,
+    data: TelegramWidgetIn,
+    user: User = Depends(get_current_user),
+    verifier: TelegramVerifier = Depends(get_telegram_verifier),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        info = verifier.verify_widget(data.model_dump())
+    except Exception:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Недействительные данные Telegram")
+    tg_id = info["tg_id"]
+    existing = (
+        await db.execute(
+            select(OAuthAccount).where(
+                OAuthAccount.provider == "telegram", OAuthAccount.provider_user_id == tg_id
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        if existing.user_id != user.id:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Этот Telegram уже привязан к другому аккаунту")
+        return  # идемпотентно
+    db.add(OAuthAccount(user_id=user.id, provider="telegram", provider_user_id=tg_id))
+    await db.commit()
+
+
+@router.delete("/link/telegram", status_code=status.HTTP_204_NO_CONTENT)
+async def unlink_telegram(
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    has_google = (
+        await db.execute(
+            select(OAuthAccount.id).where(
+                OAuthAccount.user_id == user.id, OAuthAccount.provider == "google"
+            )
+        )
+    ).first() is not None
+    if user.password_hash is None and not has_google:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Нужен другой способ входа (пароль или Google)")
+    await db.execute(
+        delete(OAuthAccount).where(
+            OAuthAccount.user_id == user.id, OAuthAccount.provider == "telegram"
+        )
+    )
+    await db.commit()
+
+
+@router.post("/telegram/miniapp", response_model=TelegramAuthOut)
+@limiter.limit("20/minute")
+async def telegram_miniapp(
+    request: Request,
+    data: TelegramMiniAppIn,
+    verifier: TelegramVerifier = Depends(get_telegram_verifier),
+    db: AsyncSession = Depends(get_db),
+):
+    if not settings.telegram_miniapp_enabled:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+    try:
+        info = verifier.verify_miniapp(data.init_data)
+    except Exception:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Недействительный initData")
+    tg_id, tg_username = info["tg_id"], info.get("tg_username")
+    acc = (
+        await db.execute(
+            select(OAuthAccount).where(
+                OAuthAccount.provider == "telegram", OAuthAccount.provider_user_id == tg_id
+            )
+        )
+    ).scalar_one_or_none()
+    if acc:
+        user = await db.get(User, acc.user_id)
+        token = await _issue_session(db, user, request)
+        await db.commit()
+        return TelegramAuthOut(access_token=token, token_type="bearer", user=await _user_out(db, user))
+    return TelegramAuthOut(
+        needs_username=True,
+        registration_token=create_telegram_registration_token(tg_id, tg_username),
+    )
 
 
 MAX_AVATAR_BYTES = 3 * 1024 * 1024

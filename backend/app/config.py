@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     google_client_id: str = ""
+    telegram_bot_token: str = ""
+    telegram_auth_ttl: int = 86400  # макс. возраст auth_date, сек (антиреплей)
+    telegram_miniapp_enabled: bool = False
     rate_limit_enabled: bool = True
 
     discord_client_id: str = ""

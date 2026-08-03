@@ -50,6 +50,23 @@ def client():
 
     app.dependency_overrides[get_discord_verifier] = lambda: _FakeDiscordVerifier()
 
+    from app.telegram_auth import get_telegram_verifier
+
+    class _FakeTelegramVerifier:
+        def verify_widget(self, data: dict) -> dict:
+            if data.get("hash") == "BAD":
+                raise ValueError("bad token")
+            return {"tg_id": str(data["id"]), "tg_username": data.get("username")}
+
+        def verify_miniapp(self, init_data: str) -> dict:
+            if init_data == "BAD":
+                raise ValueError("bad init_data")
+            import json
+            d = json.loads(init_data)
+            return {"tg_id": str(d["id"]), "tg_username": d.get("username")}
+
+    app.dependency_overrides[get_telegram_verifier] = lambda: _FakeTelegramVerifier()
+
     with TestClient(app) as c:  # lifespan создаёт таблицы (init_db)
         yield c
     if os.path.exists("test.db"):
@@ -80,3 +97,15 @@ def google_token(sub: str, email: str, email_verified: bool = True) -> str:
 def discord_code(discord_id, email=None, email_verified=True, username=None):
     import json
     return json.dumps({"discord_id": discord_id, "email": email, "email_verified": email_verified, "username": username})
+
+
+def telegram_widget(tg_id: str, username: str | None = None) -> dict:
+    d = {"id": tg_id, "auth_date": 1, "hash": "ok"}
+    if username:
+        d["username"] = username
+    return d
+
+
+def telegram_miniapp(tg_id: str, username: str | None = None) -> str:
+    import json
+    return json.dumps({"id": tg_id, "username": username})
