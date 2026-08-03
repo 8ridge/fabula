@@ -31,12 +31,26 @@ function cleanString(value: unknown, path: string, min: number, max: number): st
   return normalized
 }
 
+function optionalCleanString(value: unknown, path: string, min: number, max: number): string | undefined {
+  return value === undefined ? undefined : cleanString(value, path, min, max)
+}
+
 function parsePersona(value: unknown, storyPackId: StoryPackId): PlayerPersonaInput {
   if (!isRecord(value))
     throw new ContractError('INVALID_FIELD', 'Некорректное воплощение игрока.', ['$.persona'])
-  const keys = ['name', 'role_id', 'motivation', 'embodiment_note', 'narration_density'] as const
+  const keys = [
+    'name',
+    'role_id',
+    'role_label',
+    'competence',
+    'limitation',
+    'motivation',
+    'background',
+    'embodiment_note',
+    'narration_density',
+  ] as const
   exactKeys(value, keys, '$.persona')
-  requiredKeys(value, keys, '$.persona')
+  requiredKeys(value, ['name', 'role_id', 'motivation', 'embodiment_note', 'narration_density'], '$.persona')
   const roleId = cleanString(value.role_id, '$.persona.role_id', 3, 120)
   const role = STORY_PACKS[storyPackId].roles.find(candidate => candidate.id === roleId)
   if (!role)
@@ -44,12 +58,20 @@ function parsePersona(value: unknown, storyPackId: StoryPackId): PlayerPersonaIn
   if (!['concise', 'balanced', 'rich'].includes(String(value.narration_density)))
     throw new ContractError('INVALID_FIELD', 'Некорректная плотность повествования.', ['$.persona.narration_density'])
   const embodimentNote = cleanString(value.embodiment_note, '$.persona.embodiment_note', 0, 420)
-  if (role.id.endsWith(':free') && embodimentNote.length < 12)
+  const roleLabel = optionalCleanString(value.role_label, '$.persona.role_label', 2, 80)
+  const competence = optionalCleanString(value.competence, '$.persona.competence', 8, 480)
+  const limitation = optionalCleanString(value.limitation, '$.persona.limitation', 8, 480)
+  const background = optionalCleanString(value.background, '$.persona.background', 0, 1_200)
+  if (role.id.endsWith(':free') && (competence || embodimentNote).length < 12)
     throw new ContractError('INVALID_FIELD', 'Для свободного воплощения опиши компетенцию и ограничение.', ['$.persona.embodiment_note'])
   return {
     name: cleanString(value.name, '$.persona.name', 2, 40),
     role_id: roleId,
-    motivation: cleanString(value.motivation, '$.persona.motivation', 3, 160),
+    role_label: roleLabel,
+    competence,
+    limitation,
+    motivation: cleanString(value.motivation, '$.persona.motivation', 3, 600),
+    background,
     embodiment_note: embodimentNote,
     narration_density: value.narration_density as PlayerPersonaInput['narration_density'],
   }

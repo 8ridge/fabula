@@ -307,14 +307,15 @@ function makePersona(request: CreateGameSessionRequest): PlayerPersona {
   const role = pack.roles.find(candidate => candidate.id === request.persona.role_id)
   if (!role)
     throw new FabulaApiError('ROLE_NOT_FOUND', 'Выбранная роль больше недоступна для этого StoryPack.', 409)
-  const freeDescription = request.persona.embodiment_note || role.competence
+  const freeDescription = request.persona.competence || request.persona.embodiment_note || role.competence
   return {
     ...request.persona,
-    role_label: role.label,
-    competence: role.id.endsWith(':free') ? freeDescription : role.competence,
-    limitation: role.id.endsWith(':free')
+    role_label: request.persona.role_label || role.label,
+    competence: role.id.endsWith(':free') ? freeDescription : request.persona.competence || role.competence,
+    limitation: request.persona.limitation || (role.id.endsWith(':free')
       ? 'Ограничение выводится только из явно указанного описания и правил мира'
-      : role.limitation,
+      : role.limitation),
+    background: request.persona.background || '',
   }
 }
 
@@ -376,6 +377,8 @@ function makeLocations(storyPackId: StoryPackId): LocationProjection[] {
 function normalizeStoredSession(value: StoredGameSession): StoredGameSession {
   const session = clone(value)
   const pack = STORY_PACKS[session.snapshot.story_pack_id]
+  if (typeof session.snapshot.persona.background !== 'string')
+    session.snapshot.persona.background = ''
   session.snapshot.messages.forEach((message) => {
     if (!Array.isArray(message.selected_items))
       message.selected_items = []

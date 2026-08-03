@@ -66,6 +66,7 @@ function gameResponse(): GameTurnResponse {
       competence: 'Анализ',
       limitation: 'Время',
       motivation: 'Понять круг',
+      background: '',
       embodiment_note: '',
       narration_density: 'balanced',
     },

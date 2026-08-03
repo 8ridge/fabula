@@ -8,7 +8,11 @@ export type JournalUncertainty = 'confirmed' | 'reported' | 'suspected' | 'contr
 export interface PlayerPersonaInput {
   name: string
   role_id: string
+  role_label?: string
+  competence?: string
+  limitation?: string
   motivation: string
+  background?: string
   embodiment_note: string
   narration_density: 'concise' | 'balanced' | 'rich'
 }
@@ -17,6 +21,7 @@ export interface PlayerPersona extends PlayerPersonaInput {
   role_label: string
   competence: string
   limitation: string
+  background: string
 }
 
 export interface SuggestedAction {

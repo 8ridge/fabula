@@ -103,6 +103,35 @@ describe('game session repository', () => {
     expect(session.scene.present_character_ids).toEqual(['character:ilva-rein', 'character:kassar-vel'])
   })
 
+  test('keeps an edited persona preset while preserving role-owned starting equipment', async () => {
+    const repository = new GameSessionRepository(new MemoryGameSessionStorage())
+    const session = await repository.create(ownerId, {
+      schema_version: 'session-create@1.0',
+      story_pack_id: 'zero-line',
+      persona: {
+        name: 'Мира',
+        role_id: 'zero-line:courier',
+        role_label: 'Волонтер районного штаба',
+        competence: 'Помнит жильцов, дворы и безопасные входы в соседние дома',
+        limitation: 'Не умеет оставлять знакомых людей без помощи, даже когда это опасно',
+        motivation: 'Найти младшего брата до того, как город окончательно потеряет связь',
+        background: 'До вспышки Мира развозила продукты пожилым соседям и знала, у кого есть запасные ключи.',
+        embodiment_note: '',
+        narration_density: 'rich',
+      },
+    })
+
+    expect(session.persona).toMatchObject({
+      role_label: 'Волонтер районного штаба',
+      competence: 'Помнит жильцов, дворы и безопасные входы в соседние дома',
+      limitation: 'Не умеет оставлять знакомых людей без помощи, даже когда это опасно',
+      motivation: 'Найти младшего брата до того, как город окончательно потеряет связь',
+      background: 'До вспышки Мира развозила продукты пожилым соседям и знала, у кого есть запасные ключи.',
+      narration_density: 'rich',
+    })
+    expect(session.inventory[0]?.name).toBe('Карта дворов Велинска')
+  })
+
   test('knows the neighbor without placing her inside the player apartment', async () => {
     const repository = new GameSessionRepository(new MemoryGameSessionStorage())
     const session = await repository.create(ownerId, {

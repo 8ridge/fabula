@@ -150,6 +150,10 @@ function closeOnBackdrop(event: MouseEvent) {
           <p class="font-interface text-[10px] uppercase tracking-[.12em] text-[var(--accent-light)]">{{ session.persona.role_label }}</p>
           <h3 class="mt-1 font-display text-[24px] text-fabula-100">{{ session.persona.name }}</h3>
           <p class="mt-2 text-[15px] leading-relaxed text-fabula-300">{{ session.persona.motivation }}</p>
+          <div v-if="session.persona.background" class="mt-4 rounded-xl border border-white/8 bg-white/[.02] p-3">
+            <span class="font-interface text-[10px] uppercase text-[#9b9ba6]">Прошлое</span>
+            <p class="mt-1 whitespace-pre-line text-[14px] leading-relaxed text-fabula-100">{{ session.persona.background }}</p>
+          </div>
           <div class="mt-4 grid gap-3 sm:grid-cols-2">
             <div class="rounded-xl border border-white/8 bg-white/[.02] p-3">
               <span class="font-interface text-[10px] uppercase text-[#9b9ba6]">Компетенция</span>

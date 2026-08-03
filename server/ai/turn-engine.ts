@@ -1114,6 +1114,7 @@ function buildTurnPacket(
         competence: snapshot.persona.competence,
         limitation: snapshot.persona.limitation,
         motivation: snapshot.persona.motivation,
+        background: snapshot.persona.background,
         embodiment_note: snapshot.persona.embodiment_note,
       },
       scene: {

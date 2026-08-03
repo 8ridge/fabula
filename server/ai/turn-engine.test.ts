@@ -39,6 +39,7 @@ const snapshot: EngineSessionSnapshot = {
     competence: 'Разбирает задачу на этапы',
     limitation: 'Нужны материалы и время',
     motivation: 'Понять восьмой круг',
+    background: '',
     embodiment_note: '',
     narration_density: 'balanced',
   },
