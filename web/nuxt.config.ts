@@ -18,6 +18,7 @@ export default defineNuxtConfig({
   runtimeConfig: {
     public: {
       googleClientId: process.env.NUXT_PUBLIC_GOOGLE_CLIENT_ID || '',
+      discordClientId: process.env.NUXT_PUBLIC_DISCORD_CLIENT_ID || '',
     },
   },
 })
