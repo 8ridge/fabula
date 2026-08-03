@@ -231,6 +231,83 @@ describe('game session repository', () => {
     })
   })
 
+  test('repairs a legacy item after the confirmed story says it was thrown and broken', async () => {
+    const storage = new ReferenceGameSessionStorage()
+    const repository = new GameSessionRepository(storage)
+    const session = await repository.create(ownerId, {
+      schema_version: 'session-create@1.0',
+      story_pack_id: 'zero-line',
+      persona: {
+        name: 'Грег',
+        role_id: 'zero-line:courier',
+        motivation: 'Добыть лекарство',
+        embodiment_note: '',
+        narration_density: 'balanced',
+      },
+    })
+    const key = `sessions:${session.id}`
+    const stored = await storage.getItem<Record<string, any>>(key)
+    const bottle = {
+      id: 'item:legacy-thrown-bottle',
+      template_id: 'item-template:scene:bottle',
+      name: 'Бутылка',
+      category: 'resource',
+      description: 'Стеклянная бутылка.',
+      quantity: 1,
+      charges: null,
+      condition: 'usable',
+      owner_id: 'player',
+      owner_name: 'Грег',
+      holder_id: 'player',
+      holder_name: 'Грег',
+      location_id: session.scene.location_id,
+      location_name: session.scene.location_name,
+      slot: 'hand',
+      version: 0,
+      provenance: {
+        kind: 'world_event',
+        source_event_id: 'event:legacy-bottle',
+        summary: 'Бутылка взята в квартире.',
+      },
+    }
+    stored!.snapshot.inventory.push(bottle)
+    stored!.snapshot.messages.push(
+      {
+        id: 'message:legacy-player-throw',
+        role: 'player',
+        speaker: 'Грег',
+        text: 'Я использую «Бутылка» для текущего действия. Открою окно и брошу бутылку наружу.',
+        mode: 'action',
+        outcome: null,
+        created_at: '2026-08-03T14:16:28.101Z',
+        selected_items: [structuredClone(bottle)],
+        selected_journal_entries: [],
+      },
+      {
+        id: 'message:legacy-narrator-throw',
+        role: 'narrator',
+        speaker: 'Рассказчик',
+        text: 'Стеклянный предмет описывает дугу и разбивается о стену дома напротив.',
+        mode: null,
+        outcome: 'success',
+        created_at: '2026-08-03T14:16:28.102Z',
+        selected_items: [],
+        selected_journal_entries: [],
+      },
+    )
+    stored!.stateRevisions = { zeroLineOpeningPresence: 1 }
+    await storage.setItem(key, stored)
+
+    const restored = await repository.get(ownerId, session.id)
+    const item = restored.inventory.find(candidate => candidate.id === bottle.id)
+
+    expect(item).toMatchObject({
+      quantity: 0,
+      condition: 'spent',
+      version: 1,
+    })
+  })
+
   test('isolates started stories by the server-owned player id', async () => {
     const repository = new GameSessionRepository(new MemoryGameSessionStorage())
     await repository.create(ownerId, createRequest)

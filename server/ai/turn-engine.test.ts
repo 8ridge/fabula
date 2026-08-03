@@ -911,6 +911,301 @@ describe('turn engine model telemetry', () => {
     expect(result.modelRuns.map(run => run.role)).toEqual(['inventory', 'primary'])
   })
 
+  test('requires consumption when the selected bottle is thrown away irreversibly', async () => {
+    const bottleItemId = 'item:bottle'
+    const bottleCommand: TurnCommand = {
+      ...command,
+      mode: 'action',
+      text: 'Я использую «Бутылка» для текущего действия. Подойду к окну, открою его и брошу бутылку в дальнего прохожего.',
+      selected_item_ids: [bottleItemId],
+    }
+    const bottleSnapshot: EngineSessionSnapshot = {
+      ...snapshot,
+      inventory: [{
+        id: bottleItemId,
+        template_id: 'item-template:bottle',
+        name: 'Бутылка',
+        category: 'resource',
+        description: 'Стеклянная бутылка, завернутая в газету.',
+        quantity: 1,
+        charges: null,
+        condition: 'usable',
+        owner_id: 'player',
+        owner_name: 'Лея',
+        holder_id: 'player',
+        holder_name: 'Лея',
+        location_id: snapshot.scene.location_id,
+        location_name: snapshot.scene.location_name,
+        slot: 'hand',
+        version: 0,
+        provenance: {
+          kind: 'world_event',
+          source_event_id: 'event:bottle-taken',
+          summary: 'Бутылка взята в текущей сцене.',
+        },
+      }],
+      allowedOperationTypes: ['event.create', 'inventory.consume'],
+    }
+    const requests: ChatJsonRequest[] = []
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        requests.push(request)
+        const output = successfulTurnOutput()
+        output.intent.type = 'throw_bottle'
+        output.intent.referenced_entities = [bottleItemId]
+        output.resolution.summary = 'Бутылка разбивается о стену дома напротив.'
+        output.narrative_text = 'Ты бросаешь бутылку из окна. Она разбивается о стену дома напротив и больше не остается у тебя.'
+        output.operations = [
+          {
+            type: 'event.create',
+            operation_index: 0,
+            event_id: bottleSnapshot.reservedIds.events[0]!,
+            event_kind: 'bottle_thrown_and_broken',
+            actor_ids: ['player'],
+            target_ids: [],
+            item_ids: [bottleItemId],
+            location_id: bottleSnapshot.scene.location_id,
+            source_turn_id: bottleCommand.idempotency_key,
+          },
+          {
+            type: 'inventory.consume',
+            operation_index: 1,
+            source_event_id: bottleSnapshot.reservedIds.events[0]!,
+            item_id: bottleItemId,
+            amount: 1,
+            expected: {
+              owner_id: 'player',
+              holder_id: 'player',
+              location_id: bottleSnapshot.scene.location_id,
+              container_id: null,
+              quantity: 1,
+              charges: null,
+              condition: 'usable',
+              version: 0,
+            },
+          },
+        ]
+        return {
+          requestId: 'request:bottle-thrown',
+          model: request.model,
+          output,
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+
+    const result = await createEngine(client).execute(bottleCommand, bottleSnapshot)
+
+    expect(requests[0]).toMatchObject({
+      payload: {
+        inventory_advisory: {
+          reason_codes: ['irreversible_selected_item_loss'],
+          operation_candidates: [{
+            type: 'inventory.consume',
+            item_id: bottleItemId,
+            required_on_success: true,
+            amount: 1,
+            expected_state: {
+              quantity: 1,
+              condition: 'usable',
+              version: 0,
+            },
+            resulting_state: {
+              quantity: 0,
+              condition: 'spent',
+              version: 1,
+            },
+          }],
+        },
+      },
+    })
+    expect(result.output.operations.find(operation => operation.type === 'inventory.consume')).toMatchObject({
+      type: 'inventory.consume',
+      item_id: bottleItemId,
+      amount: 1,
+    })
+  })
+
+  test('repairs a successful irreversible throw when the primary model omits consumption', async () => {
+    const bottleItemId = 'item:bottle'
+    const bottleCommand: TurnCommand = {
+      ...command,
+      mode: 'action',
+      text: 'Я использую «Бутылка» для текущего действия. Открою окно и брошу бутылку наружу.',
+      selected_item_ids: [bottleItemId],
+    }
+    const bottleSnapshot: EngineSessionSnapshot = {
+      ...snapshot,
+      inventory: [{
+        id: bottleItemId,
+        template_id: 'item-template:bottle',
+        name: 'Бутылка',
+        category: 'resource',
+        description: 'Стеклянная бутылка.',
+        quantity: 1,
+        charges: null,
+        condition: 'usable',
+        owner_id: 'player',
+        owner_name: 'Лея',
+        holder_id: 'player',
+        holder_name: 'Лея',
+        location_id: snapshot.scene.location_id,
+        location_name: snapshot.scene.location_name,
+        slot: 'hand',
+        version: 0,
+        provenance: {
+          kind: 'world_event',
+          source_event_id: 'event:bottle-taken',
+          summary: 'Бутылка взята в текущей сцене.',
+        },
+      }],
+      allowedOperationTypes: ['event.create', 'inventory.consume'],
+    }
+    const requests: ChatJsonRequest[] = []
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        requests.push(request)
+        if (request.schema?.name === 'fabula_turn_output_0_2') {
+          const output = successfulTurnOutput()
+          output.intent.type = 'throw_bottle'
+          output.intent.referenced_entities = [bottleItemId]
+          output.resolution.summary = 'Бутылка разбивается снаружи.'
+          output.narrative_text = 'Ты бросаешь бутылку из окна, и она разбивается снаружи.'
+          output.operations = [{
+            type: 'event.create',
+            operation_index: 0,
+            event_id: bottleSnapshot.reservedIds.events[0]!,
+            event_kind: 'bottle_thrown_and_broken',
+            actor_ids: ['player'],
+            target_ids: [],
+            item_ids: [bottleItemId],
+            location_id: bottleSnapshot.scene.location_id,
+            source_turn_id: bottleCommand.idempotency_key,
+          }]
+          return {
+            requestId: 'request:bottle-primary',
+            model: request.model,
+            output,
+            usage: { total_tokens: 10, cost: 0.001 },
+          }
+        }
+        return {
+          requestId: 'request:bottle-fallback',
+          model: request.model,
+          output: {
+            outcome: 'success',
+            summary: 'Ты бросаешь бутылку из окна. Стекло разбивается снаружи, и бутылки у тебя больше нет.',
+            event_kind: 'bottle_thrown_and_broken',
+            suggested_actions: modelSuggestedActions(),
+          },
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+
+    const result = await createEngine(client).execute(bottleCommand, bottleSnapshot)
+
+    expect(requests[1]).toMatchObject({
+      schema: { name: 'fabula_quick_turn_1_0' },
+      payload: {
+        inventory_advisory: {
+          operation_candidates: [{
+            type: 'inventory.consume',
+            required_on_success: true,
+          }],
+        },
+      },
+    })
+    expect(result.output.operations.find(operation => operation.type === 'inventory.consume')).toMatchObject({
+      type: 'inventory.consume',
+      item_id: bottleItemId,
+      amount: 1,
+    })
+    expect(result.modelRuns.slice(-2)).toMatchObject([
+      {
+        role: 'primary',
+        status: 'discarded',
+        error_code: 'MODEL_INVENTORY_MISMATCH',
+      },
+      {
+        role: 'fallback',
+        status: 'accepted',
+        error_code: null,
+      },
+    ])
+  })
+
+  test('does not consume a reusable item used for a strike', async () => {
+    const rebarItemId = 'item:rebar'
+    const rebarCommand: TurnCommand = {
+      ...command,
+      mode: 'action',
+      text: 'Я использую «Арматура» для текущего действия. Ударю арматурой по двери.',
+      selected_item_ids: [rebarItemId],
+    }
+    const rebarSnapshot: EngineSessionSnapshot = {
+      ...snapshot,
+      inventory: [{
+        id: rebarItemId,
+        template_id: 'item-template:rebar',
+        name: 'Арматура',
+        category: 'tool',
+        description: 'Короткий стальной прут.',
+        quantity: 1,
+        charges: null,
+        condition: 'usable',
+        owner_id: 'player',
+        owner_name: 'Лея',
+        holder_id: 'player',
+        holder_name: 'Лея',
+        location_id: snapshot.scene.location_id,
+        location_name: snapshot.scene.location_name,
+        slot: 'hand',
+        version: 0,
+        provenance: {
+          kind: 'world_event',
+          source_event_id: 'event:rebar-taken',
+          summary: 'Арматура взята в текущей сцене.',
+        },
+      }],
+      allowedOperationTypes: ['event.create', 'inventory.consume'],
+    }
+    const requests: ChatJsonRequest[] = []
+    const client = {
+      chatJson: async (request: ChatJsonRequest) => {
+        requests.push(request)
+        const output = successfulTurnOutput()
+        output.intent.type = 'strike_door_with_rebar'
+        output.intent.referenced_entities = [rebarItemId]
+        output.resolution.summary = 'Арматура ударяет по двери.'
+        output.narrative_text = 'Ты бьешь арматурой по двери. Стальной прут остается в руке.'
+        output.operations = [{
+          type: 'event.create',
+          operation_index: 0,
+          event_id: rebarSnapshot.reservedIds.events[0]!,
+          event_kind: 'door_struck_with_rebar',
+          actor_ids: ['player'],
+          target_ids: [],
+          item_ids: [rebarItemId],
+          location_id: rebarSnapshot.scene.location_id,
+          source_turn_id: rebarCommand.idempotency_key,
+        }]
+        return {
+          requestId: 'request:rebar-strike',
+          model: request.model,
+          output,
+          usage: { total_tokens: 10, cost: 0.001 },
+        }
+      },
+    } as unknown as OpenRouterClient
+
+    const result = await createEngine(client).execute(rebarCommand, rebarSnapshot)
+
+    expect((requests[0]!.payload.inventory_advisory as Record<string, any>).operation_candidates)
+      .toEqual([])
+    expect(result.output.operations.some(operation => operation.type === 'inventory.consume')).toBe(false)
+  })
+
   test('requires a successful acquisition to create the reserved inventory item', async () => {
     const bottleItemId = 'item:reserved:bottle'
     const bottleCommand: TurnCommand = {

@@ -12,7 +12,7 @@ import type {
   InteractionTurnDraft,
   InteractionToolName,
 } from '~/types/interaction-ui'
-import { inventoryUnavailableReason } from '~/composables/useInventoryStore'
+import { inventoryItemIsActive, inventoryUnavailableReason } from '~/composables/useInventoryStore'
 
 type ComposerHandle = {
   resize: () => void
@@ -67,7 +67,9 @@ const selectedJournalEntries = computed(() => {
   return game.session.value.journal.filter(entry => selectedJournalEntryIds.value.includes(entry.id))
 })
 const playerInventoryCount = computed(() =>
-  game.session.value?.inventory.filter(item => item.owner_id === 'player' || item.holder_id === 'player').length || 0)
+  game.session.value?.inventory.filter(item =>
+    (item.owner_id === 'player' || item.holder_id === 'player')
+    && inventoryItemIsActive(item)).length || 0)
 const queueKey = computed(() => sessionId.value ? `fabula:turn-queue:${sessionId.value}` : '')
 
 useHead({

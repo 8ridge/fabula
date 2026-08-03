@@ -56,9 +56,13 @@ export function inventoryVisualFor(item: InventoryItemProjection): InventoryItem
 export function inventoryUnavailableReason(item: InventoryItemProjection): string | null {
   if (item.holder_id !== 'player')
     return `Сейчас предмет у персонажа «${item.holder_name}»`
-  if (item.condition === 'spent' || item.quantity <= 0 || item.charges === 0)
+  if (!inventoryItemIsActive(item))
     return 'Предмет уже использован'
   return null
+}
+
+export function inventoryItemIsActive(item: InventoryItemProjection): boolean {
+  return item.condition !== 'spent' && item.quantity > 0 && item.charges !== 0
 }
 
 export function projectInventoryItem(item: InventoryItemProjection): InventoryItemView {
@@ -85,7 +89,9 @@ export function useInventoryStore(session: Ref<GameSessionSnapshot>) {
 
   const items = computed(() =>
     session.value.inventory
-      .filter(item => item.owner_id === 'player' || item.holder_id === 'player')
+      .filter(item =>
+        (item.owner_id === 'player' || item.holder_id === 'player')
+        && inventoryItemIsActive(item))
       .map(projectInventoryItem),
   )
 
@@ -139,7 +145,9 @@ export function useInventoryStore(session: Ref<GameSessionSnapshot>) {
     () => [
       session.value.id,
       ...session.value.inventory
-        .filter(item => item.owner_id === 'player' || item.holder_id === 'player')
+        .filter(item =>
+          (item.owner_id === 'player' || item.holder_id === 'player')
+          && inventoryItemIsActive(item))
         .map(item => item.id),
     ],
     syncSelection,

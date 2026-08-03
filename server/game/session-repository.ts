@@ -19,6 +19,10 @@ import { AiExecutionError, FabulaApiError } from '../ai/http'
 import type { ExpectedInventoryState, TurnOperation, TurnOutput } from '../ai/contracts'
 import { normalizeInventoryItemCopy, startingEquipmentItemStory, worldEventItemStory } from './inventory-copy'
 import { ALLOWED_TURN_OPERATION_TYPES, getStoryPackContext } from './storypack-context'
+import {
+  confirmsIrreversibleItemLoss,
+  explicitlyLosesSelectedItem,
+} from './inventory-consumption'
 
 export interface SessionTurnResult {
   output: TurnOutput
@@ -153,6 +157,7 @@ interface StoredGameSession {
   idempotency: StoredIdempotencyRecord[]
   stateRevisions?: {
     zeroLineOpeningPresence?: 1
+    irreversibleInventoryConsumption?: 1
   }
 }
 
@@ -404,6 +409,13 @@ function normalizeStoredSession(value: StoredGameSession): StoredGameSession {
       zeroLineOpeningPresence: 1,
     }
   }
+  if (session.stateRevisions?.irreversibleInventoryConsumption !== 1) {
+    repairConfirmedIrreversibleInventoryLosses(session)
+    session.stateRevisions = {
+      ...session.stateRevisions,
+      irreversibleInventoryConsumption: 1,
+    }
+  }
   if (session.snapshot.version === 0) {
     session.snapshot.characters = makeCharacters(pack.id)
     session.snapshot.locations = makeLocations(pack.id)
@@ -415,6 +427,35 @@ function normalizeStoredSession(value: StoredGameSession): StoredGameSession {
       item.location_id = session.snapshot.scene.location_id
   })
   return session
+}
+
+function repairConfirmedIrreversibleInventoryLosses(session: StoredGameSession): void {
+  for (let index = 0; index < session.snapshot.messages.length - 1; index += 1) {
+    const playerMessage = session.snapshot.messages[index]!
+    const narratorMessage = session.snapshot.messages[index + 1]!
+    if (playerMessage.role !== 'player'
+      || playerMessage.mode !== 'action'
+      || playerMessage.selected_items.length !== 1
+      || !explicitlyLosesSelectedItem(playerMessage.text)
+      || narratorMessage.role !== 'narrator'
+      || !['success', 'partial_success'].includes(narratorMessage.outcome || '')
+      || !confirmsIrreversibleItemLoss(narratorMessage.text)) {
+      continue
+    }
+
+    const selectedItem = playerMessage.selected_items[0]!
+    const item = session.snapshot.inventory.find(candidate => candidate.id === selectedItem.id)
+    if (!item || item.condition === 'spent' || item.quantity <= 0 || item.charges === 0)
+      continue
+
+    if (item.charges !== null)
+      item.charges = 0
+    else
+      item.quantity = Math.max(0, item.quantity - 1)
+    if (item.quantity === 0 || item.charges === 0)
+      item.condition = 'spent'
+    item.version += 1
+  }
 }
 
 function normalizeItemProvenance(item: InventoryItemProjection): void {
@@ -932,9 +973,10 @@ export class GameSessionRepository {
       knowledge: [],
       turns: [],
       idempotency: [],
-      stateRevisions: pack.id === 'zero-line'
-        ? { zeroLineOpeningPresence: 1 }
-        : undefined,
+      stateRevisions: {
+        ...(pack.id === 'zero-line' ? { zeroLineOpeningPresence: 1 as const } : {}),
+        irreversibleInventoryConsumption: 1,
+      },
     }
     await this.storage.setItem(sessionKey(sessionId), session)
     return clone(session.snapshot)

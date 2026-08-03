@@ -25,6 +25,7 @@ import {
   acquisitionDisplayName,
   stripAcquisitionDestination,
 } from '../game/inventory-copy'
+import { explicitlyLosesSelectedItem } from '../game/inventory-consumption'
 
 export interface TurnEngineResult extends SessionTurnResult {
   modelRuns: SafeModelRun[]
@@ -74,9 +75,10 @@ const QUICK_TURN_PROMPT = `Ты создаешь короткое безопас
 - 25-80 слов, 1-3 коротких абзаца, одно наблюдаемое событие на предложение;
 - без отвлеченных метафор, объяснения проверок и технических сообщений. Не
   приписывай наблюдаемым звукам, запахам и следам неподтвержденную причину;
-- этот резервный ход не меняет сцену, состав персонажей или инвентарь. Не утверждай,
-  что найден, получен, потрачен или передан новый предмет, и не добавляй в сцену
-  объект, которого нет в текущем контексте;
+- этот резервный ход не придумывает смену сцены, состава персонажей или состояния
+  предметов. Обязательные операции из inventory_advisory должны отражаться в
+  результате: безвозвратно брошенный, разбитый, сожженный, съеденный или выпитый
+  предмет после успеха больше не остается у игрока;
 - outcome=impossible используй только для действительно невозможной попытки;
 - вместе с результатом верни 3-6 коротких suggested_actions, доступных именно
   после этого результата. Не заполняй список универсальными вариантами ради количества.`
@@ -385,11 +387,15 @@ export class TurnEngine {
           reasoning: NO_REASONING,
         })
         const advisory = requireExplicitAcquisitionCandidate(
-          parseStandaloneOutput(
+          withRequiredIrreversibleConsumption(
+            parseStandaloneOutput(
             'inventory',
             attempt.sanitizedFreeEndpoint
               ? withInventoryAdvisoryVersion(result.output)
               : result.output,
+            ),
+            command,
+            snapshot,
           ),
           command,
         )
@@ -790,7 +796,11 @@ function buildLocalInventoryAdvisory(
     },
     consistency_notes: ['Локальный резерв использован только после отказа обоих маршрутов Nemotron.'],
   } satisfies Record<string, JsonValue>
-  const parsed = parseStandaloneOutput('inventory', advisory)
+  const parsed = withRequiredIrreversibleConsumption(
+    parseStandaloneOutput('inventory', advisory),
+    command,
+    snapshot,
+  )
   assertInventoryAdvisoryAlignment(parsed, command, snapshot)
   return parsed
 }
@@ -1284,6 +1294,90 @@ function inventorySceneRelation(
   if (item.location_id === snapshot.scene.location_id)
     return 'present_in_scene'
   return 'remote'
+}
+
+function withRequiredIrreversibleConsumption(
+  advisory: Record<string, JsonValue>,
+  command: TurnCommand,
+  snapshot: EngineSessionSnapshot,
+): Record<string, JsonValue> {
+  if (command.mode !== 'action'
+    || command.selected_item_ids.length !== 1
+    || !explicitlyLosesSelectedItem(command.text)
+    || !snapshot.allowedOperationTypes.includes('inventory.consume')) {
+    return advisory
+  }
+
+  const itemId = command.selected_item_ids[0]!
+  const item = snapshot.inventory.find(candidate => candidate.id === itemId)
+  if (!item || !inventoryItemAccessible(item, snapshot))
+    return advisory
+
+  const amount = item.charges ?? 1
+  const resultingQuantity = item.charges === null ? item.quantity - amount : item.quantity
+  const resultingCharges = item.charges === null ? null : item.charges - amount
+  const fullySpent = resultingQuantity === 0 || resultingCharges === 0
+  const expectedState = {
+    owner_id: item.owner_id,
+    holder_id: item.holder_id,
+    location_id: item.location_id,
+    quantity: item.quantity,
+    charges: item.charges,
+    condition: item.condition,
+    slot: item.slot,
+    version: item.version,
+  } satisfies Record<string, JsonValue>
+  const resultingState = {
+    ...expectedState,
+    quantity: resultingQuantity,
+    charges: resultingCharges,
+    condition: fullySpent ? 'spent' : item.condition,
+    version: item.version + 1,
+  } satisfies Record<string, JsonValue>
+  const operationCandidates = advisory.operation_candidates as Array<Record<string, JsonValue>>
+  const storySync = advisory.story_sync as Record<string, JsonValue>
+  const requiredFact = `После успешного действия «${item.name}» больше не доступен игроку.`
+  const forbiddenClaim = `«${item.name}» остается у игрока после безвозвратной потери.`
+
+  return {
+    ...advisory,
+    reason_codes: [
+      ...new Set([
+        ...(advisory.reason_codes as string[]),
+        'irreversible_selected_item_loss',
+      ]),
+    ],
+    operation_candidates: [
+      ...operationCandidates.filter(candidate =>
+        candidate.type !== 'inventory.consume' || candidate.item_id !== item.id),
+      {
+        type: 'inventory.consume',
+        item_id: item.id,
+        required_on_success: true,
+        amount,
+        from_entity_id: item.holder_id,
+        to_entity_id: null,
+        reason: 'Выбранное действие безвозвратно уничтожает, расходует или удаляет предмет из владения игрока.',
+        expected_state: expectedState,
+        resulting_state: resultingState,
+        instance_draft: null,
+        narrative_requirements: [requiredFact],
+        forbidden_narrative_claims: [forbiddenClaim],
+      },
+    ],
+    story_sync: {
+      ...storySync,
+      plot_relevant_item_ids: [
+        ...new Set([...(storySync.plot_relevant_item_ids as string[]), item.id]),
+      ],
+      required_narrative_facts: [
+        ...new Set([...(storySync.required_narrative_facts as string[]), requiredFact]),
+      ],
+      forbidden_narrative_claims: [
+        ...new Set([...(storySync.forbidden_narrative_claims as string[]), forbiddenClaim]),
+      ],
+    },
+  }
 }
 
 function assertInventoryAdvisoryAlignment(
@@ -1859,6 +1953,7 @@ function buildQuickFallbackPacket(
     relevant_memories: Array.isArray(packet.relevant_memories)
       ? packet.relevant_memories.slice(-3)
       : [],
+    inventory_advisory: packet.inventory_advisory ?? null,
     pack_rules: {
       prompt_overlay: packRules.prompt_overlay ?? null,
     },
@@ -1983,7 +2078,43 @@ function quickProposalToTurnOutput(
       ...creationDraft,
     } as Extract<TurnOperation, { type: 'inventory.create_instance' }>)
   }
+  const requiredConsumptions = ['success', 'partial_success'].includes(proposal.outcome)
+    ? (inventoryAdvisory.operation_candidates as Array<Record<string, JsonValue>>).filter(candidate =>
+        candidate.required_on_success === true
+        && candidate.type === 'inventory.consume')
+    : []
+  for (const candidate of requiredConsumptions) {
+    const expectedState = candidate.expected_state
+    if (
+      !eventId
+      || typeof candidate.item_id !== 'string'
+      || typeof candidate.amount !== 'number'
+      || !expectedState
+      || typeof expectedState !== 'object'
+      || Array.isArray(expectedState)
+    ) {
+      continue
+    }
+    operations.push({
+      type: 'inventory.consume',
+      operation_index: operations.length,
+      source_event_id: eventId,
+      item_id: candidate.item_id,
+      amount: candidate.amount,
+      expected: {
+        owner_id: String(expectedState.owner_id),
+        holder_id: String(expectedState.holder_id),
+        location_id: String(expectedState.location_id),
+        container_id: null,
+        quantity: Number(expectedState.quantity),
+        charges: expectedState.charges === null ? null : Number(expectedState.charges),
+        condition: expectedState.condition as Extract<TurnOperation, { type: 'inventory.consume' }>['expected']['condition'],
+        version: Number(expectedState.version),
+      },
+    })
+  }
   const createsInventoryItem = operations.some(operation => operation.type === 'inventory.create_instance')
+  const consumesInventoryItem = operations.some(operation => operation.type === 'inventory.consume')
   return parseTurnOutput({
     schema_version: 'turn-output@0.2',
     turn_id: command.idempotency_key,
@@ -2037,6 +2168,8 @@ function quickProposalToTurnOutput(
       assumptions: [
         createsInventoryItem
           ? 'Резервный ход создает только предмет из проверенного inventory advisory.'
+          : consumesInventoryItem
+            ? 'Резервный ход списывает только безвозвратно использованный выбранный предмет.'
           : 'Резервный ход не меняет сцену, присутствие или инвентарь.',
         ...(proposal.serverGuarded
           ? ['Сервер отклонил противоположный результат резервной модели.']
