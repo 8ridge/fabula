@@ -159,7 +159,7 @@ function closeSetup() {
             >
               Настроить героя
             </button>
-            <p class="mt-3 text-center text-[11px] leading-relaxed text-fabula-500">Настройка откроется в отдельном окне и сохранится только после подтверждения.</p>
+            <p class="mt-3 text-center text-[11px] leading-relaxed text-fabula-500">Выбери, кем ты станешь, и начни свою ветку.</p>
           </div>
         </section>
 
