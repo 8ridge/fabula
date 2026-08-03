@@ -19,9 +19,17 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     rate_limit_enabled: bool = True
 
+    discord_client_id: str = ""
+    discord_client_secret: str = ""
+    discord_redirect_uris: str = ""  # через запятую; allowlist для redirect_uri
+
     @property
     def cors_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def discord_redirect_list(self) -> list[str]:
+        return [u.strip() for u in self.discord_redirect_uris.split(",") if u.strip()]
 
 
 settings = Settings()
