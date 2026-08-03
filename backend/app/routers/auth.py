@@ -435,6 +435,59 @@ async def discord_complete(request: Request, data: DiscordCompleteIn, db: AsyncS
     return TokenOut(access_token=token, user=await _user_out(db, user))
 
 
+@router.post("/link/discord", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/minute")
+async def link_discord(
+    request: Request,
+    data: DiscordIn,
+    user: User = Depends(get_current_user),
+    verifier: DiscordVerifier = Depends(get_discord_verifier),
+    db: AsyncSession = Depends(get_db),
+):
+    _check_discord_redirect(data.redirect_uri)
+    try:
+        info = verifier.exchange(data.code, data.redirect_uri)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Не удалось войти через Discord")
+    did = info["discord_id"]
+    existing = (
+        await db.execute(
+            select(OAuthAccount).where(
+                OAuthAccount.provider == "discord", OAuthAccount.provider_user_id == did
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        if existing.user_id != user.id:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Этот Discord уже привязан к другому аккаунту")
+        return
+    db.add(OAuthAccount(user_id=user.id, provider="discord", provider_user_id=did))
+    await db.commit()
+
+
+@router.delete("/link/discord", status_code=status.HTTP_204_NO_CONTENT)
+async def unlink_discord(
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    others = (
+        await db.execute(
+            select(OAuthAccount.provider).where(
+                OAuthAccount.user_id == user.id, OAuthAccount.provider != "discord"
+            )
+        )
+    ).first()
+    if user.password_hash is None and others is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Нужен другой способ входа")
+    await db.execute(
+        delete(OAuthAccount).where(
+            OAuthAccount.user_id == user.id, OAuthAccount.provider == "discord"
+        )
+    )
+    await db.commit()
+
+
 MAX_AVATAR_BYTES = 3 * 1024 * 1024
 MAX_AVATAR_DIM = 6000
 
