@@ -8,6 +8,7 @@ export const STORY_PACK_IDS = [
 export type StoryPackId = (typeof STORY_PACK_IDS)[number]
 export type StoryPackVersion = '0.2'
 export type StoryMode = 'action' | 'exploration' | 'speech'
+export type StoryRoleVisual = 'medical' | 'utility' | 'courier' | 'officer' | 'free'
 
 export interface StoryPackTheme {
   accent: string
@@ -35,6 +36,7 @@ export interface StoryRole {
   competence: string
   limitation: string
   startingItem: StartingItemDefinition | null
+  visual?: StoryRoleVisual
 }
 
 export interface StorySuggestion {
@@ -92,10 +94,11 @@ export interface StoryPack {
 
 const freeRole = (packId: StoryPackId): StoryRole => ({
   id: `${packId}:free`,
-  label: 'Свободное воплощение',
-  competence: 'Одна правдоподобная компетенция из описания игрока',
-  limitation: 'Одна значимая граница, которую мир будет учитывать',
+  label: 'Свой герой',
+  competence: 'Выбери знакомую профессию или занятие и опиши полезный навык',
+  limitation: 'Добавь страх, привычку или слабость, которая иногда мешает действовать',
   startingItem: null,
+  visual: 'free',
 })
 
 export const STORY_PACKS: Record<StoryPackId, StoryPack> = {
@@ -119,15 +122,16 @@ export const STORY_PACKS: Record<StoryPackId, StoryPack> = {
       icon: '◒',
     },
     logline: 'В 21:14 Велинск теряет связь. В подъезде слышны слишком быстрые шаги, а до закрытия аптеки остается шестнадцать минут.',
-    entryFantasy: 'Ты обычный человек, чья внимательность и конкретная компетенция делают тебя незаменимым.',
+    entryFantasy: 'Ты обычный человек. Знакомая работа, полезный навык и внимательность могут сделать тебя незаменимым.',
     promise: 'Каждая открытая дверь, оставленный след и замеченный сосед могут вернуться последствием позже.',
     systemFocus: ['Ресурсы', 'Двери и шум', 'Наблюдатели', 'Отложенные последствия'],
     roles: [
       {
         id: 'zero-line:paramedic',
-        label: 'Фельдшер-стажер',
-        competence: 'Распознает травмы и ранние симптомы',
-        limitation: 'Тяжело переживает сортировку пострадавших',
+        label: 'Фельдшер скорой помощи',
+        competence: 'Оказывает первую помощь и быстро оценивает состояние пострадавшего',
+        limitation: 'Не может спокойно пройти мимо человека, которому нужна помощь',
+        visual: 'medical',
         startingItem: {
           templateId: 'tourniquet',
           name: 'Турникет',
@@ -141,9 +145,10 @@ export const STORY_PACKS: Record<StoryPackId, StoryPack> = {
       },
       {
         id: 'zero-line:electromechanic',
-        label: 'Электромеханик',
-        competence: 'Понимает питание, замки и трамвайные механизмы',
-        limitation: 'Слаб в управлении напуганной толпой',
+        label: 'Электромонтер ЖКХ',
+        competence: 'Разбирается в щитках, замках и инженерных сетях домов',
+        limitation: 'Теряется, когда вокруг начинается паника',
+        visual: 'utility',
         startingItem: {
           templateId: 'multitool',
           name: 'Карманный мультитул',
@@ -157,9 +162,10 @@ export const STORY_PACKS: Record<StoryPackId, StoryPack> = {
       },
       {
         id: 'zero-line:courier',
-        label: 'Курьер',
-        competence: 'Знает дворы, проходы и короткие маршруты',
-        limitation: 'Не имеет защитного снаряжения',
+        label: 'Курьер доставки',
+        competence: 'Знает дворы, подъезды и короткие пути через район',
+        limitation: 'Привык рассчитывать на скорость, а не на силовое столкновение',
+        visual: 'courier',
         startingItem: {
           templateId: 'city-map',
           name: 'Карта дворов Велинска',
@@ -172,15 +178,16 @@ export const STORY_PACKS: Record<StoryPackId, StoryPack> = {
         },
       },
       {
-        id: 'zero-line:reporter',
-        label: 'Репортер',
-        competence: 'Проверяет слухи и добивается признаний',
-        limitation: 'Привлекает внимание тех, кому есть что скрывать',
+        id: 'zero-line:district-officer',
+        label: 'Участковый',
+        competence: 'Знает район, людей и умеет быстро оценивать угрозу',
+        limitation: 'Форма и удостоверение вызывают недоверие у тех, кто боится властей',
+        visual: 'officer',
         startingItem: {
-          templateId: 'voice-recorder',
-          name: 'Карманный диктофон',
+          templateId: 'service-flashlight',
+          name: 'Служебный фонарь',
           category: 'tool',
-          description: 'Небольшой диктофон с ограниченным зарядом.',
+          description: 'Крепкий фонарь с тремя делениями заряда.',
           quantity: 1,
           charges: 3,
           condition: 'usable',

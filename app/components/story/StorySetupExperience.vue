@@ -132,21 +132,21 @@ function closeSetup() {
           <div class="border-b border-white/8 bg-[rgb(var(--pack-accent-rgb)/.07)] p-6 sm:p-7">
             <p class="font-interface text-[10px] uppercase tracking-[.18em] text-[var(--pack-accent)]">Новая личная ветка</p>
             <h2 class="mt-2 font-display text-[26px] leading-tight text-fabula-100">Создай своего героя</h2>
-            <p class="mt-3 text-[15px] leading-relaxed text-fabula-500">Выбери готовую основу или собери свою. Все способности, мотивацию и прошлое можно изменить до начала истории.</p>
+            <p class="mt-3 text-[15px] leading-relaxed text-fabula-500">Кем ты был вчера? Что умеешь лучше других? Ради чего готов шагнуть в неизвестность?</p>
           </div>
 
           <ol class="grid gap-0 px-6 py-2 sm:px-7" aria-label="Этапы настройки героя">
             <li class="flex gap-4 border-b border-white/8 py-4">
               <span class="grid size-8 shrink-0 place-items-center rounded-full border border-[rgb(var(--pack-accent-rgb)/.5)] font-interface text-[11px] text-[var(--pack-accent-light)]">1</span>
-              <span><strong class="block font-display text-[15px] font-normal text-fabula-100">Основа</strong><span class="mt-1 block text-[12px] leading-relaxed text-fabula-500">Специализация и стартовый предмет</span></span>
+              <span><strong class="block font-display text-[15px] font-normal text-fabula-100">Кто ты</strong><span class="mt-1 block text-[12px] leading-relaxed text-fabula-500">Профессия и вещь, которая осталась при тебе</span></span>
             </li>
             <li class="flex gap-4 border-b border-white/8 py-4">
               <span class="grid size-8 shrink-0 place-items-center rounded-full border border-white/15 font-interface text-[11px] text-fabula-400">2</span>
-              <span><strong class="block font-display text-[15px] font-normal text-fabula-100">Способности</strong><span class="mt-1 block text-[12px] leading-relaxed text-fabula-500">Имя, роль, сильная сторона и граница</span></span>
+              <span><strong class="block font-display text-[15px] font-normal text-fabula-100">Что ты умеешь</strong><span class="mt-1 block text-[12px] leading-relaxed text-fabula-500">Навык, который может спасти тебя и других</span></span>
             </li>
             <li class="flex gap-4 py-4">
               <span class="grid size-8 shrink-0 place-items-center rounded-full border border-white/15 font-interface text-[11px] text-fabula-400">3</span>
-              <span><strong class="block font-display text-[15px] font-normal text-fabula-100">Личная история</strong><span class="mt-1 block text-[12px] leading-relaxed text-fabula-500">Своя цель, прошлое и ритм рассказа</span></span>
+              <span><strong class="block font-display text-[15px] font-normal text-fabula-100">Ради чего идешь дальше</strong><span class="mt-1 block text-[12px] leading-relaxed text-fabula-500">Цель и прошлое, которое не отпускает</span></span>
             </li>
           </ol>
 
