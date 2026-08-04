@@ -10,8 +10,7 @@
       <a href="#packs">Миры</a>
       <a href="#feats">Возможности</a>
       <a href="#price">Тарифы</a>
-      <a href="#" class="auth-open" data-auth="login">Войти</a>
-      <a href="/app" class="btn btn-solid">Начать</a>
+      <a href="/app?scr=packs" data-start="1" class="btn btn-solid">Начать</a>
     </nav>
   </div>
 </header>
@@ -339,18 +338,14 @@ onMounted(() => {
     img.addEventListener('error', () => { img.style.display = 'none' }, { once: true })
   })
 
-  // если уже есть сессия — «Войти» становится «Профиль», добавляем «Миры», «Начать» → «Продолжить»
+  // если уже есть сессия — добавляем в шапку «Профиль» (кнопка «Начать» сама ведёт в миры)
   function markLoggedInNav(){
-    const loginLink = document.querySelector('.nav-links a[data-auth="login"]')
-    if (loginLink) {
-      loginLink.textContent = 'Профиль'; loginLink.setAttribute('href', '/profile'); loginLink.removeAttribute('data-auth')
-      if (!document.querySelector('.nav-links a[data-worlds]')) {
-        const worlds = document.createElement('a'); worlds.textContent = 'Миры'; worlds.href = '/app?scr=packs'; worlds.setAttribute('data-worlds','1')
-        loginLink.parentNode.insertBefore(worlds, loginLink)
-      }
+    const nav = document.querySelector('.nav-links')
+    if (nav && !nav.querySelector('a[data-profile]')) {
+      const startBtn = nav.querySelector('a.btn-solid')
+      const prof = document.createElement('a'); prof.textContent = 'Профиль'; prof.href = '/profile'; prof.setAttribute('data-profile','1')
+      if (startBtn) nav.insertBefore(prof, startBtn); else nav.appendChild(prof)
     }
-    const startBtn = document.querySelector('.nav-links a.btn-solid')
-    if (startBtn) { startBtn.textContent = 'Продолжить'; startBtn.setAttribute('href','/app') }
   }
   try { if (localStorage.getItem('fabula-token')) markLoggedInNav() } catch (e) {}
 
@@ -842,10 +837,11 @@ if('serviceWorker' in navigator){
 
   // открытие по «Войти»
   document.querySelectorAll('[data-auth]').forEach(a=>a.addEventListener('click',e=>{ if(!a.dataset.auth) return; e.preventDefault(); open(a.dataset.auth); }));
-  // «Начать» без входа → предложить регистрацию (а не кидать в /app и обратно на 401)
+  // «Начать»: не залогинен → вход/регистрация; залогинен → экран выбора миров
   document.querySelectorAll('[data-start]').forEach(a=>a.addEventListener('click',e=>{
-    if(localStorage.getItem('fabula-token')) return;  // залогинен — идёт в /app
-    e.preventDefault(); open('reg');
+    e.preventDefault();
+    if(localStorage.getItem('fabula-token')){ location.href='/app?scr=packs'; return; }  // залогинен → миры
+    open('reg');
   }));
   $('authClose').addEventListener('click', close);
   scrim.addEventListener('click', e=>{ if(e.target===scrim) close(); });

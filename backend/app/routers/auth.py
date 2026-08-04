@@ -355,11 +355,14 @@ async def unlink_google(
 def _check_discord_redirect(redirect_uri: str) -> None:
     allow = settings.discord_redirect_list
     if not allow or redirect_uri not in allow:
-        # ВРЕМЕННАЯ ДИАГНОСТИКА: показываем, что реально в рантайме
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            f"Недопустимый redirect_uri | got={redirect_uri!r} allow={allow!r} raw={settings.discord_redirect_uris!r} cid_set={bool(settings.discord_client_id)} secret_set={bool(settings.discord_client_secret)}",
-        )
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Недопустимый redirect_uri")
+
+
+def _discord_login_error(e) -> str:
+    """Человеческое сообщение об ошибке обмена Discord (без утечки конфига)."""
+    if "rate_limited" in str(e):
+        return "Discord временно ограничил вход — попробуй через пару минут."
+    return "Не удалось войти через Discord."
 
 
 @router.post("/discord", response_model=DiscordAuthOut)
@@ -376,7 +379,7 @@ async def discord_auth(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"Не удалось войти через Discord: {e}")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _discord_login_error(e))
     did = info["discord_id"]
     email = info.get("email")
     ev = bool(info.get("email_verified"))
@@ -472,7 +475,7 @@ async def link_discord(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"Не удалось войти через Discord: {e}")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _discord_login_error(e))
     did = info["discord_id"]
     existing = (
         await db.execute(

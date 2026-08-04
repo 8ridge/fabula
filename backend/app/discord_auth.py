@@ -28,12 +28,19 @@ class RealDiscordVerifier(DiscordVerifier):
             timeout=10,
         )
         if tok.status_code != 200:
-            # ВРЕМЕННАЯ ДИАГНОСТИКА: пробрасываем причину от Discord (invalid_client/invalid_grant)
-            raise ValueError(f"token {tok.status_code} {tok.text[:200]} | cid={settings.discord_client_id!r} secret_set={bool(settings.discord_client_secret)} redirect={redirect_uri!r}")
+            info = {}
+            try:
+                info = tok.json()
+            except Exception:
+                pass
+            desc = (info.get("error_description") or "").lower()
+            if tok.status_code == 429 or "rate lim" in desc:
+                raise ValueError("rate_limited")
+            raise ValueError(info.get("error") or f"http_{tok.status_code}")
         access = tok.json()["access_token"]
         me = requests.get(_ME_URL, headers={"Authorization": f"Bearer {access}"}, timeout=10)
         if me.status_code != 200:
-            raise ValueError(f"userinfo {me.status_code} {me.text[:200]}")
+            raise ValueError("userinfo_failed")
         u = me.json()
         email = u.get("email")
         return {
