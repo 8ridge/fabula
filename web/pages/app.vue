@@ -353,14 +353,15 @@ onMounted(() => {
     if (!state || state !== saved) { toast('Discord: проверка безопасности не пройдена'); loadProfile(); return; }
     const redirect_uri = location.origin + '/app';
     if (link) {
-      const { res } = await apiAuth('/auth/link/discord', 'POST', { code, redirect_uri });
+      const { res, data } = await apiAuth('/auth/link/discord', 'POST', { code, redirect_uri });
       if (res.status === 409) toast('Этот Discord уже привязан к другому');
       else if (res.ok) toast('Discord привязан');
+      else toast((data&&data.detail) ? ('Discord: '+data.detail) : 'Не удалось привязать Discord');
       loadProfile();
       return;
     }
     const { res, data } = await apiAuth('/auth/discord', 'POST', { code, redirect_uri });
-    if (!res.ok || !data) { toast('Не удалось войти через Discord'); loadProfile(); return; }
+    if (!res.ok || !data) { toast((data&&data.detail) ? ('Discord: '+data.detail) : 'Не удалось войти через Discord'); loadProfile(); return; }
     if (data.needs_username) { window.__discordReg = data.registration_token; openDiscordNick(); return; }
     saveSessionFromData(data);
     loadProfile();

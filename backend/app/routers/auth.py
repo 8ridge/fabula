@@ -371,8 +371,8 @@ async def discord_auth(
         info = verifier.exchange(data.code, data.redirect_uri)
     except HTTPException:
         raise
-    except Exception:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Не удалось войти через Discord")
+    except Exception as e:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"Не удалось войти через Discord: {e}")
     did = info["discord_id"]
     email = info.get("email")
     ev = bool(info.get("email_verified"))
@@ -467,8 +467,8 @@ async def link_discord(
         info = verifier.exchange(data.code, data.redirect_uri)
     except HTTPException:
         raise
-    except Exception:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Не удалось войти через Discord")
+    except Exception as e:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"Не удалось войти через Discord: {e}")
     did = info["discord_id"]
     existing = (
         await db.execute(

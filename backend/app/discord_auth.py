@@ -27,10 +27,13 @@ class RealDiscordVerifier(DiscordVerifier):
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             timeout=10,
         )
-        tok.raise_for_status()
+        if tok.status_code != 200:
+            # ВРЕМЕННАЯ ДИАГНОСТИКА: пробрасываем причину от Discord (invalid_client/invalid_grant)
+            raise ValueError(f"token {tok.status_code} {tok.text[:200]} | cid={settings.discord_client_id!r} secret_set={bool(settings.discord_client_secret)} redirect={redirect_uri!r}")
         access = tok.json()["access_token"]
         me = requests.get(_ME_URL, headers={"Authorization": f"Bearer {access}"}, timeout=10)
-        me.raise_for_status()
+        if me.status_code != 200:
+            raise ValueError(f"userinfo {me.status_code} {me.text[:200]}")
         u = me.json()
         email = u.get("email")
         return {
