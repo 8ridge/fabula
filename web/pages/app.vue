@@ -266,7 +266,7 @@
 <script setup>
 import { onMounted } from 'vue'
 import '~/assets/css/app.css'
-definePageMeta({ layout: false })
+definePageMeta({ layout: false, alias: ['/profile'] })
 useHead({
   title: 'ФАБУЛА · MVP',
   link: [{ rel: 'stylesheet', href: '/assets/fonts/fonts.css' }]
@@ -337,7 +337,7 @@ onMounted(() => {
         const v = (document.getElementById('pmDiscordNick').value||'').trim();
         if(!/^[A-Za-z0-9_]{3,20}$/.test(v)){ msg.textContent='Ник: 3–20, латиница, цифры, _'; return true; }
         const { res, data } = await apiAuth('/auth/discord/complete','POST',{ registration_token: window.__discordReg, username: v });
-        if(res.ok){ saveSessionFromData(data); loadProfile(); toast('Готово!'); return false; }
+        if(res.ok){ saveSessionFromData(data); loadProfile(); go('profile'); toast('Готово!'); return false; }
         msg.textContent = res.status===409 ? 'Ник занят' : 'Проверь ник'; return true;
       });
     requestAnimationFrame(()=>{ const ni=document.getElementById('pmDiscordNick'); if(ni) ni.focus(); });
@@ -364,6 +364,7 @@ onMounted(() => {
     if (data.needs_username) { window.__discordReg = data.registration_token; openDiscordNick(); return; }
     saveSessionFromData(data);
     loadProfile();
+    go('profile');
   }
 
   const _dq = new URLSearchParams(location.search);
@@ -616,15 +617,18 @@ soundBtn.addEventListener('click',(e)=>{
 
 /* ================= NAV ================= */
 const scrs=document.querySelectorAll('.scr');
+const SCR_PATH={ profile:'/profile' };  // остальные экраны живут на /app
 function go(name){
   scrs.forEach(s=>s.classList.toggle('on',s.dataset.scr===name));
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('act',a.dataset.go===name));
+  try { const p=SCR_PATH[name]||'/app'; if(location.pathname!==p) history.replaceState(null,'',p); } catch(e){}
   sfxNav();
 }
 document.querySelectorAll('#nav a').forEach(a=>a.addEventListener('click',()=>go(a.dataset.go)));
   try {
     const scr = new URLSearchParams(location.search).get('scr')
-    if (scr && ['home','packs','profile'].includes(scr)) go(scr)
+    if (location.pathname === '/profile') go('profile')
+    else if (scr && ['home','packs','profile'].includes(scr)) go(scr)
   } catch(e) {}
 
 /* ================= INVENTORY ================= */

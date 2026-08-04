@@ -343,7 +343,7 @@ onMounted(() => {
   function markLoggedInNav(){
     const loginLink = document.querySelector('.nav-links a[data-auth="login"]')
     if (loginLink) {
-      loginLink.textContent = 'Профиль'; loginLink.setAttribute('href', '/app?scr=profile'); loginLink.removeAttribute('data-auth')
+      loginLink.textContent = 'Профиль'; loginLink.setAttribute('href', '/profile'); loginLink.removeAttribute('data-auth')
       if (!document.querySelector('.nav-links a[data-worlds]')) {
         const worlds = document.createElement('a'); worlds.textContent = 'Миры'; worlds.href = '/app?scr=packs'; worlds.setAttribute('data-worlds','1')
         loginLink.parentNode.insertBefore(worlds, loginLink)
@@ -866,7 +866,7 @@ if('serviceWorker' in navigator){
       localStorage.setItem('fabula-user', JSON.stringify(data.user));
     }catch(_){}
   }
-  function go(){ setTimeout(()=>location.href='/app', 650); }
+  function goProfile(){ setTimeout(()=>location.href='/profile', 650); }
 
   async function apiPost(path, body){
     const r = await fetch(AUTH_API+path, {
@@ -896,7 +896,7 @@ if('serviceWorker' in navigator){
     try{
       const {r, data} = await apiPost(reg ? '/auth/register' : '/auth/login',
         reg ? {username: name, email, password:pass} : {email, password:pass});
-      if(r.ok){ saveSession(data); markLoggedInNav(); ok('Готово! Открой «Профиль» или «Миры».'); close(); return; }
+      if(r.ok){ saveSession(data); markLoggedInNav(); ok('Готово!'); close(); goProfile(); return; }
       if(r.status===409)      fail('Эта почта уже зарегистрирована — попробуй войти.');
       else if(r.status===401) fail('Неверная почта или пароль.');
       else if(r.status===422) fail('Проверь поля — что-то заполнено не так.');
@@ -925,7 +925,7 @@ if('serviceWorker' in navigator){
     const { r, data } = await apiPost('/auth/telegram', user);
     if (!r.ok){ fail('Не удалось войти через Telegram.'); return; }
     if (data.needs_username){ pendingRegToken = data.registration_token; pendingProvider = 'telegram'; showNickStep(); return; }
-    saveSession(data); markLoggedInNav(); ok('Готово! Открой «Профиль» или «Миры».'); close();
+    saveSession(data); markLoggedInNav(); ok('Готово!'); close(); goProfile();
   }
   document.querySelectorAll('[data-soc="tg"]').forEach(b=>b.addEventListener('click', async ()=>{
     if(!telegramBotId){ fail('Вход через Telegram скоро'); return; }
@@ -964,7 +964,7 @@ if('serviceWorker' in navigator){
     const { r, data } = await apiPost('/auth/google', { id_token: resp.credential });
     if (!r.ok){ fail('Не удалось войти через Google.'); return; }
     if (data.needs_username){ pendingRegToken = data.registration_token; pendingProvider = 'google'; showNickStep(); return; }
-    saveSession(data); markLoggedInNav(); ok('Готово! Открой «Профиль» или «Миры».'); close();
+    saveSession(data); markLoggedInNav(); ok('Готово!'); close(); goProfile();
   }
 
   async function initGoogle(){
@@ -988,7 +988,7 @@ if('serviceWorker' in navigator){
     if(!/^[A-Za-z0-9_]{3,20}$/.test(nick)){ if(m) m.textContent='Ник: 3–20 символов, латиница, цифры, _'; return; }
     const completeUrl = pendingProvider === 'telegram' ? '/auth/telegram/complete' : '/auth/google/complete';
     const { r, data } = await apiPost(completeUrl, { registration_token: pendingRegToken, username: nick });
-    if (r.ok){ saveSession(data); markLoggedInNav(); ok('Готово! Открой «Профиль» или «Миры».'); close(); }
+    if (r.ok){ saveSession(data); markLoggedInNav(); ok('Готово!'); close(); goProfile(); }
     else if (m) m.textContent = r.status===409 ? 'Ник занят' : 'Проверь ник';
   });
 })();
