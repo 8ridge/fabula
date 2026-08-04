@@ -355,7 +355,11 @@ async def unlink_google(
 def _check_discord_redirect(redirect_uri: str) -> None:
     allow = settings.discord_redirect_list
     if not allow or redirect_uri not in allow:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Недопустимый redirect_uri")
+        # ВРЕМЕННАЯ ДИАГНОСТИКА: показываем, что реально в рантайме
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Недопустимый redirect_uri | got={redirect_uri!r} allow={allow!r} raw={settings.discord_redirect_uris!r} cid_set={bool(settings.discord_client_id)} secret_set={bool(settings.discord_client_secret)}",
+        )
 
 
 @router.post("/discord", response_model=DiscordAuthOut)
